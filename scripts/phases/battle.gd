@@ -296,75 +296,100 @@ func _end_battle() -> void:
                 log_label.text = "Battle %s! +%d shards." % ["WON" if battle_won else "LOST", shards]
 
 func _draw() -> void:
-        var cam_top := int((camera_y - VIEW_H / 2) / TILE) - 1
-        var cam_bot := int((camera_y + VIEW_H / 2) / TILE) + 1
-        cam_top = max(0, cam_top)
-        cam_bot = min(CORRIDOR_H - 1, cam_bot)
+        # Overscan: draw 3 tiles beyond viewport on all sides so edges are never visible
+        var cam_top := int((camera_y - VIEW_H / 2) / TILE) - 3
+        var cam_bot := int((camera_y + VIEW_H / 2) / TILE) + 3
+        cam_top = max(-2, cam_top)
+        cam_bot = min(CORRIDOR_H + 1, cam_bot)
+        # Floor — extend beyond corridor walls so there's no hard edge
         for y in range(cam_top, cam_bot + 1):
-                for x in CORRIDOR_W:
+                for x in range(-2, CORRIDOR_W + 2):
                         var p := Vector2(x * TILE, y * TILE)
-                        if (x + y) % 7 == 0 and y > 5:
+                        var hash := (x * 7 + y * 13) % 31
+                        if x < 0 or x >= CORRIDOR_W:
+                                # Beyond walls — draw dark stone (cavern background)
+                                draw_texture(Sprites.get_sprite("wall"), p)
+                        elif hash < 3 and y > 5:
                                 draw_texture(Sprites.get_sprite("floor_crack"), p)
-                        elif (x + y) % 11 == 0 and y > 8:
+                        elif hash < 5 and y > 8:
                                 draw_texture(Sprites.get_sprite("floor_blood"), p)
+                        elif hash < 7 and y > 10:
+                                draw_texture(Sprites.get_sprite("floor_moss"), p)
                         else:
                                 draw_texture(Sprites.get_sprite("floor"), p)
+        # Side walls (extend beyond viewport)
         for y in range(cam_top, cam_bot + 1):
                 draw_texture(Sprites.get_sprite("wall"), Vector2(-TILE, y * TILE))
                 draw_texture(Sprites.get_sprite("wall_mossy"), Vector2(CORRIDOR_W * TILE, y * TILE))
                 if y % 4 == 0:
                         draw_texture(Sprites.get_sprite("torch"), Vector2(-TILE, y * TILE))
                         draw_texture(Sprites.get_sprite("torch"), Vector2(CORRIDOR_W * TILE, y * TILE))
+                        # Ambient torch glow
+                        _draw_glow(Vector2(-TILE + 8, y * TILE + 8), 18, Palette.LIGHT_TORCH)
+                        _draw_glow(Vector2(CORRIDOR_W * TILE + 8, y * TILE + 8), 18, Palette.LIGHT_TORCH)
         # Exit
         draw_texture(Sprites.get_sprite("door"), Vector2(CORRIDOR_W * TILE / 2 - 8, -TILE))
-        # Enemies
+        _draw_glow(Vector2(CORRIDOR_W * TILE / 2, -TILE + 8), 16, Palette.LIGHT_EXIT)
+        # Enemies — ALL positions snapped to integers
         for e in enemies:
                 if e.alive:
                         var tex := Sprites.get_sprite(e.sprite)
-                        var bob := sin(e.walk_anim) * 1
-                        draw_rect(Rect2(int(e.pos.x) - 5, int(e.pos.y) + 6, 10, 2), Color(0, 0, 0, 0.3), true)
-                        draw_texture(tex, e.pos + Vector2(0, bob) - Vector2(8, 8))
+                        var bob := int(sin(e.walk_anim) * 1)
+                        var ex := int(e.pos.x)
+                        var ey := int(e.pos.y)
+                        draw_rect(Rect2(ex - 5, ey + 6, 10, 2), Color(0, 0, 0, 0.3), true)
+                        draw_texture(tex, Vector2(ex - 8, ey - 8 + bob))
                         var pct: float = float(e.hp) / float(e.hp_max)
-                        draw_rect(Rect2(e.pos.x - 8, e.pos.y - 14, 16, 1), Palette.DARK, true)
-                        draw_rect(Rect2(e.pos.x - 8, e.pos.y - 14, 16 * pct, 1), Palette.TEXT_RED, true)
-        # Party
+                        draw_rect(Rect2(ex - 8, ey - 14, 16, 1), Palette.DARK, true)
+                        draw_rect(Rect2(ex - 8, ey - 14, int(16 * pct), 1), Palette.TEXT_RED, true)
+        # Party — ALL positions snapped to integers
         for u in party_units:
                 if u.alive:
                         var tex := Sprites.get_sprite(u.sprite)
-                        var bob := sin(u.walk_anim) * 1
-                        draw_rect(Rect2(int(u.pos.x) - 5, int(u.pos.y) + 6, 10, 2), Color(0, 0, 0, 0.3), true)
+                        var bob := int(sin(u.walk_anim) * 1)
+                        var ux := int(u.pos.x)
+                        var uy := int(u.pos.y)
+                        draw_rect(Rect2(ux - 5, uy + 6, 10, 2), Color(0, 0, 0, 0.3), true)
                         if u.flash > 0:
-                                draw_rect(Rect2(u.pos.x - 8, u.pos.y - 8, 16, 16), Color(1, 0.3, 0.3, u.flash * 0.5), true)
-                        draw_texture(tex, u.pos + Vector2(0, bob) - Vector2(8, 8))
+                                draw_rect(Rect2(ux - 8, uy - 8, 16, 16), Color(1, 0.3, 0.3, u.flash * 0.5), true)
+                        draw_texture(tex, Vector2(ux - 8, uy - 8 + bob))
                         var pct: float = float(u.hp) / float(u.hp_max)
-                        draw_rect(Rect2(u.pos.x - 8, u.pos.y - 14, 16, 1), Palette.DARK, true)
+                        draw_rect(Rect2(ux - 8, uy - 14, 16, 1), Palette.DARK, true)
                         var c: Color = Palette.TEXT_GREEN if pct > 0.5 else (Palette.TEXT_GOLD if pct > 0.25 else Palette.TEXT_RED)
-                        draw_rect(Rect2(u.pos.x - 8, u.pos.y - 14, 16 * pct, 1), c, true)
+                        draw_rect(Rect2(ux - 8, uy - 14, int(16 * pct), 1), c, true)
                         # Weapon + durability bar
                         var adv: Dictionary = u.adv
                         if adv.get("equipped_weapon") != null:
                                 var w: Weapon = adv.equipped_weapon
-                                draw_texture(Sprites.get_weapon_sprite(w.type, w.state), u.pos + Vector2(6, -4))
+                                draw_texture(Sprites.get_weapon_sprite(w.type, w.state), Vector2(ux + 6, uy - 4))
                                 var dpct: float = w.durability_pct()
-                                draw_rect(Rect2(u.pos.x + 5, u.pos.y - 8, 8, 1), Palette.DARK, true)
-                                draw_rect(Rect2(u.pos.x + 5, u.pos.y - 8, 8 * dpct, 1), w.wear_color(), true)
+                                draw_rect(Rect2(ux + 5, uy - 8, 8, 1), Palette.DARK, true)
+                                draw_rect(Rect2(ux + 5, uy - 8, int(8 * dpct), 1), w.wear_color(), true)
         # Particles
         Juice.draw_particles(self)
-        # Damage numbers
+        # Damage numbers — snapped
         for d in damage_numbers:
                 var alpha: float = d.life / d.max_life
                 var c: Color = d.color
                 c.a = alpha
-                GameFont.draw_string_centered(self, d.pos, d.text, 7, c)
-        # Ghost ability HUD
+                GameFont.draw_string_centered(self, Vector2(int(d.pos.x), int(d.pos.y)), d.text, 7, c)
+        # Ghost ability HUD — snapped
         var hud_pos := cam.get_screen_center_position() - Vector2(VIEW_W / 2, VIEW_H / 2)
+        hud_pos = Vector2(int(hud_pos.x), int(hud_pos.y))
         var cd_pct: float = 1.0 - (ghost_ability_cd / GHOST_ABILITY_CD) if ghost_ability_cd > 0 else 1.0
         var cd_c := Palette.TEXT_GREEN if ghost_ability_cd <= 0 else Palette.TEXT_DIM
         draw_rect(Rect2(hud_pos + Vector2(4, 150), Vector2(40, 5)), Palette.DARK, true)
-        draw_rect(Rect2(hud_pos + Vector2(4, 150), Vector2(40 * cd_pct, 5)), cd_c, true)
+        draw_rect(Rect2(hud_pos + Vector2(4, 150), Vector2(int(40 * cd_pct), 5)), cd_c, true)
         GameFont.draw_string(self, hud_pos + Vector2(4, 148), "[1]Haunt", 6, cd_c)
         if ghost_ability_active > 0:
                 GameFont.draw_string_centered(self, hud_pos + Vector2(VIEW_W / 2, 148), "HAUNTING!", 8, Palette.GLOW_BLUE)
+
+func _draw_glow(pos: Vector2, radius: int, color: Color) -> void:
+        var center := Vector2(int(pos.x), int(pos.y))
+        for r in [radius, int(radius * 0.6), int(radius * 0.3)]:
+                var c := color
+                c.a = c.a * (1.0 - float(r) / float(radius)) * 0.8
+                draw_circle(center, r, c)
 
 func _input(event: InputEvent) -> void:
         if battle_over:
