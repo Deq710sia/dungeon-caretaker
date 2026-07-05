@@ -19,14 +19,14 @@ var finished: bool = false
 var wheel_angle: float = 0.0
 var weapon_angle: float = 0.0
 
-var gear: GearItem = null
+var gear: Weapon = null
 
 func _ready() -> void:
 	var p := get_parent()
 	if p and p.get("ghost") != null and p.ghost.carrying != null:
 		gear = p.ghost.carrying
 	elif p and p.get("current_gear_for_minigame") != null:
-		gear = p.current_gear_for_minigame
+		gear = p.current_weapon
 	var lbl := Label.new()
 	lbl.text = "OIL & GRINDSTONE — Hold mouse to pour. Keep meter GREEN!"
 	lbl.add_theme_font_size_override("font_size", 7)
@@ -99,7 +99,7 @@ func _draw() -> void:
 			draw_rect(Rect2(offset_pos.x - 4, offset_pos.y - 4, tex_size + 8, tex_size + 8), Color(0.55, 0.95, 0.55, 0.3), true)
 		draw_texture_rect(weapon_tex, Rect2(offset_pos.x, offset_pos.y, tex_size, tex_size), false)
 		# Weapon name
-		draw_string(ThemeDB.get_default_theme().default_font, wpos + Vector2(-50, -50), gear.display_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 7, gear.state_color())
+		draw_string(ThemeDB.get_default_theme().default_font, wpos + Vector2(-50, -50), gear.display_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 7, gear.wear_color())
 	# Oil meter (vertical bar on right)
 	var meter_x: float = vp.x * 0.75
 	var meter_y: float = vp.y * 0.20

@@ -14,16 +14,16 @@ var visited: PackedByteArray = PackedByteArray()
 var next_idx: int = 0
 var finished: bool = false
 var is_cursed: bool = false
-var gear: GearItem = null
+var gear: Weapon = null
 
 func _ready() -> void:
 	var p := get_parent()
 	if p and p.get("ghost") != null and p.ghost.carrying != null:
 		gear = p.ghost.carrying
 	elif p and p.get("current_gear_for_minigame") != null:
-		gear = p.current_gear_for_minigame
+		gear = p.current_weapon
 	if gear != null:
-		is_cursed = gear.is_cursed_variant()
+		is_cursed = gear.state == Weapon.State.CURSED
 	_build_sigil()
 	var instruction := "TRACE FORWARD!" if not is_cursed else "TRACE IN REVERSE!"
 	var lbl := Label.new()
@@ -79,7 +79,7 @@ func _draw() -> void:
 		# Weapon
 		draw_texture_rect(weapon_tex, Rect2(wpos.x, wpos.y, wsize, wsize), false)
 		# Weapon name
-		draw_string(ThemeDB.get_default_theme().default_font, Vector2(vp.x / 2 - 50, vp.y / 2 + 40), gear.display_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 7, gear.state_color())
+		draw_string(ThemeDB.get_default_theme().default_font, Vector2(vp.x / 2 - 50, vp.y / 2 + 40), gear.display_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 7, gear.wear_color())
 	# Sigil lines (faded)
 	for i in sigil_points.size():
 		var j := (i + 1) % sigil_points.size()

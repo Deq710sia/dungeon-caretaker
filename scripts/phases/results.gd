@@ -1,9 +1,8 @@
 extends Node2D
-## Phase: results (V2) — shows outcome of last battle, advances to next wave or next stage.
+## Phase: results V3 — shows battle outcome + weapon dossier cards (what happened to your weapons).
 
 var continue_btn: Button
 var upgrade_btn: Button
-var log_label: Label
 
 func _ready() -> void:
 	var res: Dictionary = GameState.last_battle_result
@@ -11,130 +10,130 @@ func _ready() -> void:
 	var survivors: int = res.get("survivors", 0)
 	var party_size: int = res.get("party_size", 0)
 	var shards: int = res.get("shards_earned", 0)
-	var stage: int = res.get("stage", 1)
-	var wave: int = res.get("wave", 1)
 
 	# Header
 	var header := Label.new()
-	var header_text := "VICTORY!" if won else "DEFEAT..."
-	header.text = "Stage %d Wave %d — %s" % [stage, wave, header_text]
-	header.add_theme_font_size_override("font_size", 11)
+	header.text = "Stage %d Wave %d — %s" % [GameState.stage, GameState.wave, "VICTORY!" if won else "DEFEAT..."]
+	header.add_theme_font_size_override("font_size", 16)
 	header.add_theme_color_override("font_color", Color(0.55, 0.95, 0.55) if won else Color(0.95, 0.40, 0.40))
 	header.add_theme_color_override("font_outline_color", Color(0, 0, 0))
 	header.add_theme_constant_override("outline_size", 3)
-	header.position = Vector2(8, 18)
-	header.size = Vector2(304, 18)
+	header.position = Vector2(0, 36)
+	header.size = Vector2(640, 22)
 	header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(header)
 
-	# Survivors panel
-	var surv_panel := Panel.new()
-	surv_panel.position = Vector2(20, 44)
-	surv_panel.size = Vector2(280, 50)
-	add_child(surv_panel)
+	# Stats panel
+	var stats_panel := Panel.new()
+	stats_panel.position = Vector2(120, 70)
+	stats_panel.size = Vector2(400, 60)
+	add_child(stats_panel)
 
-	var surv_label := Label.new()
-	surv_label.text = "Survivors: %d / %d" % [survivors, party_size]
-	surv_label.add_theme_font_size_override("font_size", 10)
-	surv_label.add_theme_color_override("font_color", Color(0.85, 0.95, 0.85))
-	surv_label.position = Vector2(8, 4)
-	surv_label.size = Vector2(264, 16)
-	surv_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	surv_panel.add_child(surv_label)
+	var stats_label := Label.new()
+	stats_label.text = "Survivors: %d / %d\n+%d Soul Shards (Total: %d)" % [survivors, party_size, shards, GameState.soul_shards]
+	stats_label.add_theme_font_size_override("font_size", 11)
+	stats_label.add_theme_color_override("font_color", Color(0.85, 0.85, 0.90))
+	stats_label.position = Vector2(8, 6)
+	stats_label.size = Vector2(384, 48)
+	stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	stats_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	stats_panel.add_child(stats_label)
 
-	var shards_label := Label.new()
-	shards_label.text = "+%d Soul Shards  (Total: %d)" % [shards, GameState.soul_shards]
-	shards_label.add_theme_font_size_override("font_size", 9)
-	shards_label.add_theme_color_override("font_color", Color(0.65, 0.85, 0.95))
-	shards_label.position = Vector2(8, 22)
-	shards_label.size = Vector2(264, 14)
-	shards_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	surv_panel.add_child(shards_label)
+	# Weapon dossier section
+	var dossier_title := Label.new()
+	dossier_title.text = "WEAPON DOSSIERS"
+	dossier_title.add_theme_font_size_override("font_size", 12)
+	dossier_title.add_theme_color_override("font_color", Color(0.75, 0.70, 0.85))
+	dossier_title.position = Vector2(0, 138)
+	dossier_title.size = Vector2(640, 16)
+	dossier_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_child(dossier_title)
 
-	# Wave/stage progress
-	var progress_label := Label.new()
-	var progress_text := ""
-	if won:
-		if GameState.wave >= GameState.WAVES_PER_STAGE:
-			progress_text = "Stage %d CLEARED! Next: Stage %d" % [GameState.stage, GameState.stage + 1]
-		else:
-			progress_text = "Wave %d/%d cleared. Next: Wave %d" % [GameState.wave, GameState.WAVES_PER_STAGE, GameState.wave + 1]
-	else:
-		progress_text = "The party has fallen. The dungeon claims them."
-	progress_label.text = progress_text
-	progress_label.add_theme_font_size_override("font_size", 8)
-	progress_label.add_theme_color_override("font_color", Color(0.85, 0.85, 0.40) if won else Color(0.85, 0.55, 0.55))
-	progress_label.position = Vector2(8, 100)
-	progress_label.size = Vector2(304, 14)
-	progress_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	add_child(progress_label)
+	# Scrollable dossier list
+	var scroll := ScrollContainer.new()
+	scroll.position = Vector2(40, 158)
+	scroll.size = Vector2(560, 150)
+	add_child(scroll)
 
-	# Party status
-	var party_panel := Panel.new()
-	party_panel.position = Vector2(20, 118)
-	party_panel.size = Vector2(280, 40)
-	add_child(party_panel)
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 3)
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(vbox)
 
-	var y := 4
-	for adv in GameState.party:
-		var status := "ALIVE" if adv.get("alive", false) else "DEAD"
-		var c := Color(0.55, 0.95, 0.55) if adv.alive else Color(0.95, 0.40, 0.40)
-		var l := Label.new()
-		l.text = "%s (%s): %s" % [adv.name, adv.class, status]
-		l.add_theme_font_size_override("font_size", 7)
-		l.add_theme_color_override("font_color", c)
-		l.position = Vector2(8, y)
-		l.size = Vector2(264, 10)
-		party_panel.add_child(l)
-		y += 10
+	for w in GameState.arsenal:
+		var card := _make_dossier_card(w)
+		vbox.add_child(card)
 
 	# Buttons
 	upgrade_btn = Button.new()
 	upgrade_btn.text = "Upgrade Shop"
-	upgrade_btn.add_theme_font_size_override("font_size", 8)
-	upgrade_btn.custom_minimum_size = Vector2(140, 22)
-	upgrade_btn.position = Vector2(8, 160)
+	upgrade_btn.add_theme_font_size_override("font_size", 12)
+	upgrade_btn.position = Vector2(120, 318)
+	upgrade_btn.size = Vector2(180, 28)
 	upgrade_btn.pressed.connect(_on_upgrade)
 	add_child(upgrade_btn)
 
 	continue_btn = Button.new()
-	var next_label := "Continue >"
-	continue_btn.text = next_label
-	continue_btn.add_theme_font_size_override("font_size", 8)
-	continue_btn.custom_minimum_size = Vector2(140, 22)
-	continue_btn.position = Vector2(172, 160)
+	continue_btn.text = "Continue >"
+	continue_btn.add_theme_font_size_override("font_size", 12)
+	continue_btn.position = Vector2(340, 318)
+	continue_btn.size = Vector2(180, 28)
 	continue_btn.pressed.connect(_on_continue)
 	add_child(continue_btn)
 
-	log_label = Label.new()
-	log_label.text = "Survivors take gear with them. The dead drop theirs back to your pit."
-	log_label.add_theme_font_size_override("font_size", 6)
-	log_label.add_theme_color_override("font_color", Color(0.55, 0.55, 0.65))
-	log_label.position = Vector2(8, 178)
-	log_label.size = Vector2(304, 8)
-	log_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	add_child(log_label)
+func _make_dossier_card(w: Weapon) -> Panel:
+	var panel := Panel.new()
+	panel.custom_minimum_size = Vector2(540, 32)
+	# Weapon sprite
+	var spr := TextureRect.new()
+	spr.texture = Sprites.get_weapon_sprite(w.type, w.state)
+	spr.position = Vector2(4, 4)
+	spr.size = Vector2(24, 24)
+	spr.expand_mode = TextureRect.EXPAND_FIT_WIDTH_PROPORTIONAL
+	spr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	panel.add_child(spr)
+	# Name + wear
+	var name_lbl := Label.new()
+	var broken_tag := " [BROKEN]" if w.is_broken else ""
+	name_lbl.text = "%s [%s]%s" % [w.display_name, w.wear_name(), broken_tag]
+	name_lbl.add_theme_font_size_override("font_size", 9)
+	name_lbl.add_theme_color_override("font_color", w.wear_color() if not w.is_broken else Color(0.55, 0.30, 0.30))
+	name_lbl.position = Vector2(32, 4)
+	name_lbl.size = Vector2(280, 12)
+	panel.add_child(name_lbl)
+	# Stats line
+	var stats_lbl := Label.new()
+	stats_lbl.text = "Forged S%d | Kills: %d | Waves: %d | Dur: %d/%d" % [w.day_forged, w.kill_log.size(), w.waves_survived, w.durability, w.durability_max]
+	stats_lbl.add_theme_font_size_override("font_size", 8)
+	stats_lbl.add_theme_color_override("font_color", Color(0.70, 0.70, 0.75))
+	stats_lbl.position = Vector2(32, 16)
+	stats_lbl.size = Vector2(280, 12)
+	panel.add_child(stats_lbl)
+	# Wielder
+	var wielder_lbl := Label.new()
+	wielder_lbl.text = "Wielder: %s" % (w.wielder if w.wielder != "" else "unassigned")
+	wielder_lbl.add_theme_font_size_override("font_size", 8)
+	wielder_lbl.add_theme_color_override("font_color", Color(0.70, 0.70, 0.75))
+	wielder_lbl.position = Vector2(320, 4)
+	wielder_lbl.size = Vector2(216, 12)
+	panel.add_child(wielder_lbl)
+	# Authoring fingerprint
+	var auth_lbl := Label.new()
+	auth_lbl.text = "SHP:%d BAL:%d PWR:%d MYS:%d" % [int(w.sharpness * 100), int(w.balance * 100), int(w.power * 100), int(w.mystic * 100)]
+	auth_lbl.add_theme_font_size_override("font_size", 7)
+	auth_lbl.add_theme_color_override("font_color", Color(0.65, 0.65, 0.70))
+	auth_lbl.position = Vector2(320, 16)
+	auth_lbl.size = Vector2(216, 12)
+	panel.add_child(auth_lbl)
+	return panel
 
 func _on_upgrade() -> void:
 	GameState.set_phase("upgrade")
 
 func _on_continue() -> void:
-	# Remove gear from survivors (they leave with it)
-	var to_remove: Array = []
-	for gear in GameState.salvage_pit:
-		for adv in GameState.party:
-			if adv.get("alive", false):
-				if gear.last_owner == adv.get("name", ""):
-					to_remove.append(gear)
-					break
-	for gear in to_remove:
-		GameState.salvage_pit.erase(gear)
-	GameState.salvage_changed.emit()
-	# Advance wave/stage
 	GameState.next_wave()
 	var status := GameState.is_run_over()
 	if status == "win":
 		GameState.set_phase("win_lose")
 	else:
-		# Next wave -> back to salvage run
-		GameState.set_phase("salvage_run")
+		GameState.set_phase("planning")

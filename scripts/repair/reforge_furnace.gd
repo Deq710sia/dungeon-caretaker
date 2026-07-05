@@ -10,7 +10,7 @@ const TIME_LIMIT: float = 12.0
 var time_left: float = TIME_LIMIT
 var stage: int = 0
 var finished: bool = false
-var gear: GearItem = null
+var gear: Weapon = null
 
 # Stage 1: melt
 var melt_level: float = 0.0
@@ -42,7 +42,7 @@ func _ready() -> void:
         if p and p.get("ghost") != null and p.ghost.carrying != null:
                 gear = p.ghost.carrying
         elif p and p.get("current_gear_for_minigame") != null:
-                gear = p.current_gear_for_minigame
+                gear = p.current_weapon
         hammer_cells.resize(hammer_total)
         for i in hammer_total:
                 hammer_cells[i] = 0
@@ -105,10 +105,10 @@ func _draw() -> void:
         if gear != null:
                 var display_state := gear.state
                 match stage:
-                        0: display_state = GearItem.State.SHATTERED
-                        1: display_state = GearItem.State.SHATTERED  # still broken until pour done
-                        2: display_state = GearItem.State.RUSTED  # being reformed
-                        3: display_state = GearItem.State.PRISTINE
+                        0: display_state = Weapon.State.SHATTERED
+                        1: display_state = Weapon.State.SHATTERED  # still broken until pour done
+                        2: display_state = Weapon.State.RUSTED  # being reformed
+                        3: display_state = Weapon.State.PRISTINE
                 var weapon_tex := Sprites.get_weapon_sprite(gear.type, display_state)
                 var wsize := 80
                 var wpos := Vector2(vp.x / 2 - wsize / 2, vp.y * 0.30)
@@ -118,7 +118,7 @@ func _draw() -> void:
                 # Weapon
                 draw_texture_rect(weapon_tex, Rect2(wpos.x, wpos.y, wsize, wsize), false)
                 # Name
-                draw_string(ThemeDB.get_default_theme().default_font, Vector2(vp.x / 2 - 60, wpos.y + wsize + 14), gear.display_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 7, gear.state_color())
+                draw_string(ThemeDB.get_default_theme().default_font, Vector2(vp.x / 2 - 60, wpos.y + wsize + 14), gear.display_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 7, gear.wear_color())
         match stage:
                 0: _draw_melt()
                 1: _draw_pour()

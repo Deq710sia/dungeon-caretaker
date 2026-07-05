@@ -1,22 +1,31 @@
-# Dungeon Caretaker: A Ghost's Salvage (V2)
+# Dungeon Caretaker: A Ghost's Salvage (V3)
 
-A top-down pixel-art **roguelike management sim** where you play the spectral caretaker of a cursed dungeon. You don't fight — you salvage, repair, and deliver gear to waves of doomed adventurers. The dungeon is a top-down scroller; the camera follows the action.
+A top-down pixel-art **roguelike management sim** where weapons are the persistent, named, degrading objects you invest in across waves. You don't fight — you salvage, repair, and assign weapons to doomed adventurers, then watch them auto-battle and witness your craft succeed or shatter.
 
-## V2 Changes (Major Redesign)
+## V3 — The Real Redesign
 
-V1 was all menus. V2 is a real game:
+V1 was all menus. V2 was top-down but broken: text unreadable, no planning phase, QTE cutscenes replaced with physical dodging, weapons weren't central. V3 fixes all of this based on actual game design research (Jacksmith, Papa's Pizzeria, Hades, Slay the Spire, Dumb Ways to Die).
 
-- **Top-down scroller** — camera follows the ghost through dungeon corridors
-- **3 distinct phases per wave**, each visually unique:
-  1. **Salvage Run** — walk through a dungeon corridor, collect gear from corpses, dodge pits/fire/spikes
-  2. **Workshop** — top-down room with physical stations; repair minigames show the WEAPON as the centerpiece
-  3. **Battle** — camera follows the party as they auto-fight through enemies toward the exit
-- **Weapons are the stars** — every repair minigame draws the weapon large in the center, state-tinted (bloodied/rusted/haunted/cursed/shattered)
-- **Durability system** — weapons degrade during battle; breakage drops the state
-- **Stages + Waves** — 5 stages, 3 waves each. Party persists across waves; gear pool carries over.
-- **Legible pixel font** — Press Start 2P embedded, used globally via Theme
-- **Better sprites** — 32×32 base with detail (highlight, shadow, shading); 18+ sprite types
-- **Animated** — bobbing characters, pulsing highlights, particle effects, floating damage numbers
+### What V3 does differently:
+
+**1. Text is legible now** — Internal resolution raised to 640×360 (from 320×180). Press Start 2P font at 8-12px body, 16-24px headers. Verified 9/10 legibility via visual inspection.
+
+**2. Real Planning phase** — Wave path map (showing node types + boss), battle intel (enemy types, count, HP/ATK estimates), weapon-to-adventurer assignment UI, irreversible commit. Based on Slay the Spire's asymmetric intel pattern.
+
+**3. QTE cutscenes, not physical dodging** — The salvage phase auto-walks the ghost through the dungeon. At each hazard, a Dumb Ways to Die style QTE cutscene triggers: one verb, 3 beats, ~15s. Failure = lose a salvage (not run-ending).
+
+**4. Weapons are characters** — Every weapon has:
+- A unique name (procedurally generated)
+- A day-stamp (when it was forged/found)
+- A wielder binding (who it's assigned to)
+- 4 discrete wear states with distinct art (Pristine → Worn → Damaged → Shattered)
+- A kill log (enemies slain)
+- Authoring fingerprints (sharpness/balance/power/mystic from crafting minigames)
+- Retained as a broken memento when shattered (never deleted)
+
+**5. Spectator battle with visible degradation** — The party auto-fights. You watch. Weapons visibly degrade during the fight (wear state changes, durability bar drops). When a weapon breaks, there's hit-stop + particle burst + log message. This is the "judgement phase" that reads your crafting.
+
+**6. Weapon dossier cards** — After each battle, the results screen shows every weapon's dossier: name, wear state, day forged, kills, waves survived, wielder, authoring fingerprints. This is how you remember "the bad sword from wave 3."
 
 ## How to Run
 
@@ -24,62 +33,45 @@ V1 was all menus. V2 is a real game:
 2. Open the project folder in Godot
 3. Press **F5** to play
 
-No external assets required — all sprites are generated procedurally. The pixel font (Press Start 2P) is bundled.
-
 ## Controls
 
 | Action | Keys |
 |---|---|
 | Move ghost | WASD or Arrow keys |
 | Interact | E or Space |
-| Minigames | Mouse |
+| Minigames | Mouse click (or Space/E for QTEs) |
 | Ghost ability (battle) | 1 |
 | Back to menu | ESC |
 
 ## Game Loop (Per Wave)
 
-1. **Salvage Run** (top-down scroller):
-   - Ghost spawns at the top of a dungeon corridor
-   - Walk down, collecting gear from corpses (walk over them)
-   - Dodge hazards: pits, fire, spikes (knockback + time penalty)
-   - Reach the exit stairs before the 60s timer ends
-2. **Workshop** (top-down room):
-   - 5 stations in a row: Salvage Pit, Polish Bench, Oil & Grindstone, Exorcise Altar, Reforge Furnace
-   - Adventurers wait at the bottom with patience bars and order tickets
-   - Walk to salvage pit + E → pick up gear
-   - Walk to matching station + E → repair minigame (weapon shown large)
-   - Walk to adventurer + E → delivery gauntlet (Dumb Ways to Die QTE)
-   - Ring the bell (or wait for timer) → battle
-3. **Battle** (top-down scroller):
-   - Camera follows the party as they walk through the dungeon
-   - Party auto-fights enemies they encounter
-   - Press 1 to Haunt enemies (slow them, 25s cooldown)
-   - Reach the exit = win the wave
-4. **Results** → **Upgrade Shop** → next wave (or next stage)
+1. **Planning** — See the wave path, battle intel, your arsenal. Assign weapons to adventurers. Commit.
+2. **Salvage** — Auto-walk through dungeon. QTE cutscenes at hazards. Collect gear from corpses.
+3. **Workshop** — Walk between 4 repair stations. Each minigame shows the weapon large. Repair restores durability and state.
+4. **Battle** — Spectator phase. Party auto-fights. Weapons visibly degrade. Watch your craft succeed or shatter.
+5. **Results** — Weapon dossier cards show what happened. Earn soul shards.
+6. **Upgrade Shop** — Spend shards on permanent meta-upgrades.
+7. Next wave (or next stage).
 
 ## Gear States & Repair Stations
 
 | State | Effect | Repair Station | Minigame |
 |---|---|---|---|
 | Pristine | Full stats | — | None |
-| Bloodied | -20% stats | Polish Bench | Drag-wipe blood off the weapon (coverage %) |
-| Rusted | -30% stats | Oil & Grindstone | Hold to pour oil; keep meter in green band |
+| Bloodied | -20% stats | Polish Bench | Drag-wipe blood off the weapon |
+| Rusted | -30% stats | Oil & Grindstone | Hold to pour oil; keep meter in green |
 | Haunted | -10% + jitter | Exorcise Altar | Trace the sigil forward |
 | Cursed | -40% + debuff | Exorcise Altar (same!) | Trace the sigil in REVERSE |
 | Shattered | Useless | Reforge Furnace | 3-stage: Melt → Pour → Hammer |
 
-Each minigame shows the **weapon large in the center of the screen**, state-tinted, so you see exactly what you're repairing.
+## Wear States (visible on weapon art)
 
-## Durability System (V2)
-
-Every weapon has durability (100 base, +25 per Sturdy Grip upgrade). Each battle hit costs 8 durability (weapons) or 5 (armor). When durability hits 0:
-- Pristine → Bloodied
-- Bloodied → Rusted
-- Rusted → Shattered
-- Haunted → Cursed
-- Cursed → Shattered
-
-This creates the core tension: a well-repaired weapon might survive multiple waves, but a neglected one will break mid-battle and need full reforge.
+| Wear | Durability % | Effect |
+|---|---|---|
+| Pristine | 75-100% | Full effectiveness |
+| Worn | 40-75% | 85% effectiveness |
+| Damaged | 0-40% | 60% effectiveness |
+| Shattered | 0% | 0% — weapon breaks (hit-stop + particles) |
 
 ## Win Condition
 
@@ -87,24 +79,22 @@ Clear all **5 stages** (3 waves each = 15 waves total).
 
 ## Resolution
 
-Built for any display, including 4K. Base viewport is 320×180, scaled with `viewport` stretch mode (pixel-perfect). Window can be resized freely.
+640×360 internal, scales to 4K+ via `canvas_items` stretch mode. Pixel-perfect.
 
 ## Art
 
 - All sprites procedurally generated at runtime (`scripts/sprites.gd`)
 - Pixel font: Press Start 2P (bundled in `assets/fonts/`)
-- For V3: drop Kenney.nl CC0 pixel art packs into `assets/sprites/` and swap the `Sprites.get_sprite()` calls
 
 ## Save Data
 
-Meta-upgrades persist between sessions, saved to `user://save_v2.json`.
+Meta-upgrades persist between sessions, saved to `user://save_v3.json`.
 
 ## Tech
 
 - **Engine:** Godot 4.3+ (GL Compatibility renderer)
 - **Language:** GDScript
-- **Resolution:** 320×180 base, scales to 4K+
-- **Input:** Keyboard + Mouse
+- **Resolution:** 640×360 base, scales to 4K+
 
 ## License
 

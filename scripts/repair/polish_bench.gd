@@ -23,7 +23,7 @@ var area_origin: Vector2
 var area_size: Vector2
 
 # The gear being repaired (passed from workshop via parent)
-var gear: GearItem = null
+var gear: Weapon = null
 
 func _ready() -> void:
 	# Get the gear from parent
@@ -31,7 +31,7 @@ func _ready() -> void:
 	if p and p.get("ghost") != null and p.ghost.carrying != null:
 		gear = p.ghost.carrying
 	elif p and p.get("current_gear_for_minigame") != null:
-		gear = p.current_gear_for_minigame
+		gear = p.current_weapon
 	# Setup area
 	var vp := Vector2(320, 180)
 	area_origin = Vector2(vp.x * 0.20, vp.y * 0.30)
@@ -99,7 +99,7 @@ func _draw() -> void:
 		draw_string(ThemeDB.get_default_theme().default_font, Vector2(10, vp.y - 24), "Clean: %.0f%%" % (clean_pct * 100), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.85, 0.95, 0.85))
 		draw_string(ThemeDB.get_default_theme().default_font, Vector2(vp.x - 10, vp.y - 24), "Time: %.1fs" % time_left, HORIZONTAL_ALIGNMENT_RIGHT, -1, 8, Color(0.95, 0.85, 0.40))
 		# Item name
-		draw_string(ThemeDB.get_default_theme().default_font, Vector2(vp.x / 2 - 50, vp.y - 24), gear.display_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 7, gear.state_color())
+		draw_string(ThemeDB.get_default_theme().default_font, Vector2(vp.x / 2 - 50, vp.y - 24), gear.display_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 7, gear.wear_color())
 	# Progress bar
 	var bar_x: float = vp.x * 0.20
 	var bar_y: float = vp.y * 0.82

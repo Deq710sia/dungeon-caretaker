@@ -1,49 +1,44 @@
 extends Node
-## GameState — V2 singleton autoload.
-## Structure: Multiple STAGES, each with multiple WAVES of adventurers.
-## Player persists gear across waves within a stage; stages reset party.
+## GameState V3 — weapon-centric model.
+## The weapon is the persistent, named, degrading object the player invests in.
+## Structure: 5 stages, each with a planning -> salvage -> workshop -> battle -> results loop.
 
 signal stage_changed(new_stage: int)
 signal wave_changed(new_wave: int)
 signal shards_changed(new_count: int)
 signal phase_changed(new_phase: String)
 signal party_changed
-signal salvage_changed
+signal arsenal_changed
 
-const MAX_STAGE: int = 5        # 5 stages = full run
-const WAVES_PER_STAGE: int = 3  # 3 waves of adventurers per stage
-const SAVE_PATH: String = "user://save_v2.json"
+const MAX_STAGE: int = 5
+const WAVES_PER_STAGE: int = 3
+const SAVE_PATH: String = "user://save_v3.json"
 
 # --- Run state ---
 var stage: int = 1
-var wave: int = 1               # current wave within stage
+var wave: int = 1
 var soul_shards: int = 0
 var current_phase: String = "menu"
-var salvage_pit: Array = []
+var arsenal: Array = []  # Array[Weapon] — the player's persistent weapon inventory
 var party: Array = []
-var pending_deliveries: Array = []
 var last_battle_result: Dictionary = {}
-var last_wave_result: Dictionary = {}
-var stage_cleared: bool = false
 var run_log: Array = []
 
 # --- Meta state (persists) ---
 var meta_upgrades: Dictionary = {
 	"fleet_shade": 0,
-	"master_polisher": 0,
-	"patient_adventurers": 0,
-	"sturdy_grip": 0,       # +weapon durability per level
+	"master_forge": 0,
+	"sturdy_grip": 0,
 	"adventurer_training": 0,
-	"spirit_cannons": 0,
+	"salvage_expert": 0,
 }
 
 const UPGRADE_DEFS: Dictionary = {
-	"fleet_shade": {"name": "Fleet Shade", "desc": "+15% ghost speed", "max": 5, "cost_base": 30, "cost_growth": 20},
-	"master_polisher": {"name": "Master Polisher", "desc": "+10% repair quality", "max": 5, "cost_base": 40, "cost_growth": 25},
-	"patient_adventurers": {"name": "Patient Adventurers", "desc": "+20% order patience", "max": 5, "cost_base": 35, "cost_growth": 20},
-	"sturdy_grip": {"name": "Sturdy Grip", "desc": "+25 weapon durability", "max": 5, "cost_base": 50, "cost_growth": 30},
-	"adventurer_training": {"name": "Adventurer Training", "desc": "+5% party combat IQ", "max": 5, "cost_base": 60, "cost_growth": 35},
-	"spirit_cannons": {"name": "Spirit Cannons", "desc": "Unlock ghost abilities", "max": 3, "cost_base": 80, "cost_growth": 60},
+	"fleet_shade": {"name": "Fleet Shade", "desc": "+15% ghost speed in salvage", "max": 5, "cost_base": 30, "cost_growth": 20},
+	"master_forge": {"name": "Master Forge", "desc": "+10% repair quality", "max": 5, "cost_base": 40, "cost_growth": 25},
+	"sturdy_grip": {"name": "Sturdy Grip", "desc": "+25 weapon max durability", "max": 5, "cost_base": 50, "cost_growth": 30},
+	"adventurer_training": {"name": "Adventurer Training", "desc": "+5% party combat skill", "max": 5, "cost_base": 60, "cost_growth": 35},
+	"salvage_expert": {"name": "Salvage Expert", "desc": "+1 salvage slot, better finds", "max": 3, "cost_base": 45, "cost_growth": 25},
 }
 
 func _ready() -> void:
@@ -53,49 +48,40 @@ func _ready() -> void:
 func start_new_run() -> void:
 	stage = 1
 	wave = 1
-	soul_shards = 80
-	salvage_pit.clear()
+	soul_shards = 100
+	arsenal.clear()
 	party.clear()
-	pending_deliveries.clear()
 	last_battle_result.clear()
-	last_wave_result.clear()
-	stage_cleared = false
 	run_log.clear()
-	# Starter gear pool
-	salvage_pit.append(GearItem.new("sword",  GearItem.State.BLOODIED, "Rusted Longsword",  "Found at dungeon entrance, blood still wet."))
-	salvage_pit.append(GearItem.new("helm",   GearItem.State.RUSTED,   "Pitted Helm",        "Sat in standing water for a season."))
-	salvage_pit.append(GearItem.new("staff",  GearItem.State.HAUNTED,  "Whispering Staff",   "Last wielder screams faintly at night."))
-	salvage_pit.append(GearItem.new("robe",   GearItem.State.PRISTINE, "Traveler's Robe",    "Miraculously intact."))
-	salvage_pit.append(GearItem.new("sword",  GearItem.State.CURSED,   "Knight's Bane",      "Cursed after Sir Galford's wipe."))
-	# Apply sturdy_grip durability bonus to all starter gear
-	for g in salvage_pit:
-		g.durability_max = GearItem.BASE_DURABILITY + meta_upgrades["sturdy_grip"] * 25
-		g.durability = g.durability_max
-	run_log.append("Stage 1, Wave 1 — A new run begins. The dungeon stirs.")
+	# Starter weapons — each named, day-stamped, with personality
+	arsenal.append(Weapon.new("sword", "Rusted Longsword", "Found at the dungeon entrance, blood still wet."))
+	arsenal.append(Weapon.new("staff", "Whispering Staff", "Last wielder screams faintly at night."))
+	arsenal.append(Weapon.new("helm", "Pitted Helm", "Sat in standing water for a season."))
+	arsenal.append(Weapon.new("robe", "Traveler's Robe", "Miraculously intact. Smells of lavender."))
+	# Apply upgrades
+	for w in arsenal:
+		w.durability_max = Weapon.BASE_DURABILITY + meta_upgrades["sturdy_grip"] * 25
+		w.durability = int(w.durability_max * 0.6)
+	run_log.append("Stage 1, Wave 1 — A new run begins.")
 	stage_changed.emit(stage)
 	wave_changed.emit(wave)
 	shards_changed.emit(soul_shards)
-	salvage_changed.emit()
+	arsenal_changed.emit()
 
 func next_wave() -> void:
 	wave += 1
 	if wave > WAVES_PER_STAGE:
-		# Stage cleared!
-		stage_cleared = true
-		wave = 1
 		stage += 1
+		wave = 1
 		if stage > MAX_STAGE:
-			# Run complete (win)
 			return
-		run_log.append("Stage %d cleared! Descending to stage %d..." % [stage - 1, stage])
+		run_log.append("Stage %d cleared! Descending..." % (stage - 1))
 	else:
-		run_log.append("Wave %d of stage %d begins." % [wave, stage])
-	# Clear party & tickets for next wave
+		run_log.append("Wave %d begins." % wave)
 	party.clear()
-	pending_deliveries.clear()
 	wave_changed.emit(wave)
 	stage_changed.emit(stage)
-	salvage_changed.emit()
+	arsenal_changed.emit()
 
 # === CURRENCY ===
 func add_shards(amount: int) -> void:
@@ -118,14 +104,11 @@ func set_phase(p: String) -> void:
 func spawn_party() -> void:
 	party.clear()
 	var classes := ["knight", "mage"]
-	# Party size scales with stage
 	var count := 2 + int(stage / 2)
 	count = min(count, 4)
 	for i in count:
 		var cls: String = classes[i % classes.size()]
-		var hp_max := 100 if cls == "knight" else 70
-		# Scale HP with stage
-		hp_max += (stage - 1) * 15
+		var hp_max := (100 if cls == "knight" else 70) + (stage - 1) * 15
 		party.append({
 			"class": cls,
 			"name": _random_name(i),
@@ -133,50 +116,26 @@ func spawn_party() -> void:
 			"hp": hp_max,
 			"atk": (18 if cls == "knight" else 22) + (stage - 1) * 3,
 			"def": (12 if cls == "knight" else 6) + (stage - 1) * 2,
-			"equipped": {},
+			"equipped_weapon": null,  # Weapon
+			"equipped_armor": null,  # Weapon (armor is also a Weapon type)
 			"alive": true,
-		})
-	pending_deliveries.clear()
-	for adv in party:
-		var ticket := {}
-		match adv["class"]:
-			"knight": ticket = {"weapon": "sword", "armor": "helm"}
-			"mage":   ticket = {"weapon": "staff", "armor": "robe"}
-			_:        ticket = {"weapon": "sword", "armor": "helm"}
-		pending_deliveries.append({
-			"adventurer": adv,
-			"needs": ticket,
-			"patience": 60.0 + meta_upgrades["patient_adventurers"] * 12.0,
-			"patience_max": 60.0 + meta_upgrades["patient_adventurers"] * 12.0,
-			"fulfilled": {},
 		})
 	party_changed.emit()
 
 func _random_name(seed_i: int) -> String:
-	var names := ["Bram", "Wren", "Cael", "Mira", "Edric", "Solis", "Thora", "Quill", "Aldric", "Nyx"]
+	var names := ["Bram", "Wren", "Cael", "Mira", "Edric", "Solis", "Thora", "Quill"]
 	return names[(stage + wave + seed_i) % names.size()]
 
-# === GEAR POOL ===
-func add_gear_to_pit(gear: GearItem) -> void:
-	salvage_pit.append(gear)
-	salvage_changed.emit()
+# === ARSENAL ===
+func add_weapon(w: Weapon) -> void:
+	arsenal.append(w)
+	arsenal_changed.emit()
 
-func remove_gear_from_pit(gear: GearItem) -> void:
-	salvage_pit.erase(gear)
-	salvage_changed.emit()
+func remove_weapon(w: Weapon) -> void:
+	arsenal.erase(w)
+	arsenal_changed.emit()
 
-func find_gear_in_pit(type: String, min_state: int = -1) -> GearItem:
-	var best: Variant = null
-	for g in salvage_pit:
-		if g.type != type:
-			continue
-		if min_state >= 0 and g.state > min_state:
-			continue
-		if best == null or g.state < best.state:
-			best = g
-	return best
-
-# === UPGRADE SHOP ===
+# === UPGRADES ===
 func upgrade_cost(key: String) -> int:
 	var def: Dictionary = UPGRADE_DEFS[key]
 	var lvl: int = meta_upgrades[key]

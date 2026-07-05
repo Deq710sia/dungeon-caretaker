@@ -973,11 +973,11 @@ static func get_weapon_sprite(type: String, state: int) -> ImageTexture:
 	# Apply state tint
 	var tint: Color = Color.WHITE
 	match state:
-		GearItem.State.BLOODIED:  tint = Color(1.2, 0.6, 0.6, 1.0)  # redden
-		GearItem.State.RUSTED:    tint = Color(1.3, 1.0, 0.5, 1.0)  # orange-brown
-		GearItem.State.HAUNTED:   tint = Color(0.7, 0.9, 1.3, 1.0)  # icy
-		GearItem.State.CURSED:    tint = Color(1.3, 0.6, 1.4, 1.0)  # purple
-		GearItem.State.SHATTERED: tint = Color(0.5, 0.5, 0.5, 1.0)  # gray
+		Weapon.State.BLOODIED:  tint = Color(1.2, 0.6, 0.6, 1.0)  # redden
+		Weapon.State.RUSTED:    tint = Color(1.3, 1.0, 0.5, 1.0)  # orange-brown
+		Weapon.State.HAUNTED:   tint = Color(0.7, 0.9, 1.3, 1.0)  # icy
+		Weapon.State.CURSED:    tint = Color(1.3, 0.6, 1.4, 1.0)  # purple
+		Weapon.State.SHATTERED: tint = Color(0.5, 0.5, 0.5, 1.0)  # gray
 	# Multiply tint onto the image
 	for y in img.get_height():
 		for x in img.get_width():
@@ -987,27 +987,27 @@ static func get_weapon_sprite(type: String, state: int) -> ImageTexture:
 				img.set_pixel(x, y, nc)
 	# Add state-specific overlays
 	match state:
-		GearItem.State.BLOODIED:
+		Weapon.State.BLOODIED:
 			# Add blood drips
 			for i in 5:
 				var bx := 8 + i * 4
 				var by := 4 + (i % 3) * 3
 				_px(img, bx, by, Color(0.55, 0.05, 0.05, 1.0))
 				_px(img, bx, by + 1, Color(0.35, 0.03, 0.03, 1.0))
-		GearItem.State.RUSTED:
+		Weapon.State.RUSTED:
 			# Add rust spots
 			for i in 8:
 				var rx := 4 + (i * 5) % 24
 				var ry := 4 + (i * 3) % 24
 				_px(img, rx, ry, Color(0.55, 0.30, 0.10, 1.0))
 				_px(img, rx + 1, ry, Color(0.40, 0.20, 0.05, 1.0))
-		GearItem.State.HAUNTED:
+		Weapon.State.HAUNTED:
 			# Add ghostly wisps
 			for i in 6:
 				var wx := 6 + (i * 4) % 20
 				var wy := 2 + (i * 5) % 26
 				_px(img, wx, wy, Color(0.60, 0.85, 1.0, 0.6))
-		GearItem.State.CURSED:
+		Weapon.State.CURSED:
 			# Add dark runes
 			for i in 5:
 				var cx := 6 + i * 5
@@ -1015,7 +1015,7 @@ static func get_weapon_sprite(type: String, state: int) -> ImageTexture:
 				_px(img, cx, cy, Color(0.20, 0.05, 0.30, 1.0))
 				_px(img, cx + 1, cy, Color(0.40, 0.10, 0.50, 1.0))
 				_px(img, cx, cy + 1, Color(0.40, 0.10, 0.50, 1.0))
-		GearItem.State.SHATTERED:
+		Weapon.State.SHATTERED:
 			# Add crack lines
 			_line(img, 4, 8, 16, 14, Color(0.05, 0.05, 0.05, 1.0))
 			_line(img, 16, 14, 24, 22, Color(0.05, 0.05, 0.05, 1.0))
