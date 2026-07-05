@@ -119,4 +119,4 @@ func _on_continue() -> void:
 	if status == "win" or status == "lose":
 		GameState.set_phase("win_lose")
 	else:
-		GameState.set_phase("salvage")
+		GameState.set_phase("hub")

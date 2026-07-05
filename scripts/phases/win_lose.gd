@@ -84,7 +84,7 @@ func _ready() -> void:
 
 func _on_restart() -> void:
 	GameState.start_new_run()
-	GameState.set_phase("salvage")
+	GameState.set_phase("hub")
 
 func _on_menu() -> void:
 	GameState.set_phase("menu")

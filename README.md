@@ -24,12 +24,18 @@ No external assets required — all sprites are generated procedurally at runtim
 
 ## Game Loop (One Day)
 
-1. **Dawn — Salvage Pit:** Review yesterday's gear. Each piece has a state (Pristine, Bloodied, Rusted, Haunted, Cursed, Shattered) and history.
-2. **Morning — Workshop:** Repair gear at one of four stations. Each station is a tactile minigame (Jacksmith-style).
-3. **Midday — Entrance Hall:** A new party arrives with order tickets. Pick up revitalized gear, run it across the hall, dodge a gauntlet of *Dumb Ways to Die*-style QTE microgames.
-4. **Dusk — Battle:** Bell tolls. Watch the auto-battle play out. Use your ghost ability (key 1) to slow enemies.
-5. **Night — Tally:** Survivors leave with their gear. The dead drop theirs back to the pit, worse for wear.
-6. **Between Days — Upgrades:** Spend soul shards on permanent meta-upgrades.
+1. **Dawn — Hub Scene:** You spawn as a ghost in a top-down room. The room contains:
+   - **Salvage Pit** (top-left): a pile of yesterday's gear. Walk to it and press E to pick up the next piece.
+   - **4 Repair Stations** (top row): Polish Bench, Oil & Grindstone, Exorcise Altar, Reforge Furnace. Walk to one while carrying gear and press E to start that station's minigame.
+   - **Merc Post** (top-right): walk here + E to hire martyr adventurers (costs 60 shards).
+   - **Adventurers** (bottom row): the new party, waiting with order tickets and patience timers.
+2. **Repair Minigames:** Each station has a tactile minigame (drag-wipe, hold-to-pour, trace-sigil, multi-stage forge). Quality score 0-100%.
+3. **Delivery Gauntlet:** Walk to an adventurer with gear + press E to trigger a *Dumb Ways to Die*-style QTE gauntlet (3-5 microgames, 3 integrity pips).
+4. **Bell Timer:** Counts down in the HUD. When it hits zero (or you click "Ring Bell"), the party auto-descends to battle.
+5. **Auto-Battle:** Top-down view. Party auto-fights. Press 1 to use your ghost Haunt ability (slows enemies).
+6. **Results:** Survivors leave with their gear. The dead drop theirs back to the pit, worse for wear.
+7. **Upgrade Shop:** Spend soul shards on permanent meta-upgrades.
+8. **Sleep → Next Day:** Repeat for 30 days.
 
 ## Gear States & Repair Stations
 
