@@ -57,7 +57,7 @@ func _ready() -> void:
 func _spawn_enemies() -> void:
 	enemies.clear()
 	# Number scales with day
-	var count := 2 + GameState.day / 5
+	var count: int = 2 + int(GameState.day) / 5
 	count = min(count, 5)
 	for i in count:
 		var sprite_name := "slime"

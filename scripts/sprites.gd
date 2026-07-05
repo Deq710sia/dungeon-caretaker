@@ -71,7 +71,7 @@ static func _draw_ghost(img: Image) -> void:
 static func _draw_knight(img: Image) -> void:
 	var armor := Color(0.55, 0.65, 0.85)
 	var dark := Color(0.25, 0.30, 0.45)
-	var skin := Color(0.95, 0.80, 0.65)
+	var _skin := Color(0.95, 0.80, 0.65)
 	# Body
 	_rect(img, 4, 8, 8, 6, armor)
 	# Helmet

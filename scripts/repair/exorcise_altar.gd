@@ -56,7 +56,6 @@ func _build_sigil() -> void:
 	var r: float = min(area_size.x, area_size.y) * 0.35
 	# Build a star pattern (pentagram visit order)
 	var n := 5
-	var order := [0, 2, 4, 1, 3]  # pentagram traversal
 	for i in n:
 		var a := -PI / 2.0 + i * (2.0 * PI / n)
 		sigil_points.append(Vector2(cx + cos(a) * r, cy + sin(a) * r))

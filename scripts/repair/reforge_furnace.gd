@@ -226,7 +226,7 @@ func _click_melt(pos: Vector2) -> void:
 		stage = 1
 	# Otherwise, holding mouse handled in _input
 
-func _click_pour(pos: Vector2) -> void:
+func _click_pour(_pos: Vector2) -> void:
 	# Any click locks the pour
 	if pour_locked:
 		return

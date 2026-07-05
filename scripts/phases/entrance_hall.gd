@@ -240,7 +240,7 @@ func _draw() -> void:
 		# Patience bar above
 		var pct: float = float(a.patience) / float(a.patience_max)
 		var bar_w := 16
-		var bar_x: float = a.pos.x - bar_w / 2
+		var bar_x: float = a.pos.x - bar_w / 2.0
 		var bar_y: float = a.pos.y - 16
 		draw_rect(Rect2(bar_x, bar_y, bar_w, 2), Color(0.20, 0.20, 0.20), true)
 		var c: Color = Color(0.55, 0.95, 0.55) if pct > 0.5 else (Color(0.95, 0.85, 0.30) if pct > 0.25 else Color(0.95, 0.40, 0.40))

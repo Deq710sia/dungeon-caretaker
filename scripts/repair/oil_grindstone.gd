@@ -93,7 +93,7 @@ func _draw() -> void:
 	draw_rect(Rect2(meter_x, meter_y, meter_w, meter_h), Color(0.55, 0.55, 0.65), false, 2)
 
 	# Stats
-	var pct := time_in_zone / TIME_LIMIT
+	var _pct := time_in_zone / TIME_LIMIT
 	draw_string(get_default_font(), area_origin + Vector2(8, area_size.y + 20), "In-zone: %.1fs / %.1fs" % [time_in_zone, TIME_LIMIT], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.85, 0.95, 0.85))
 	draw_string(get_default_font(), area_origin + Vector2(area_size.x - 8, area_size.y + 20), "Time: %.1fs" % time_left, HORIZONTAL_ALIGNMENT_RIGHT, -1, 12, Color(0.95, 0.85, 0.40))
 
