@@ -1,37 +1,34 @@
-# Dungeon Caretaker: A Ghost's Salvage (V3)
+# Dungeon Caretaker: A Ghost's Salvage (V4)
 
-A top-down pixel-art **roguelike management sim** where weapons are the persistent, named, degrading objects you invest in across waves. You don't fight — you salvage, repair, and assign weapons to doomed adventurers, then watch them auto-battle and witness your craft succeed or shatter.
+A top-down **pixel-art roguelike management sim** where weapons are the persistent, named, degrading objects you invest in across waves. You don't fight — you salvage, repair, and assign weapons to doomed adventurers, then watch them auto-battle and witness your craft succeed or shatter.
 
-## V3 — The Real Redesign
+## V4 — The Pixel Art + Agency + Juice Redesign
 
-V1 was all menus. V2 was top-down but broken: text unreadable, no planning phase, QTE cutscenes replaced with physical dodging, weapons weren't central. V3 fixes all of this based on actual game design research (Jacksmith, Papa's Pizzeria, Hades, Slay the Spire, Dumb Ways to Die).
+V3 still failed: 640×360 wasn't chunky enough to read as pixel art, `canvas_items` stretch blurred pixels, vector primitives for hazards broke the aesthetic, planning was a menu, salvage had zero agency (auto-walk removed the player), no juice. V4 fixes all of this based on deep research (Camwing's Satisfactory brain-hooks analysis, Dead Space diegetic UI, Saint11's pixel art rules, Vlambeer's juice principles, Slay the Spire's planning).
 
-### What V3 does differently:
+### What V4 does differently:
 
-**1. Text is legible now** — Internal resolution raised to 640×360 (from 320×180). Press Start 2P font at 8-12px body, 16-24px headers. Verified 9/10 legibility via visual inspection.
+**1. Real pixel art now** — Internal resolution 320×180 (Celeste standard, chunky pixels). Stretch mode `viewport` (pixel-perfect, no blur). Aspect `keep` (no non-integer scaling). 32-color curated palette (`scripts/palette.gd`) — every color in the game comes from it. All sprites 16×16, palette-disciplined, no vector primitives. Snap-to-pixel enabled. Press Start 2P font everywhere via `GameFont.gd` (no default Godot font anywhere). Verified 8/10 "authentic pixel art, chunky, palette-disciplined" via visual inspection.
 
-**2. Real Planning phase** — Wave path map (showing node types + boss), battle intel (enemy types, count, HP/ATK estimates), weapon-to-adventurer assignment UI, irreversible commit. Based on Slay the Spire's asymmetric intel pattern.
+**2. Diegetic planning phase** — No menus. Walk to the **map table** → view wave path & intel overlay. Walk to the **weapon rack** → pick up a weapon (3 visible per page). Walk to **adventurers** → assign the carried weapon. Walk to the **bell** → ring it, begin the wave. Everything is physical. Carries weapons visually, same as workshop.
 
-**3. QTE cutscenes, not physical dodging** — The salvage phase auto-walks the ghost through the dungeon. At each hazard, a Dumb Ways to Die style QTE cutscene triggers: one verb, 3 beats, ~15s. Failure = lose a salvage (not run-ending).
+**3. Salvage with full agency** — Killed the auto-walk. Ghost moves with WASD (reuses workshop code). Camera looks AHEAD (+40 offset, not backwards). Hazards are visible pixel sprites you CHOOSE to approach. Corpses have names ("Here lies Bram the Bold, felled by slimes"). QTE bar is drawn at the hazard position (diegetic, not full-screen overlay). Failure is FAIR: damages the most recently collected weapon (visible, not random deletion). Push-your-luck: hazards have cooldown, you can retreat.
 
-**4. Weapons are characters** — Every weapon has:
-- A unique name (procedurally generated)
-- A day-stamp (when it was forged/found)
-- A wielder binding (who it's assigned to)
-- 4 discrete wear states with distinct art (Pristine → Worn → Damaged → Shattered)
-- A kill log (enemies slain)
-- Authoring fingerprints (sharpness/balance/power/mystic from crafting minigames)
-- Retained as a broken memento when shattered (never deleted)
+**4. Juice system** — New `Juice.gd` autoload: trauma-based screen shake, hit-stop (0.06–0.15s freezes on impacts/breaks/bell), directional pixel-square particles (not vector circles), squash & stretch on the ghost (preserves volume, eases back). Every significant event has visual + kinesthetic response.
 
-**5. Spectator battle with visible degradation** — The party auto-fights. You watch. Weapons visibly degrade during the fight (wear state changes, durability bar drops). When a weapon breaks, there's hit-stop + particle burst + log message. This is the "judgement phase" that reads your crafting.
+**5. Brain hooks (from research)** — Visible state change (corpses → bone piles, persistent). Anticipation (hazards pulse before you reach them). Investment (weapons have authoring fingerprints: sharpness/balance/power/mystic). Narrative (named corpses with death causes in weapon history). Near-miss (QTE shows the target zone so you see how close you were). Failure-is-progress (weapons retained as broken mementos, never deleted).
 
-**6. Weapon dossier cards** — After each battle, the results screen shows every weapon's dossier: name, wear state, day forged, kills, waves survived, wielder, authoring fingerprints. This is how you remember "the bad sword from wave 3."
+**6. Weapons are characters** — Every weapon has: unique name, day-stamp, wielder binding, 4 discrete wear states with distinct art, kill log, authoring fingerprints, retained as broken memento when shattered.
+
+**7. Spectator battle with visible degradation** — Party auto-fights, you watch. Weapons visibly degrade during the fight (wear state changes, durability bar drops). When a weapon breaks: 0.15s hit-stop + 12-particle burst + log message. This is the Jacksmith "judgement phase" that reads your crafting.
 
 ## How to Run
 
 1. Install **Godot 4.3 stable** (or newer) from https://godotengine.org/
 2. Open the project folder in Godot
 3. Press **F5** to play
+
+No external assets required — all sprites are generated procedurally. The pixel font (Press Start 2P) is bundled.
 
 ## Controls
 
@@ -45,10 +42,10 @@ V1 was all menus. V2 was top-down but broken: text unreadable, no planning phase
 
 ## Game Loop (Per Wave)
 
-1. **Planning** — See the wave path, battle intel, your arsenal. Assign weapons to adventurers. Commit.
-2. **Salvage** — Auto-walk through dungeon. QTE cutscenes at hazards. Collect gear from corpses.
-3. **Workshop** — Walk between 4 repair stations. Each minigame shows the weapon large. Repair restores durability and state.
-4. **Battle** — Spectator phase. Party auto-fights. Weapons visibly degrade. Watch your craft succeed or shatter.
+1. **Planning** (diegetic room) — Walk to map table → view wave path & intel. Walk to weapon rack → pick up weapon. Walk to adventurers → assign. Walk to bell → ring it, begin wave.
+2. **Salvage** (top-down, full agency) — WASD movement through dungeon. Collect gear from named corpses. Hazards are visible pixel sprites — approach to disarm via diegetic QTE (bar drawn at hazard position). Failure damages a visible weapon.
+3. **Workshop** (top-down room) — Walk between 4 repair stations. Each minigame shows the weapon large. Repair restores durability and state. Ring bell to battle.
+4. **Battle** (spectator, top-down scroller) — Party auto-fights. Weapons visibly degrade. Watch your craft succeed or shatter. Press 1 to Haunt enemies (slow them).
 5. **Results** — Weapon dossier cards show what happened. Earn soul shards.
 6. **Upgrade Shop** — Spend shards on permanent meta-upgrades.
 7. Next wave (or next stage).
@@ -79,12 +76,14 @@ Clear all **5 stages** (3 waves each = 15 waves total).
 
 ## Resolution
 
-640×360 internal, scales to 4K+ via `canvas_items` stretch mode. Pixel-perfect.
+320×180 internal (Celeste standard), `viewport` stretch mode, `keep` aspect. Scales to 4K+ with pixel-perfect integer scaling. Snap-to-pixel enabled.
 
 ## Art
 
-- All sprites procedurally generated at runtime (`scripts/sprites.gd`)
-- Pixel font: Press Start 2P (bundled in `assets/fonts/`)
+- All sprites procedurally generated at runtime (`scripts/sprites.gd`) — 16×16, palette-disciplined
+- 32-color curated palette (`scripts/palette.gd`)
+- Pixel font: Press Start 2P (bundled in `assets/fonts/`), applied everywhere via `GameFont.gd`
+- Juice: `scripts/juice.gd` (screen shake, hit-stop, directional particles)
 
 ## Save Data
 
@@ -94,7 +93,43 @@ Meta-upgrades persist between sessions, saved to `user://save_v3.json`.
 
 - **Engine:** Godot 4.3+ (GL Compatibility renderer)
 - **Language:** GDScript
-- **Resolution:** 640×360 base, scales to 4K+
+- **Resolution:** 320×180 base, scales to 4K+ (pixel-perfect)
+- **Pixel art:** snap_2d_transforms_to_pixel + snap_2d_vertices_to_pixel enabled
+
+## Project Structure
+
+```
+dungeon_caretaker/
+├── project.godot              (320x180, viewport stretch, snap-to-pixel)
+├── assets/
+│   ├── default_theme.tres     (Press Start 2P global theme)
+│   └── fonts/press_start_2p.ttf
+├── scripts/
+│   ├── autoload/
+│   │   ├── game_state.gd      (run state, arsenal, party, upgrades)
+│   │   └── juice.gd           (screen shake, hit-stop, particles)
+│   ├── palette.gd             (32-color curated palette)
+│   ├── game_font.gd           (Press Start 2P helper, no default font)
+│   ├── sprites.gd             (16x16 procedural pixel sprites)
+│   ├── weapon.gd              (Weapon class: name, wear, kill log, fingerprints)
+│   ├── main.gd                (phase manager)
+│   ├── phases/
+│   │   ├── main_menu.gd
+│   │   ├── planning.gd        (diegetic room: map table, rack, bell, adventurers)
+│   │   ├── salvage.gd         (WASD movement, named corpses, diegetic QTE)
+│   │   ├── workshop.gd        (4 repair stations, weapon visible in minigames)
+│   │   ├── battle.gd          (spectator, weapons degrade, hit-stop on break)
+│   │   ├── results.gd         (weapon dossier cards)
+│   │   ├── upgrade_shop.gd
+│   │   └── win_lose.gd
+│   └── repair/
+│       ├── polish_bench.gd
+│       ├── oil_grindstone.gd
+│       ├── exorcise_altar.gd
+│       └── reforge_furnace.gd
+└── scenes/
+    └── main.tscn
+```
 
 ## License
 
