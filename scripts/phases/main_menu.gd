@@ -68,7 +68,7 @@ func _ready() -> void:
 
 func _on_start() -> void:
         GameState.start_new_run()
-        GameState.set_phase("hub")
+        GameState.set_phase("salvage_run")
 
 func _on_quit() -> void:
         get_tree().quit()

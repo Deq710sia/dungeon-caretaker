@@ -1,14 +1,15 @@
 extends Node2D
-## Main phase manager. Owns the current phase scene and switches between them.
-## Phases: menu, hub (salvage+workshop+delivery combined), battle, results, upgrade, win_lose
+## Main phase manager (V2).
+## Phase flow: menu -> salvage_run -> workshop -> battle -> results -> upgrade -> (loop or next stage)
 
 const PHASE_SCRIPTS := {
-        "menu":     preload("res://scripts/phases/main_menu.gd"),
-        "hub":      preload("res://scripts/phases/entrance_hall.gd"),
-        "battle":   preload("res://scripts/phases/battle.gd"),
-        "results":  preload("res://scripts/phases/results.gd"),
-        "upgrade":  preload("res://scripts/phases/upgrade_shop.gd"),
-        "win_lose": preload("res://scripts/phases/win_lose.gd"),
+        "menu":         preload("res://scripts/phases/main_menu.gd"),
+        "salvage_run":  preload("res://scripts/phases/salvage_run.gd"),
+        "workshop":     preload("res://scripts/phases/workshop.gd"),
+        "battle":       preload("res://scripts/phases/battle.gd"),
+        "results":      preload("res://scripts/phases/results.gd"),
+        "upgrade":      preload("res://scripts/phases/upgrade_shop.gd"),
+        "win_lose":     preload("res://scripts/phases/win_lose.gd"),
 }
 
 var current_phase_node: Node2D = null

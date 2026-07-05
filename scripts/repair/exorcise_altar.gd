@@ -1,67 +1,53 @@
 extends Node2D
-## Repair Minigame: Exorcise Altar
+## Repair Minigame: Exorcise Altar (V2)
 ## Removes HAUNTED and CURSED states.
-## HAUNTED: trace the glowing sigil path before time runs out (forward).
-## CURSED: same sigil, but you must trace it in REVERSE (Simon-says style).
-## Quality = fraction of waypoints hit correctly in order.
+## The WEAPON is drawn large in the center, surrounded by the sigil you must trace.
+## HAUNTED: trace forward. CURSED: trace in reverse.
 
 signal completed(quality: float)
 
-const TIME_LIMIT: float = 7.0
+const TIME_LIMIT: float = 8.0
 
 var time_left: float = TIME_LIMIT
 var sigil_points: PackedVector2Array = PackedVector2Array()
-var visited: PackedByteArray = PackedByteArray()  # 1 if visited in correct order
+var visited: PackedByteArray = PackedByteArray()
 var next_idx: int = 0
 var finished: bool = false
-var is_cursed: bool = false  # if true, traverse in reverse
-var area_origin: Vector2
-var area_size: Vector2
+var is_cursed: bool = false
+var gear: GearItem = null
 
 func _ready() -> void:
-	var vp := get_viewport().get_visible_rect().size
-	area_origin = Vector2(vp.x * 0.15, vp.y * 0.30)
-	area_size = Vector2(vp.x * 0.70, vp.y * 0.40)
-	# Determine if cursed variant
-	if GameState.salvage_pit.size() > 0:
-		# The active gear is determined by workshop.gd when launching; we just trust the workshop
-		# to pass the gear via group "current_gear" — but for simplicity, we detect by checking
-		# if any current gear is cursed. The workshop sets current_gear before launching us.
-		pass
-	# Pull the current gear from the workshop (parent)
-	var parent := get_parent()
-	if parent and parent.has_method("get") and parent.get("current_gear") != null:
-		var g = parent.get("current_gear")
-		if g is GearItem:
-			is_cursed = g.is_cursed_variant()
-	# Build sigil: pentagram-ish 5-point star
+	var p := get_parent()
+	if p and p.get("ghost") != null and p.ghost.carrying != null:
+		gear = p.ghost.carrying
+	elif p and p.get("current_gear_for_minigame") != null:
+		gear = p.current_gear_for_minigame
+	if gear != null:
+		is_cursed = gear.is_cursed_variant()
 	_build_sigil()
-
+	var instruction := "TRACE FORWARD!" if not is_cursed else "TRACE IN REVERSE!"
 	var lbl := Label.new()
-	var instruction := "Trace the sigil!" if not is_cursed else "Trace the sigil IN REVERSE!"
-	lbl.text = "Exorcise Altar — %s (%.0fs)" % [instruction, TIME_LIMIT]
-	lbl.add_theme_font_size_override("font_size", 11)
-	lbl.add_theme_color_override("font_color", Color(0.55, 0.75, 0.95) if not is_cursed else Color(0.85, 0.55, 0.95))
+	lbl.text = "EXORCISE ALTAR — %s" % instruction
+	lbl.add_theme_font_size_override("font_size", 7)
+	lbl.add_theme_color_override("font_color", Color(0.85, 0.55, 0.95) if is_cursed else Color(0.55, 0.75, 0.95))
 	lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0))
-	lbl.add_theme_constant_override("outline_size", 3)
-	lbl.position = Vector2(area_origin.x - 80, area_origin.y - 24)
-	lbl.size = Vector2(area_size.x + 160, 20)
+	lbl.add_theme_constant_override("outline_size", 2)
+	lbl.position = Vector2(0, 22)
+	lbl.size = Vector2(320, 14)
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(lbl)
 
 func _build_sigil() -> void:
-	# 7 waypoints forming a sigil (rough pentagram + ring)
-	var cx := area_origin.x + area_size.x * 0.5
-	var cy := area_origin.y + area_size.y * 0.5
-	var r: float = min(area_size.x, area_size.y) * 0.35
-	# Build a star pattern (pentagram visit order)
-	var n := 5
+	var vp := Vector2(320, 180)
+	var center := Vector2(vp.x / 2, vp.y / 2 + 5)
+	var r: float = 55.0
+	# 7-pointed star pattern
+	var n := 7
 	for i in n:
 		var a := -PI / 2.0 + i * (2.0 * PI / n)
-		sigil_points.append(Vector2(cx + cos(a) * r, cy + sin(a) * r))
-	# Add center as final waypoint
-	sigil_points.append(Vector2(cx, cy))
-	# If cursed, reverse the order
+		sigil_points.append(center + Vector2(cos(a), sin(a)) * r)
+	# Center point
+	sigil_points.append(center)
 	if is_cursed:
 		sigil_points.reverse()
 	visited.resize(sigil_points.size())
@@ -79,14 +65,27 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 func _draw() -> void:
-	# Background (altar)
-	draw_rect(Rect2(area_origin, area_size), Color(0.08, 0.06, 0.12), true)
-	# Connecting lines (faint)
+	var vp := Vector2(320, 180)
+	draw_rect(Rect2(Vector2.ZERO, vp), Color(0.05, 0.04, 0.10, 0.95), true)
+	# Draw the WEAPON in the center (the centerpiece!)
+	if gear != null:
+		var weapon_tex := Sprites.get_weapon_sprite(gear.type, gear.state)
+		var wsize := 56
+		var wpos := Vector2(vp.x / 2 - wsize / 2, vp.y / 2 - wsize / 2 + 5)
+		# Mystical glow around weapon
+		var glow_pulse := 0.5 + 0.3 * sin(Time.get_ticks_msec() * 0.005)
+		var glow_c := Color(0.65, 0.40, 0.85, glow_pulse * 0.4) if is_cursed else Color(0.55, 0.75, 0.95, glow_pulse * 0.4)
+		draw_circle(Vector2(vp.x / 2, vp.y / 2 + 5), 45, glow_c)
+		# Weapon
+		draw_texture_rect(weapon_tex, Rect2(wpos.x, wpos.y, wsize, wsize), false)
+		# Weapon name
+		draw_string(ThemeDB.get_default_theme().default_font, Vector2(vp.x / 2 - 50, vp.y / 2 + 40), gear.display_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 7, gear.state_color())
+	# Sigil lines (faded)
 	for i in sigil_points.size():
 		var j := (i + 1) % sigil_points.size()
-		var c := Color(0.30, 0.20, 0.40, 0.5)
+		var c := Color(0.30, 0.20, 0.40, 0.4)
 		if visited[i] == 1 and visited[j] == 1:
-			c = Color(0.55, 0.75, 0.95, 0.9)
+			c = Color(0.55, 0.95, 0.75, 0.9)
 		draw_line(sigil_points[i], sigil_points[j], c, 2)
 	# Waypoints
 	for i in sigil_points.size():
@@ -98,19 +97,22 @@ func _draw() -> void:
 			c = Color(0.95, 0.85, 0.30)
 		else:
 			c = Color(0.40, 0.30, 0.55)
+		# Pulse on active
+		if i == next_idx:
+			var pulse := 1.0 + 0.2 * sin(Time.get_ticks_msec() * 0.008)
+			draw_circle(p, 18 * pulse, Color(0.95, 0.85, 0.30, 0.3))
 		draw_circle(p, 14, c)
-		draw_circle(p, 14, Color(1, 1, 1, 0.3), false, 2)
+		draw_circle(p, 14, Color(1, 1, 1, 0.4), false, 2)
 		# Number label
-		draw_string(get_default_font(), p + Vector2(-4, 4), str(i + 1), HORIZONTAL_ALIGNMENT_CENTER, -1, 12, Color(0, 0, 0))
-
-	# Progress
+		draw_string(ThemeDB.get_default_theme().default_font, p + Vector2(-3, 4), str(i + 1), HORIZONTAL_ALIGNMENT_CENTER, -1, 10, Color(0, 0, 0))
+	# Stats
 	var hit := 0
 	for v in visited:
 		if v == 1:
 			hit += 1
-	var pct := float(hit) / float(sigil_points.size())
-	draw_string(get_default_font(), area_origin + Vector2(8, area_size.y + 20), "Sigil: %.0f%%" % (pct * 100), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.85, 0.95, 0.85))
-	draw_string(get_default_font(), area_origin + Vector2(area_size.x - 8, area_size.y + 20), "Time: %.1fs" % time_left, HORIZONTAL_ALIGNMENT_RIGHT, -1, 12, Color(0.95, 0.85, 0.40))
+	var pct: float = float(hit) / float(sigil_points.size())
+	draw_string(ThemeDB.get_default_theme().default_font, Vector2(10, vp.y - 24), "Sigil: %.0f%%" % (pct * 100), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.85, 0.95, 0.85))
+	draw_string(ThemeDB.get_default_theme().default_font, Vector2(vp.x - 10, vp.y - 24), "Time: %.1fs" % time_left, HORIZONTAL_ALIGNMENT_RIGHT, -1, 8, Color(0.95, 0.85, 0.40))
 
 func _input(event: InputEvent) -> void:
 	if finished:
@@ -124,11 +126,10 @@ func _check_click(pos: Vector2) -> void:
 	if next_idx >= sigil_points.size():
 		return
 	var target := sigil_points[next_idx]
-	if pos.distance_to(target) <= 18:
+	if pos.distance_to(target) <= 20:
 		visited[next_idx] = 1
 		next_idx += 1
 		if next_idx >= sigil_points.size():
-			# All hit! Early finish with full quality
 			_finish()
 
 func _finish() -> void:
@@ -137,12 +138,9 @@ func _finish() -> void:
 	for v in visited:
 		if v == 1:
 			hit += 1
-	# Quality: hits / total. Bonus for early completion.
-	var quality := float(hit) / float(sigil_points.size())
+	var quality: float = float(hit) / float(sigil_points.size())
 	if next_idx >= sigil_points.size():
-		quality = 1.0  # perfect trace
-	await get_tree().create_timer(0.5).timeout
+		quality = 1.0
+	await get_tree().create_timer(0.4).timeout
 	completed.emit(quality)
-
-func get_default_font() -> Font:
-	return ThemeDB.get_default_theme().default_font
+	queue_free()
