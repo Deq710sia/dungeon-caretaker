@@ -87,8 +87,12 @@ func _on_buy(key: String) -> void:
 		_refresh()
 
 func _on_continue() -> void:
+	# NOTE: at this point in the flow (reached via results -> upgrades) the
+	# wave has not advanced yet, so is_run_over() here only ever reports "lose"
+	# (party already wiped) or "" — never "win" (that's only checked after
+	# results.gd calls next_wave()). Still, handle both defensively.
 	var status := GameState.is_run_over()
-	if status == "win":
+	if status == "win" or status == "lose":
 		GameState.set_phase("win_lose")
 	else:
 		GameState.set_phase("planning")

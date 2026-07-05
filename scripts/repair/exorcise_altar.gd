@@ -20,8 +20,6 @@ func _ready() -> void:
 	var p := get_parent()
 	if p and p.get("ghost") != null and p.ghost.carrying != null:
 		gear = p.ghost.carrying
-	elif p and p.get("current_gear_for_minigame") != null:
-		gear = p.current_weapon
 	if gear != null:
 		is_cursed = gear.state == Weapon.State.CURSED
 	_build_sigil()

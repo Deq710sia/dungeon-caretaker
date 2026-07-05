@@ -217,8 +217,8 @@ func _attack_enemy(unit: Dictionary, enemy: Dictionary) -> void:
 	if adv.get("equipped_weapon") != null:
 		var w: Weapon = adv.equipped_weapon
 		w.take_durability_damage(6, "combat hit")
-		if w.is_broken and not w.history.has("break_announced"):
-			w.history.append("break_announced")
+		if w.is_broken and not w.break_announced:
+			w.break_announced = true
 			Juice.add_trauma(0.5)
 			Juice.hit_stop(0.15)
 			Juice.spawn_particles(unit.pos, 12, Palette.STEEL_LT, 50.0, 0.7)

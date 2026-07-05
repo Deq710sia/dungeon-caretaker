@@ -1,6 +1,6 @@
 class_name Weapon
 extends RefCounted
-## Weapon V3 — the persistent, named, degrading object the player invests in.
+## Weapon V5 — the persistent, named, degrading object the player invests in.
 ## This is the emotional anchor of the game. Each weapon has:
 ## - A unique name (procedurally generated with personality)
 ## - A day-stamp (when it was forged/found)
@@ -8,7 +8,8 @@ extends RefCounted
 ## - 4 discrete wear states with distinct art
 ## - A kill log (enemies slain, waves survived)
 ## - Authoring scores (fingerprint of how it was crafted)
-## - Retained as memento when broken (never deleted)
+## - A full narrative history (see get_full_history()) — retained as a memento
+##   when broken, never deleted.
 
 enum WearState { PRISTINE = 0, WORN = 1, DAMAGED = 2, BROKEN = 3 }
 
@@ -19,14 +20,17 @@ const WEAR_NAMES := {
 	WearState.BROKEN: "Shattered",
 }
 
+# Colors are sourced from Palette (single source of truth) rather than
+# duplicated here, so retuning the palette can't silently drift out of sync.
 const WEAR_COLORS := {
-	WearState.PRISTINE: Color(0.55, 0.95, 0.55),
-	WearState.WORN: Color(0.95, 0.85, 0.40),
-	WearState.DAMAGED: Color(0.95, 0.55, 0.30),
-	WearState.BROKEN: Color(0.55, 0.30, 0.30),
+	WearState.PRISTINE: Palette.WEAR_PRISTINE,
+	WearState.WORN: Palette.WEAR_WORN,
+	WearState.DAMAGED: Palette.WEAR_DAMAGED,
+	WearState.BROKEN: Palette.WEAR_BROKEN,
 }
 
 const BASE_DURABILITY: int = 100
+const LEGENDARY_KILL_THRESHOLD: int = 8  # kills at which a weapon earns an epithet
 
 # --- Identity (persistent) ---
 var type: String = "sword"  # "sword" | "staff" | "helm" | "robe"
@@ -36,7 +40,10 @@ var wielder: String = ""  # adventurer name
 var is_broken: bool = false
 var kill_log: Array = []  # Array[String] — enemies slain
 var waves_survived: int = 0
-var history: Array = []  # Array[String] — flavor log
+var history: Array = []  # Array[String] — flavor log, shown in the dossier detail view
+var break_announced: bool = false  # internal flag; kept OUT of history so the
+                                    # player-facing chronicle never leaks bookkeeping text
+var is_legendary: bool = false
 
 # --- Condition (degrades, repairable) ---
 var wear_state: int = WearState.PRISTINE
@@ -64,20 +71,11 @@ const STATE_NAMES := {
 
 const STATE_COLORS := {
 	State.PRISTINE: Color(0.85, 0.95, 0.85),
-	State.BLOODIED: Color(0.85, 0.45, 0.45),
-	State.RUSTED: Color(0.75, 0.55, 0.30),
-	State.HAUNTED: Color(0.55, 0.75, 0.95),
-	State.CURSED: Color(0.65, 0.40, 0.85),
-	State.SHATTERED: Color(0.45, 0.45, 0.45),
-}
-
-const STATE_EMOJI := {
-	State.PRISTINE: "OK",
-	State.BLOODIED: "BLD",
-	State.RUSTED: "RST",
-	State.HAUNTED: "HNT",
-	State.CURSED: "CRS",
-	State.SHATTERED: "SHT",
+	State.BLOODIED: Palette.STATE_BLOODIED,
+	State.RUSTED: Palette.STATE_RUSTED,
+	State.HAUNTED: Palette.STATE_HAUNTED,
+	State.CURSED: Palette.STATE_CURSED,
+	State.SHATTERED: Palette.STATE_SHATTERED,
 }
 
 const REPAIR_TARGETS := {
@@ -133,7 +131,8 @@ func stat_multiplier() -> float:
 		WearState.BROKEN: wear_mult = 0.0
 	# Authoring bonus (average of the 4 fingerprints, weighted)
 	var authoring := (sharpness + balance + power + mystic) / 4.0
-	return state_mult * wear_mult * (0.7 + authoring * 0.3)
+	var legendary_bonus := 0.05 if is_legendary else 0.0
+	return state_mult * wear_mult * (0.7 + authoring * 0.3 + legendary_bonus)
 
 func durability_pct() -> float:
 	if durability_max <= 0:
@@ -174,18 +173,26 @@ func break_weapon(cause: String = "") -> void:
 
 func record_kill(enemy_type: String) -> void:
 	kill_log.append(enemy_type)
+	if not is_legendary and kill_log.size() >= LEGENDARY_KILL_THRESHOLD:
+		is_legendary = true
+		history.append("%s has drunk enough blood to earn a legend. It will not be forgotten." % display_name)
 
 func survive_wave() -> void:
 	waves_survived += 1
 
-func deliver_to(adventurer: Dictionary) -> void:
+## Assigns this weapon to an adventurer, unequipping it from whoever held it
+## before (if anyone). Encapsulated here so callers never have to touch
+## adventurer dict keys directly (and can't typo "weapon" vs "equipped_weapon").
+func deliver_to(adventurer: Dictionary, all_party: Array = []) -> void:
+	var slot := "armor" if type in ["helm", "robe"] else "weapon"
+	var slot_key := "equipped_" + slot
+	# Unequip from whoever had it before (search the given party, if provided)
+	if wielder != "":
+		for other in all_party:
+			if other.get(slot_key) == self:
+				other[slot_key] = null
+	adventurer[slot_key] = self
 	wielder = adventurer.get("name", "")
-	# Determine slot by type
-	var slot: String = "weapon"
-	match type:
-		"helm", "robe": slot = "armor"
-		_: slot = "weapon"
-	adventurer[slot] = self
 
 func apply_combat_damage(owner_died: bool) -> void:
 	if owner_died:
@@ -202,12 +209,50 @@ func apply_combat_damage(owner_died: bool) -> void:
 			state = State.BLOODIED
 			history.append("Damaged in combat on Stage %d Wave %d." % [GameState.stage, GameState.wave])
 
+## A one-line flavor descriptor from the authoring fingerprints, so sharpness/
+## balance/power/mystic actually surface somewhere instead of being an
+## invisible multiplier. Used in the dossier detail view.
+func authoring_blurb() -> String:
+	var traits := []
+	if sharpness >= 0.75: traits.append("razor-sharp")
+	elif sharpness <= 0.25: traits.append("dull")
+	if balance >= 0.75: traits.append("perfectly balanced")
+	elif balance <= 0.25: traits.append("clumsy in the hand")
+	if power >= 0.75: traits.append("powerfully forged")
+	elif power <= 0.25: traits.append("weakly tempered")
+	if mystic >= 0.75: traits.append("humming with old magic")
+	elif mystic <= 0.25: traits.append("spiritually inert")
+	if traits.is_empty():
+		return "An unremarkable piece of work — competent, forgettable."
+	return "This piece is " + ", ".join(traits) + "."
+
 func get_dossier_text() -> String:
 	# A short summary for the dossier card
 	var lines := []
-	lines.append("%s — %s" % [display_name, wear_name()])
+	var name_line := display_name
+	if is_legendary:
+		name_line = "★ " + display_name + " ★"
+	lines.append("%s — %s" % [name_line, wear_name()])
 	lines.append("Forged Stage %d | Wielder: %s" % [day_forged, wielder if wielder != "" else "unassigned"])
 	lines.append("Kills: %d | Waves survived: %d" % [kill_log.size(), waves_survived])
 	if is_broken:
 		lines.append("[BROKEN — reforgable]")
+	return "\n".join(lines)
+
+## The FULL narrative log for the detail popup — every line ever appended to
+## history, in order, plus the authoring blurb and kill log. This is where all
+## that flavor text players never used to see actually gets read.
+func get_full_history() -> String:
+	var lines := []
+	lines.append(get_dossier_text())
+	lines.append("")
+	lines.append(authoring_blurb())
+	if kill_log.size() > 0:
+		lines.append("")
+		lines.append("Kill log: " + ", ".join(kill_log))
+	if history.size() > 0:
+		lines.append("")
+		lines.append("Chronicle:")
+		for h in history:
+			lines.append("- " + h)
 	return "\n".join(lines)

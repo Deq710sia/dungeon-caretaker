@@ -25,8 +25,6 @@ func _ready() -> void:
 	var p := get_parent()
 	if p and p.get("ghost") != null and p.ghost.carrying != null:
 		gear = p.ghost.carrying
-	elif p and p.get("current_gear_for_minigame") != null:
-		gear = p.current_weapon
 	var lbl := Label.new()
 	lbl.text = "OIL & GRINDSTONE — Hold mouse to pour. Keep meter GREEN!"
 	lbl.add_theme_font_size_override("font_size", 7)

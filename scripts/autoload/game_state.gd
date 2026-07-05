@@ -1,7 +1,13 @@
 extends Node
-## GameState V3 — weapon-centric model.
+## GameState V5 — weapon-centric model with persistent party + recruit system.
 ## The weapon is the persistent, named, degrading object the player invests in.
 ## Structure: 5 stages, each with a planning -> salvage -> workshop -> battle -> results loop.
+##
+## V5 changes:
+## - Party persists across waves (no more party.clear() in next_wave()).
+## - is_run_over() returns "lose" when the whole party is wiped.
+## - spawn_party() only spawns if the party has no living members.
+## - New: can_recruit(), recruit_cost(), recruit_adventurer(), living_party_count().
 
 signal stage_changed(new_stage: int)
 signal wave_changed(new_wave: int)
@@ -12,6 +18,7 @@ signal arsenal_changed
 
 const MAX_STAGE: int = 5
 const WAVES_PER_STAGE: int = 3
+const MAX_PARTY_SIZE: int = 4
 const SAVE_PATH: String = "user://save_v3.json"
 
 # --- Run state ---
@@ -20,7 +27,7 @@ var wave: int = 1
 var soul_shards: int = 0
 var current_phase: String = "menu"
 var arsenal: Array = []  # Array[Weapon] — the player's persistent weapon inventory
-var party: Array = []
+var party: Array = []     # Array[Dictionary] — persists across waves; dead members stay dead
 var last_battle_result: Dictionary = {}
 var run_log: Array = []
 
@@ -62,6 +69,8 @@ func start_new_run() -> void:
 	for w in arsenal:
 		w.durability_max = Weapon.BASE_DURABILITY + meta_upgrades["sturdy_grip"] * 25
 		w.durability = int(w.durability_max * 0.6)
+	# Spawn the initial party
+	spawn_party()
 	run_log.append("Stage 1, Wave 1 — A new run begins.")
 	stage_changed.emit(stage)
 	wave_changed.emit(wave)
@@ -78,7 +87,9 @@ func next_wave() -> void:
 		run_log.append("Stage %d cleared! Descending..." % (stage - 1))
 	else:
 		run_log.append("Wave %d begins." % wave)
-	party.clear()
+	# NOTE: party is NOT cleared — it persists across waves. Dead members stay
+	# dead; survivors keep their HP and gear assignments. The player must
+	# recruit at the shrine (planning phase) to replace the fallen.
 	wave_changed.emit(wave)
 	stage_changed.emit(stage)
 	arsenal_changed.emit()
@@ -101,11 +112,24 @@ func set_phase(p: String) -> void:
 	phase_changed.emit(p)
 
 # === PARTY ===
+func living_party_count() -> int:
+	var count := 0
+	for adv in party:
+		if adv.get("alive", false):
+			count += 1
+	return count
+
 func spawn_party() -> void:
+	# Only spawn if there are no living members — this preserves survivors
+	# across waves and after recruits. Called by start_new_run() for a fresh
+	# party, and defensively by phases if something went wrong.
+	if living_party_count() > 0:
+		return
+	# Clear out any dead entries so we start fresh
 	party.clear()
 	var classes := ["knight", "mage"]
 	var count := 2 + int(stage / 2)
-	count = min(count, 4)
+	count = min(count, MAX_PARTY_SIZE)
 	for i in count:
 		var cls: String = classes[i % classes.size()]
 		var hp_max := (100 if cls == "knight" else 70) + (stage - 1) * 15
@@ -117,7 +141,7 @@ func spawn_party() -> void:
 			"atk": (18 if cls == "knight" else 22) + (stage - 1) * 3,
 			"def": (12 if cls == "knight" else 6) + (stage - 1) * 2,
 			"equipped_weapon": null,  # Weapon
-			"equipped_armor": null,  # Weapon (armor is also a Weapon type)
+			"equipped_armor": null,   # Weapon (armor is also a Weapon type)
 			"alive": true,
 		})
 	party_changed.emit()
@@ -125,6 +149,41 @@ func spawn_party() -> void:
 func _random_name(seed_i: int) -> String:
 	var names := ["Bram", "Wren", "Cael", "Mira", "Edric", "Solis", "Thora", "Quill"]
 	return names[(stage + wave + seed_i) % names.size()]
+
+# === RECRUITING ===
+## Can recruit if: at least one living member (to vouch) AND party isn't full.
+## A wiped party can't recruit — that's the lose condition.
+func can_recruit() -> bool:
+	return living_party_count() > 0 and living_party_count() < MAX_PARTY_SIZE
+
+func recruit_cost() -> int:
+	# Scales with stage so late-game recruits feel like an investment.
+	return 40 + stage * 10
+
+func recruit_adventurer() -> bool:
+	if not can_recruit():
+		return false
+	var cost := recruit_cost()
+	if not spend_shards(cost):
+		return false
+	# Add a fresh adventurer (alternates class to keep balance)
+	var living := living_party_count()
+	var cls: String = "knight" if living % 2 == 0 else "mage"
+	var hp_max := (100 if cls == "knight" else 70) + (stage - 1) * 15
+	party.append({
+		"class": cls,
+		"name": _random_name(party.size()),
+		"hp_max": hp_max,
+		"hp": hp_max,
+		"atk": (18 if cls == "knight" else 22) + (stage - 1) * 3,
+		"def": (12 if cls == "knight" else 6) + (stage - 1) * 2,
+		"equipped_weapon": null,
+		"equipped_armor": null,
+		"alive": true,
+	})
+	run_log.append("Recruited a new %s to the party." % cls)
+	party_changed.emit()
+	return true
 
 # === ARSENAL ===
 func add_weapon(w: Weapon) -> void:
@@ -177,6 +236,10 @@ func load_meta() -> void:
 func is_run_over() -> String:
 	if stage > MAX_STAGE:
 		return "win"
+	# A fully wiped party ends the run — the shrine can't recruit without a
+	# living vouch, so there's no recovery.
+	if living_party_count() == 0:
+		return "lose"
 	return ""
 
 # === ENEMY DIFFICULTY ===

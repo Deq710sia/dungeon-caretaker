@@ -31,6 +31,11 @@ func _on_phase_changed(new_phase: String) -> void:
 	if current_phase_node:
 		current_phase_node.queue_free()
 		current_phase_node = null
+	# A fresh phase shouldn't inherit leftover shake/particles from the last one.
+	Juice.clear_particles()
+	Juice.trauma = 0.0
+	Juice.shake_amount = 0.0
+	Juice.hit_stop_timer = 0.0
 	var script: GDScript = PHASE_SCRIPTS.get(new_phase)
 	if script == null:
 		push_error("Unknown phase: " + new_phase)

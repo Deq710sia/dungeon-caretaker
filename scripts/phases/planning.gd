@@ -12,6 +12,7 @@ const ADVENTURER_RADIUS: float = 14.0
 const MAP_TABLE_POS := Vector2(160, 50)
 const WEAPON_RACK_POS := Vector2(40, 50)
 const BELL_POS := Vector2(280, 50)
+const RECRUIT_POS := Vector2(220, 90)
 # Adventurers stand in a row at the bottom
 const ADVENTURER_Y: float = 130
 
@@ -36,17 +37,19 @@ var prompt_label: Label
 
 func _ready() -> void:
 	if GameState.party.is_empty():
-		GameState.spawn_party()
+		# Defensive fallback only — normal flow always starts a run with a party.
+		GameState.start_new_run()
 	_adventurers_arrive()
 	_build_hud()
 
 func _adventurers_arrive() -> void:
 	adventurers.clear()
-	var n := GameState.party.size()
+	var living := GameState.party.filter(func(a): return a.get("alive", true))
+	var n := living.size()
 	var spacing: float = 180.0 / float(max(1, n))
 	var start_x: float = 70.0 + spacing / 2.0
 	for i in n:
-		var adv: Dictionary = GameState.party[i]
+		var adv: Dictionary = living[i]
 		adventurers.append({
 			"pos": Vector2(start_x + i * spacing, ADVENTURER_Y),
 			"sprite": "knight" if adv["class"] == "knight" else "mage",
@@ -135,6 +138,10 @@ func _find_nearest_interactive() -> void:
 	if ghost.pos.distance_to(BELL_POS) < best_dist:
 		best_dist = ghost.pos.distance_to(BELL_POS)
 		near_interactive = "bell"
+	# Recruiting shrine
+	if ghost.pos.distance_to(RECRUIT_POS) < best_dist:
+		best_dist = ghost.pos.distance_to(RECRUIT_POS)
+		near_interactive = "recruit"
 	# Adventurers
 	for a in adventurers:
 		if ghost.pos.distance_to(a.pos) < ADVENTURER_RADIUS:
@@ -152,6 +159,15 @@ func _find_nearest_interactive() -> void:
 				prompt_label.text = "[E] Put weapon back"
 		"bell":
 			prompt_label.text = "[E] RING BELL — begin wave!"
+		"recruit":
+			var fallen := GameState.party.size() - GameState.living_party_count()
+			if not GameState.can_recruit():
+				if GameState.living_party_count() == 0:
+					prompt_label.text = "Shrine — no one is left to vouch for a recruit"
+				else:
+					prompt_label.text = "Shrine — party is full"
+			else:
+				prompt_label.text = "[E] Recruit a soul (%d shards) — %d fallen so far" % [GameState.recruit_cost(), fallen]
 		"":
 			if ghost.carrying != null:
 				var w: Weapon = ghost.carrying
@@ -194,6 +210,8 @@ func _handle_interact() -> void:
 				ghost.carrying = null
 		"bell":
 			_ring_bell()
+		"recruit":
+			_try_recruit()
 		_:
 			if near_interactive.begins_with("adv_"):
 				_assign_weapon(near_interactive.substr(4))
@@ -217,11 +235,7 @@ func _assign_weapon(adv_name: String) -> void:
 		return
 	var adv := _get_adv(adv_name)
 	var w: Weapon = ghost.carrying
-	# Determine slot
-	var slot: String = "weapon"
-	match w.type:
-		"helm", "robe": slot = "armor"
-		_: slot = "weapon"
+	var slot: String = "armor" if w.type in ["helm", "robe"] else "weapon"
 	# Check type compatibility
 	var expected_weapon := "sword" if adv.class == "knight" else "staff"
 	var expected_armor := "helm" if adv.class == "knight" else "robe"
@@ -231,25 +245,25 @@ func _assign_weapon(adv_name: String) -> void:
 	if slot == "armor" and w.type != expected_armor:
 		Juice.spawn_particles(ghost.pos, 4, Palette.TEXT_RED, 20.0, 0.3)
 		return
-	# Remove from previous owner
-	if w.wielder != "":
-		for other in GameState.party:
-			if other.get("name", "") == w.wielder:
-				if other.get("equipped_weapon") == w:
-					other.equipped_weapon = null
-				if other.get("equipped_armor") == w:
-					other.equipped_armor = null
-	# Assign
-	match slot:
-		"weapon": adv.equipped_weapon = w
-		"armor": adv.equipped_armor = w
-	w.wielder = adv.name
+	w.deliver_to(adv, GameState.party)
 	ghost.carrying = null
 	# JUICE
 	Juice.add_trauma(0.2)
 	Juice.hit_stop(0.05)
 	Juice.spawn_particles(ghost.pos, 8, Palette.TEXT_GREEN, 30.0, 0.4)
 	ghost.squash = 1.2
+
+func _try_recruit() -> void:
+	if not GameState.can_recruit():
+		Juice.spawn_particles(RECRUIT_POS, 4, Palette.TEXT_RED, 20.0, 0.3)
+		return
+	if GameState.recruit_adventurer():
+		_adventurers_arrive()
+		Juice.add_trauma(0.3)
+		Juice.hit_stop(0.06)
+		Juice.spawn_particles(RECRUIT_POS, 10, Palette.TEXT_GREEN, 35.0, 0.5)
+	else:
+		Juice.spawn_particles(RECRUIT_POS, 4, Palette.TEXT_RED, 20.0, 0.3)
 
 func _ring_bell() -> void:
 	# JUICE: big shake, particles
@@ -292,6 +306,15 @@ func _draw() -> void:
 		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
 		draw_rect(Rect2(BELL_POS.x - 12, BELL_POS.y - 12, 24, 24), Color(0.95, 0.85, 0.40, pulse), false, 1)
 	GameFont.draw_string_centered(self, BELL_POS + Vector2(0, 22), "BELL", 6, Palette.TEXT)
+	# Recruiting shrine
+	draw_texture(Sprites.get_sprite("shrine"), RECRUIT_POS - Vector2(8, 8))
+	if near_interactive == "recruit":
+		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+		draw_rect(Rect2(RECRUIT_POS.x - 12, RECRUIT_POS.y - 12, 24, 24), Color(0.65, 0.40, 0.85, pulse), false, 1)
+	GameFont.draw_string_centered(self, RECRUIT_POS + Vector2(0, 22), "SHRINE", 6, Palette.TEXT)
+	var fallen_count := GameState.party.size() - GameState.living_party_count()
+	if fallen_count > 0:
+		GameFont.draw_string_centered(self, RECRUIT_POS + Vector2(0, -20), "Fallen: %d" % fallen_count, 6, Palette.TEXT_DIM)
 	# Adventurers
 	for a in adventurers:
 		var tex := Sprites.get_sprite(a.sprite)

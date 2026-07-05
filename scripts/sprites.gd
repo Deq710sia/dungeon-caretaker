@@ -46,6 +46,7 @@ static func _build(name: String) -> Image:
 		"stairs":      _draw_stairs(img)
 		"bell":        _draw_bell(img)
 		"map_table":   _draw_map_table(img)
+		"shrine":      _draw_shrine(img)
 		"weapon_rack": _draw_weapon_rack(img)
 		"spark":       _draw_spark(img)
 		_:             _draw_default(img)
@@ -499,6 +500,26 @@ static func _draw_map_table(img: Image) -> void:
 	# Path
 	_line(img, 5, 6, 8, 6, Palette.WOOD_DK)
 	_line(img, 8, 6, 11, 6, Palette.WOOD_DK)
+
+static func _draw_shrine(img: Image) -> void:
+	var stone := Palette.STONE
+	var dark := Palette.STONE_DK
+	# Base plinth
+	_rect(img, 3, 12, 10, 3, stone)
+	_rect(img, 3, 14, 10, 1, dark)
+	# Standing stone / headstone shape
+	_rect(img, 5, 4, 6, 8, Palette.STONE_LT)
+	_rect(img, 5, 4, 6, 1, dark)
+	_px(img, 5, 3, Palette.STONE_LT); _px(img, 10, 3, Palette.STONE_LT)
+	# Carved rune (mystic glow)
+	_px(img, 7, 7, Palette.GLOW_PURP)
+	_px(img, 8, 7, Palette.GLOW_PURP)
+	_px(img, 7, 8, Palette.GLOW_PURP)
+	_px(img, 8, 9, Palette.GLOW_PURP)
+	# Floating soul-lights above it
+	_px(img, 6, 1, Palette.GLOW_BLUE)
+	_px(img, 10, 2, Palette.GLOW_BLUE)
+	_px(img, 8, 0, Color(Palette.GLOW_BLUE.r, Palette.GLOW_BLUE.g, Palette.GLOW_BLUE.b, 0.7))
 
 static func _draw_weapon_rack(img: Image) -> void:
 	var wood := Palette.WOOD

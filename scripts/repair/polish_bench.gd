@@ -30,8 +30,6 @@ func _ready() -> void:
 	var p := get_parent()
 	if p and p.get("ghost") != null and p.ghost.carrying != null:
 		gear = p.ghost.carrying
-	elif p and p.get("current_gear_for_minigame") != null:
-		gear = p.current_weapon
 	# Setup area
 	var vp := Vector2(320, 180)
 	area_origin = Vector2(vp.x * 0.20, vp.y * 0.30)

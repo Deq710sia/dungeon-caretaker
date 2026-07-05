@@ -1,26 +1,41 @@
-# Dungeon Caretaker: A Ghost's Salvage (V4)
+# Dungeon Caretaker: A Ghost's Salvage (V5)
 
 A top-down **pixel-art roguelike management sim** where weapons are the persistent, named, degrading objects you invest in across waves. You don't fight — you salvage, repair, and assign weapons to doomed adventurers, then watch them auto-battle and witness your craft succeed or shatter.
 
-## V4 — The Pixel Art + Agency + Juice Redesign
+## V5 — Polish, Persistent Party, Chronicle
 
-V3 still failed: 640×360 wasn't chunky enough to read as pixel art, `canvas_items` stretch blurred pixels, vector primitives for hazards broke the aesthetic, planning was a menu, salvage had zero agency (auto-walk removed the player), no juice. V4 fixes all of this based on deep research (Camwing's Satisfactory brain-hooks analysis, Dead Space diegetic UI, Saint11's pixel art rules, Vlambeer's juice principles, Slay the Spire's planning).
+V4 fixed the pixel art, agency, and juice. V5 fixes the gameplay loop: **the party now persists across waves** (dead members stay dead), there's a **real lose condition** (full party wipe ends the run), a **recruiting shrine** in the planning room to replace the fallen, **clickable weapon dossiers** that show full narrative history, a **run chronicle** on the win/lose screen, and **legendary weapons** that earn an epithet after 8 kills. Plus dead-code cleanup and rebalanced reforge minigame.
 
-### What V4 does differently:
+### What V5 adds:
 
-**1. Real pixel art now** — Internal resolution 320×180 (Celeste standard, chunky pixels). Stretch mode `viewport` (pixel-perfect, no blur). Aspect `keep` (no non-integer scaling). 32-color curated palette (`scripts/palette.gd`) — every color in the game comes from it. All sprites 16×16, palette-disciplined, no vector primitives. Snap-to-pixel enabled. Press Start 2P font everywhere via `GameFont.gd` (no default Godot font anywhere). Verified 8/10 "authentic pixel art, chunky, palette-disciplined" via visual inspection.
+**1. Persistent party + lose condition** — The party no longer respawns fresh each wave. Dead adventurers stay dead. If the whole party wipes, the run ends ("THE DUNGEON WINS..."). This gives real stakes to combat — you can't just throw bodies at the dungeon.
 
-**2. Diegetic planning phase** — No menus. Walk to the **map table** → view wave path & intel overlay. Walk to the **weapon rack** → pick up a weapon (3 visible per page). Walk to **adventurers** → assign the carried weapon. Walk to the **bell** → ring it, begin the wave. Everything is physical. Carries weapons visually, same as workshop.
+**2. Recruiting shrine** — In the planning room, walk to the shrine (top-right) to recruit a new adventurer for shards (cost scales with stage). Requires at least one living member to "vouch" — a wiped party can't recruit, which is the lose condition.
 
-**3. Salvage with full agency** — Killed the auto-walk. Ghost moves with WASD (reuses workshop code). Camera looks AHEAD (+40 offset, not backwards). Hazards are visible pixel sprites you CHOOSE to approach. Corpses have names ("Here lies Bram the Bold, felled by slimes"). QTE bar is drawn at the hazard position (diegetic, not full-screen overlay). Failure is FAIR: damages the most recently collected weapon (visible, not random deletion). Push-your-luck: hazards have cooldown, you can retreat.
+**3. Clickable weapon dossiers** — The results screen now shows weapon dossier cards as clickable buttons. Click any weapon to see its full narrative history: dossier text, authoring blurb ("razor-sharp, perfectly balanced"), kill log, and chronicle (every event ever logged). This is where all the flavor text that was being written but never shown finally gets read.
 
-**4. Juice system** — New `Juice.gd` autoload: trauma-based screen shake, hit-stop (0.06–0.15s freezes on impacts/breaks/bell), directional pixel-square particles (not vector circles), squash & stretch on the ghost (preserves volume, eases back). Every significant event has visual + kinesthetic response.
+**4. Run chronicle** — The win/lose screen now shows the full `run_log` as a scrollable chronicle. Every wave result, every recruit, every stage clear — the story of your run, finally visible.
 
-**5. Brain hooks (from research)** — Visible state change (corpses → bone piles, persistent). Anticipation (hazards pulse before you reach them). Investment (weapons have authoring fingerprints: sharpness/balance/power/mystic). Narrative (named corpses with death causes in weapon history). Near-miss (QTE shows the target zone so you see how close you were). Failure-is-progress (weapons retained as broken mementos, never deleted).
+**5. Legendary weapons** — Weapons that reach 8 kills earn "legendary" status (marked with ★), get a +5% stat bonus, and a history entry: "has drunk enough blood to earn a legend."
 
-**6. Weapons are characters** — Every weapon has: unique name, day-stamp, wielder binding, 4 discrete wear states with distinct art, kill log, authoring fingerprints, retained as broken memento when shattered.
+**6. Weapon.deliver_to()** — Assignment logic is now encapsulated in the Weapon class (was inline in planning.gd with a bug-prone key typo). Unequips from previous wielder automatically.
 
-**7. Spectator battle with visible degradation** — Party auto-fights, you watch. Weapons visibly degrade during the fight (wear state changes, durability bar drops). When a weapon breaks: 0.15s hit-stop + 12-particle burst + log message. This is the Jacksmith "judgement phase" that reads your crafting.
+**7. Juice cleanup on phase transitions** — `main.gd` now clears Juice particles/trauma/shake when switching phases, so effects don't bleed between phases.
+
+**8. Reforge furnace rebalanced** — Hammer stage had 40 cells but only 12 swings (capped at 30% max). Now has 24 swings so a skilled player can reach 100%.
+
+**9. Dead code removed** — `qte_cutscene.gd` (unreferenced V3 leftover) deleted. Dead `current_gear_for_minigame` branches removed from 3 repair minigames. `break_announced` moved from a history-array hack to a proper boolean field. Palette/Weapon color duplication resolved (Weapon now references Palette directly).
+
+**10. DESIGN_IDEAS.md** — Preserved 6 unimplemented-but-good ideas (boss waves, haunted/cursed combat behavior, individual fallen memorials, wielder-history bonuses, live authoring feedback, cinematic QTE cutscenes for boss waves) so they don't get lost.
+
+### Carried over from V4:
+
+- **Real pixel art** — 320×180, `viewport` stretch, 32-color palette, 16×16 sprites, snap-to-pixel
+- **Diegetic planning** — walk to map table / weapon rack / adventurers / bell
+- **Salvage with full agency** — WASD movement, named corpses, diegetic QTE bars
+- **Juice system** — screen shake, hit-stop, directional particles, squash/stretch
+- **Weapons as characters** — named, day-stamped, 4 wear states, kill log, authoring fingerprints
+- **Spectator battle** — party auto-fights, weapons visibly degrade, break = hit-stop + particles
 
 ## How to Run
 

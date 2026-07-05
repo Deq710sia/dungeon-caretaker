@@ -1,20 +1,18 @@
 extends Node2D
-## Phase: win_lose V4 — 320x180.
+## Phase: win_lose V5 — 320x180. Shows the run's chronicle as a send-off,
+## win or lose, so the run_log (previously write-only) finally pays off.
 
 func _ready() -> void:
 	var status := GameState.is_run_over()
 	var is_win := status == "win"
-	var survivors := 0
-	for adv in GameState.party:
-		if adv.get("alive", false):
-			survivors += 1
+	var survivors := GameState.living_party_count()
 	var title := Label.new()
 	title.text = "VICTORY!" if is_win else "THE DUNGEON WINS..."
 	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", Palette.TEXT_GREEN if is_win else Palette.TEXT_RED)
 	title.add_theme_color_override("font_outline_color", Palette.VOID)
 	title.add_theme_constant_override("outline_size", 3)
-	title.position = Vector2(0, 40)
+	title.position = Vector2(0, 12)
 	title.size = Vector2(320, 18)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(title)
@@ -22,19 +20,37 @@ func _ready() -> void:
 	sub.text = "Stage %d Wave %d" % [GameState.stage, GameState.wave]
 	sub.add_theme_font_size_override("font_size", 8)
 	sub.add_theme_color_override("font_color", Palette.TEXT)
-	sub.position = Vector2(0, 62)
+	sub.position = Vector2(0, 32)
 	sub.size = Vector2(320, 10)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(sub)
 	var stats := Label.new()
-	stats.text = "Survivors: %d\nShards: %d\nArsenal: %d weapons" % [survivors, GameState.soul_shards, GameState.arsenal.size()]
-	stats.add_theme_font_size_override("font_size", 8)
+	stats.text = "Survivors: %d    Shards: %d    Arsenal: %d weapons" % [survivors, GameState.soul_shards, GameState.arsenal.size()]
+	stats.add_theme_font_size_override("font_size", 7)
 	stats.add_theme_color_override("font_color", Palette.TEXT)
-	stats.position = Vector2(60, 80)
-	stats.size = Vector2(200, 40)
+	stats.position = Vector2(0, 46)
+	stats.size = Vector2(320, 10)
 	stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	stats.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	add_child(stats)
+	# The chronicle — the run's full run_log, finally shown to someone.
+	var chronicle_title := Label.new()
+	chronicle_title.text = "THE CHRONICLE" if is_win else "HOW IT ENDED"
+	chronicle_title.add_theme_font_size_override("font_size", 7)
+	chronicle_title.add_theme_color_override("font_color", Palette.TEXT_GOLD)
+	chronicle_title.position = Vector2(0, 58)
+	chronicle_title.size = Vector2(320, 9)
+	chronicle_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_child(chronicle_title)
+	var scroll := ScrollContainer.new()
+	scroll.position = Vector2(20, 68)
+	scroll.size = Vector2(280, 56)
+	add_child(scroll)
+	var log_label := Label.new()
+	log_label.text = "\n".join(GameState.run_log)
+	log_label.add_theme_font_size_override("font_size", 7)
+	log_label.add_theme_color_override("font_color", Palette.TEXT_DIM)
+	log_label.custom_minimum_size = Vector2(270, 8 * max(1, GameState.run_log.size()))
+	scroll.add_child(log_label)
 	var restart_btn := Button.new()
 	restart_btn.text = "New Run"
 	restart_btn.add_theme_font_size_override("font_size", 8)

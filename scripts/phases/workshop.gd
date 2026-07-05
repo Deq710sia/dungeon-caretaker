@@ -40,18 +40,20 @@ var ring_bell_btn: Button
 
 func _ready() -> void:
 	if GameState.party.is_empty():
-		GameState.spawn_party()
+		# Defensive fallback only — normal flow always starts a run with a party.
+		GameState.start_new_run()
 	_adventurers_arrive()
 	_build_hud()
 	bell_timer = max(50.0, 90.0 - GameState.stage * 5)
 
 func _adventurers_arrive() -> void:
 	adventurers.clear()
-	var n := GameState.party.size()
+	var living := GameState.party.filter(func(a): return a.get("alive", true))
+	var n := living.size()
 	var spacing: float = 200.0 / float(max(1, n))
 	var start_x: float = 60.0 + spacing / 2.0
 	for i in n:
-		var adv: Dictionary = GameState.party[i]
+		var adv: Dictionary = living[i]
 		adventurers.append({
 			"pos": Vector2(start_x + i * spacing, 130),
 			"sprite": "knight" if adv["class"] == "knight" else "mage",
