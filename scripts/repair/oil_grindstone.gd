@@ -99,7 +99,7 @@ func _draw() -> void:
 			draw_rect(Rect2(offset_pos.x - 4, offset_pos.y - 4, tex_size + 8, tex_size + 8), Color(0.55, 0.95, 0.55, 0.3), true)
 		draw_texture_rect(weapon_tex, Rect2(offset_pos.x, offset_pos.y, tex_size, tex_size), false)
 		# Weapon name
-		draw_string(ThemeDB.get_default_theme().default_font, wpos + Vector2(-50, -50), gear.display_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 7, gear.wear_color())
+		draw_string(GameFont.get_font(), wpos + Vector2(-50, -50), gear.display_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 7, gear.wear_color())
 	# Oil meter (vertical bar on right)
 	var meter_x: float = vp.x * 0.75
 	var meter_y: float = vp.y * 0.20
@@ -117,13 +117,13 @@ func _draw() -> void:
 	# Border
 	draw_rect(Rect2(meter_x, meter_y, meter_w, meter_h), Color(0.55, 0.55, 0.65), false, 2)
 	# Label
-	draw_string(ThemeDB.get_default_theme().default_font, Vector2(meter_x - 4, meter_y - 4), "OIL", HORIZONTAL_ALIGNMENT_CENTER, -1, 7, Color(0.85, 0.85, 0.90))
+	draw_string(GameFont.get_font(), Vector2(meter_x - 4, meter_y - 4), "OIL", HORIZONTAL_ALIGNMENT_CENTER, -1, 7, Color(0.85, 0.85, 0.90))
 	# Stats
 	var pct: float = time_in_zone / TIME_LIMIT
-	draw_string(ThemeDB.get_default_theme().default_font, Vector2(10, vp.y - 24), "In-zone: %.1fs" % time_in_zone, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.85, 0.95, 0.85))
-	draw_string(ThemeDB.get_default_theme().default_font, Vector2(vp.x - 10, vp.y - 24), "Time: %.1fs" % time_left, HORIZONTAL_ALIGNMENT_RIGHT, -1, 8, Color(0.95, 0.85, 0.40))
+	draw_string(GameFont.get_font(), Vector2(10, vp.y - 24), "In-zone: %.1fs" % time_in_zone, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.85, 0.95, 0.85))
+	draw_string(GameFont.get_font(), Vector2(vp.x - 10, vp.y - 24), "Time: %.1fs" % time_left, HORIZONTAL_ALIGNMENT_RIGHT, -1, 8, Color(0.95, 0.85, 0.40))
 	if pouring:
-		draw_string(ThemeDB.get_default_theme().default_font, Vector2(vp.x / 2 - 20, vp.y - 24), "POURING", HORIZONTAL_ALIGNMENT_CENTER, -1, 8, Color(0.95, 0.85, 0.40))
+		draw_string(GameFont.get_font(), Vector2(vp.x / 2 - 20, vp.y - 24), "POURING", HORIZONTAL_ALIGNMENT_CENTER, -1, 8, Color(0.95, 0.85, 0.40))
 
 func _input(event: InputEvent) -> void:
 	if finished:

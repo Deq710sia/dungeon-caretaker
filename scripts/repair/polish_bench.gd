@@ -96,10 +96,10 @@ func _draw() -> void:
 		# Stats
 		var pct: float = float(covered) / float(total_cells)
 		var clean_pct := clampf(pct / TARGET_COVERAGE, 0.0, 1.0)
-		draw_string(ThemeDB.get_default_theme().default_font, Vector2(10, vp.y - 24), "Clean: %.0f%%" % (clean_pct * 100), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.85, 0.95, 0.85))
-		draw_string(ThemeDB.get_default_theme().default_font, Vector2(vp.x - 10, vp.y - 24), "Time: %.1fs" % time_left, HORIZONTAL_ALIGNMENT_RIGHT, -1, 8, Color(0.95, 0.85, 0.40))
+		draw_string(GameFont.get_font(), Vector2(10, vp.y - 24), "Clean: %.0f%%" % (clean_pct * 100), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.85, 0.95, 0.85))
+		draw_string(GameFont.get_font(), Vector2(vp.x - 10, vp.y - 24), "Time: %.1fs" % time_left, HORIZONTAL_ALIGNMENT_RIGHT, -1, 8, Color(0.95, 0.85, 0.40))
 		# Item name
-		draw_string(ThemeDB.get_default_theme().default_font, Vector2(vp.x / 2 - 50, vp.y - 24), gear.display_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 7, gear.wear_color())
+		draw_string(GameFont.get_font(), Vector2(vp.x / 2 - 50, vp.y - 24), gear.display_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 7, gear.wear_color())
 	# Progress bar
 	var bar_x: float = vp.x * 0.20
 	var bar_y: float = vp.y * 0.82

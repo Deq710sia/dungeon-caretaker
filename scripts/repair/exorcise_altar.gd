@@ -79,7 +79,7 @@ func _draw() -> void:
 		# Weapon
 		draw_texture_rect(weapon_tex, Rect2(wpos.x, wpos.y, wsize, wsize), false)
 		# Weapon name
-		draw_string(ThemeDB.get_default_theme().default_font, Vector2(vp.x / 2 - 50, vp.y / 2 + 40), gear.display_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 7, gear.wear_color())
+		draw_string(GameFont.get_font(), Vector2(vp.x / 2 - 50, vp.y / 2 + 40), gear.display_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 7, gear.wear_color())
 	# Sigil lines (faded)
 	for i in sigil_points.size():
 		var j := (i + 1) % sigil_points.size()
@@ -104,15 +104,15 @@ func _draw() -> void:
 		draw_circle(p, 14, c)
 		draw_circle(p, 14, Color(1, 1, 1, 0.4), false, 2)
 		# Number label
-		draw_string(ThemeDB.get_default_theme().default_font, p + Vector2(-3, 4), str(i + 1), HORIZONTAL_ALIGNMENT_CENTER, -1, 10, Color(0, 0, 0))
+		draw_string(GameFont.get_font(), p + Vector2(-3, 4), str(i + 1), HORIZONTAL_ALIGNMENT_CENTER, -1, 10, Color(0, 0, 0))
 	# Stats
 	var hit := 0
 	for v in visited:
 		if v == 1:
 			hit += 1
 	var pct: float = float(hit) / float(sigil_points.size())
-	draw_string(ThemeDB.get_default_theme().default_font, Vector2(10, vp.y - 24), "Sigil: %.0f%%" % (pct * 100), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.85, 0.95, 0.85))
-	draw_string(ThemeDB.get_default_theme().default_font, Vector2(vp.x - 10, vp.y - 24), "Time: %.1fs" % time_left, HORIZONTAL_ALIGNMENT_RIGHT, -1, 8, Color(0.95, 0.85, 0.40))
+	draw_string(GameFont.get_font(), Vector2(10, vp.y - 24), "Sigil: %.0f%%" % (pct * 100), HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.85, 0.95, 0.85))
+	draw_string(GameFont.get_font(), Vector2(vp.x - 10, vp.y - 24), "Time: %.1fs" % time_left, HORIZONTAL_ALIGNMENT_RIGHT, -1, 8, Color(0.95, 0.85, 0.40))
 
 func _input(event: InputEvent) -> void:
 	if finished:
