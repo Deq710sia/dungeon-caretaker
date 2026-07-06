@@ -4,6 +4,22 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.7.1 — Battle Uses Full Dungeon Generation (2026-07-07)
+
+### Battle Matches Salvage Generation
+**Changed:** Battle now reads the FULL dungeon generation from `GameState.get_dungeon_gen()` — not just `corridor_h` but also `narrow_zones` and `noise_seed`. Previously battle only read the corridor length but ignored the narrow zones, so the battle corridor was a uniform 18-tile-wide tube while salvage had narrow chokepoints. Now both phases render the same physical space:
+- Floor detail uses the same `FastNoiseLite` seed (same moss/crack/blood patterns)
+- Walls respect narrow zones (narrow zones have walls at the narrow bounds, wide zones at 0 and CORRIDOR_W)
+- Enemy spawn positions respect narrow zones (spawn within the walkable width at their y-level)
+- Party spawn position respects narrow zones at the bottom of the corridor
+
+**Intention:** The player runs through the SAME dungeon in battle and salvage. If salvage has a narrow chokepoint at y=30, battle has the same narrow chokepoint at y=30. This makes the dungeon feel like a real place, not two separate layouts. The direction is opposite (party fights up, ghost salvages down) but the physical space is identical.
+
+### Crash Fix (v0.7 hotfix)
+**Changed:** Fixed `weapon.gd:169` crash — `var enemy := enemies[...]` failed type inference on an untyped array. Fixed by typing as `Array[String]` and `var enemy: String`. Also fixed shadowed variable warning (`roll_affliction(type)` → `roll_affliction(p_type)`).
+
+---
+
 ## v0.7 — Salvage Overhaul + Movement Normalization + Phase Bank Fix (2026-07-07)
 
 ### Phase Bank Fix

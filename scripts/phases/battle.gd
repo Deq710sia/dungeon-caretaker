@@ -8,8 +8,12 @@ const TILE: int = 16
 const CORRIDOR_W: int = 18
 const VIEW_W: int = 480
 const VIEW_H: int = 270
-# corridor_h is read from the dungeon generation in _ready() — matches salvage.
+# Corridor dimensions and layout read from the dungeon generation in _ready()
+# — same layout as salvage. The party enters from the bottom (salvage exit)
+# and fights upward toward the enemies at the top.
 var corridor_h: int = 60
+var narrow_zones: Array = []
+var _noise: FastNoiseLite
 
 var party_units: Array = []
 var enemies: Array = []
@@ -44,9 +48,16 @@ const PHASE_BANK_MAX: float = 3.0
 var phase_bank: float = 0.0
 
 func _ready() -> void:
-	# Read corridor length from the dungeon generation — same layout as salvage.
+	# Read the FULL dungeon generation — same layout as salvage (corridor
+	# length, narrow zones, noise seed for floor detail). This ensures the
+	# battle takes place in the same physical space the player will salvage.
 	var gen: Dictionary = GameState.get_dungeon_gen()
 	corridor_h = gen.get("corridor_h", 60)
+	narrow_zones = gen.get("narrow_zones", [])
+	_noise = FastNoiseLite.new()
+	_noise.seed = gen.get("seed", randi())
+	_noise.frequency = 0.3
+	_noise.noise_type = FastNoiseLite.TYPE_CELLULAR
 	cam = Camera2D.new()
 	cam.position = Vector2(CORRIDOR_W * TILE / 2, 0)
 	cam.enabled = true
@@ -90,8 +101,13 @@ func _spawn_party_units() -> void:
 			def_ = base_def + int(12 * mult)
 		var iq_mult: float = 1.0 + float(GameState.meta_upgrades["adventurer_training"]) * 0.05
 		atk = int(atk * iq_mult)
+		# Party enters from the bottom (salvage exit). Position them within
+		# the corridor width at the bottom — respect narrow zones.
+		var bottom_y_tile := corridor_h - 3
+		var bottom_bounds := _get_width_bounds_at_y(bottom_y_tile)
+		var bottom_center_x: float = (bottom_bounds.x + bottom_bounds.y) / 2.0 * TILE
 		party_units.append({
-			"pos": Vector2(CORRIDOR_W * TILE / 2 + (i - 1) * 24, (corridor_h - 3) * TILE),
+			"pos": Vector2(bottom_center_x + (i - 1) * 24, bottom_y_tile * TILE),
 			"hp": hp,
 			"hp_max": hp,
 			"atk": atk,
@@ -109,15 +125,20 @@ func _spawn_enemies() -> void:
 	enemies.clear()
 	var count: int = GameState.get_enemy_count()
 	for i in count:
-		var x := (2 + (i * 5) % (CORRIDOR_W - 4)) * TILE + TILE / 2
-		var y := (3 + i * 5) * TILE
+		# Enemy y-position: spread them along the corridor. They start at
+		# the top and the party fights upward toward them.
+		var y_tile := 3 + i * 5
+		# Get the corridor width at this y — respect narrow zones so enemies
+		# spawn within the walkable area (same layout as salvage).
+		var width_bounds := _get_width_bounds_at_y(y_tile)
+		var x_tile: int = width_bounds.x + 1 + (i * 5) % max(1, width_bounds.y - width_bounds.x - 2)
 		var sprite_name := "slime"
 		match i % 3:
 			0: sprite_name = "slime"
 			1: sprite_name = "skeleton"
 			2: sprite_name = "bat"
 		enemies.append({
-			"pos": Vector2(x, y),
+			"pos": Vector2(x_tile * TILE + TILE / 2.0, y_tile * TILE + TILE / 2.0),
 			"hp": GameState.get_enemy_hp(),
 			"hp_max": GameState.get_enemy_hp(),
 			"atk": GameState.get_enemy_atk(),
@@ -463,40 +484,53 @@ func _end_battle() -> void:
 	else:
 		log_label.text = "Battle %s! +%d shards." % ["WON" if battle_won else "LOST", shards]
 
+func _get_width_bounds_at_y(tile_y: int) -> Vector2i:
+	# Returns the left/right bounds (in tile coords) of the corridor at the
+	# given y. Wide zones = full 18-tile width (0, 18). Narrow zones return
+	# their (width_left, width_right). Matches salvage's _get_corridor_width_at_y.
+	for nz in narrow_zones:
+		if abs(tile_y - nz.y_center) < nz.y_half:
+			return Vector2i(nz.width_left, nz.width_right)
+	return Vector2i(0, CORRIDOR_W)
+
 func _draw() -> void:
 	# Overscan: draw 3 tiles beyond viewport on all sides so edges are never visible
 	var cam_top := int((camera_y - VIEW_H / 2) / TILE) - 3
 	var cam_bot := int((camera_y + VIEW_H / 2) / TILE) + 3
 	cam_top = max(-2, cam_top)
 	cam_bot = min(corridor_h + 1, cam_bot)
-	# Floor — extend beyond corridor walls so there's no hard edge
+	# Floor — respect narrow zones (same layout as salvage) and use noise
+	# for detail tiling (same seed as salvage, so floor details match).
 	for y in range(cam_top, cam_bot + 1):
-		for x in range(-2, CORRIDOR_W + 2):
+		var bounds := _get_width_bounds_at_y(y)
+		for x in range(bounds.x - 1, bounds.y + 1):
 			var p := Vector2(x * TILE, y * TILE)
-			var hash := (x * 7 + y * 13) % 31
-			if x < 0 or x >= CORRIDOR_W:
-				# Beyond walls — dark void gradient (skybox) instead of
-				# flat gray wall.
+			if x < bounds.x or x >= bounds.y:
+				# Beyond walls — dark void gradient (skybox)
 				var void_t := float(y) / float(corridor_h)
 				draw_rect(Rect2(p, Vector2(TILE, TILE)), Color(0.03 + void_t * 0.02, 0.02 + void_t * 0.015, 0.06 + void_t * 0.03), true)
-			elif hash < 3 and y > 5:
-				draw_texture(Sprites.get_sprite("floor_crack"), p)
-			elif hash < 5 and y > 8:
-				draw_texture(Sprites.get_sprite("floor_blood"), p)
-			elif hash < 7 and y > 10:
-				draw_texture(Sprites.get_sprite("floor_moss"), p)
 			else:
-				draw_texture(Sprites.get_sprite("floor"), p)
-	# Side walls (extend beyond viewport)
+				# Noise-based floor detail (same as salvage)
+				var n := _noise.get_noise_2d(x, y)
+				if n < -0.3 and y > 5:
+					draw_texture(Sprites.get_sprite("floor_moss"), p)
+				elif n < -0.1 and y > 8:
+					draw_texture(Sprites.get_sprite("floor_crack"), p)
+				elif n > 0.3 and y > 10:
+					draw_texture(Sprites.get_sprite("floor_blood"), p)
+				else:
+					draw_texture(Sprites.get_sprite("floor"), p)
+	# Side walls — respect narrow zones (narrow zones have their own walls
+	# at the narrow bounds, wide zones have walls at 0 and CORRIDOR_W).
 	for y in range(cam_top, cam_bot + 1):
-		draw_texture(Sprites.get_sprite("wall"), Vector2(-TILE, y * TILE))
-		draw_texture(Sprites.get_sprite("wall_mossy"), Vector2(CORRIDOR_W * TILE, y * TILE))
+		var bounds := _get_width_bounds_at_y(y)
+		draw_texture(Sprites.get_sprite("wall"), Vector2((bounds.x - 1) * TILE, y * TILE))
+		draw_texture(Sprites.get_sprite("wall_mossy"), Vector2(bounds.y * TILE, y * TILE))
 		if y % 4 == 0:
-			draw_texture(Sprites.get_sprite("torch"), Vector2(-TILE, y * TILE))
-			draw_texture(Sprites.get_sprite("torch"), Vector2(CORRIDOR_W * TILE, y * TILE))
-			# Ambient torch glow
-			_draw_glow(Vector2(-TILE + 8, y * TILE + 8), 18, Palette.LIGHT_TORCH)
-			_draw_glow(Vector2(CORRIDOR_W * TILE + 8, y * TILE + 8), 18, Palette.LIGHT_TORCH)
+			draw_texture(Sprites.get_sprite("torch"), Vector2((bounds.x - 1) * TILE, y * TILE))
+			draw_texture(Sprites.get_sprite("torch"), Vector2(bounds.y * TILE, y * TILE))
+			_draw_glow(Vector2((bounds.x - 1) * TILE + 8, y * TILE + 8), 18, Palette.LIGHT_TORCH)
+			_draw_glow(Vector2(bounds.y * TILE + 8, y * TILE + 8), 18, Palette.LIGHT_TORCH)
 	# Exit
 	draw_texture(Sprites.get_sprite("door"), Vector2(CORRIDOR_W * TILE / 2 - 8, -TILE))
 	_draw_glow(Vector2(CORRIDOR_W * TILE / 2, -TILE + 8), 16, Palette.LIGHT_EXIT)
