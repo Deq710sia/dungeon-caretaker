@@ -176,7 +176,7 @@ func _find_nearest_interactive() -> void:
 			prompt_label.text = "[E] View wave map & intel"
 		"rack":
 			if ghost.carrying == null:
-				prompt_label.text = "[E] Pick up weapon (page %d) [[]/] to cycle" % rack_page
+				prompt_label.text = "[E] Pick up weapon (page %d)" % rack_page
 			else:
 				prompt_label.text = "[E] Put weapon back"
 		"bell":
@@ -425,4 +425,3 @@ func _on_phase_exit() -> void:
 	if ghost.carrying != null:
 		GameState.add_weapon(ghost.carrying)
 		ghost.carrying = null
-

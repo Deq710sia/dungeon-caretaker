@@ -40,6 +40,7 @@ var meta_upgrades: Dictionary = {
         "sturdy_grip": 0,
         "adventurer_training": 0,
         "salvage_expert": 0,
+        "ghost_resilience": 0,
 }
 
 const UPGRADE_DEFS: Dictionary = {
@@ -48,6 +49,7 @@ const UPGRADE_DEFS: Dictionary = {
         "sturdy_grip": {"name": "Sturdy Grip", "desc": "+25 max durability", "max": 5, "cost_base": 50, "cost_growth": 30},
         "adventurer_training": {"name": "Adventurer Training", "desc": "+5% combat skill", "max": 5, "cost_base": 60, "cost_growth": 35},
         "salvage_expert": {"name": "Salvage Expert", "desc": "+1 salvage slot", "max": 3, "cost_base": 45, "cost_growth": 25},
+        "ghost_resilience": {"name": "Ghost Resilience", "desc": "+1 max ghost HP in salvage", "max": 3, "cost_base": 35, "cost_growth": 20},
 }
 
 func _ready() -> void:
@@ -110,7 +112,6 @@ func next_wave() -> void:
                 stage += 1
                 wave = 1
                 if stage > MAX_STAGE:
-                        run_log.append("Stage %d cleared — the dungeon is conquered!" % (stage - 1))
                         return
                 run_log.append("Stage %d cleared! Descending..." % (stage - 1))
         else:

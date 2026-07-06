@@ -32,24 +32,13 @@ func _ready() -> void:
 	GameState.phase_changed.connect(_on_phase_changed)
 	_on_phase_changed("menu")
 	DisplayServer.window_set_title("Dungeon Caretaker: A Ghost's Salvage")
-	fade_rect = ColorRect.new()
-	fade_rect.color = Color(0, 0, 0, 0)
-	fade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
-	fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	fade_rect.z_index = 100
-	add_child(fade_rect)
 
 func _on_phase_changed(new_phase: String) -> void:
-	if fade_rect == null:
-		_instantiate_phase(new_phase)
-		return
-	# Fade out, swap phase, fade in
-	if fade_tween:
-		fade_tween.kill()
-	fade_tween = create_tween()
-	fade_tween.tween_property(fade_rect, "color:a", 1.0, 0.12)
-	fade_tween.tween_callback(_instantiate_phase.bind(new_phase))
-	fade_tween.tween_property(fade_rect, "color:a", 0.0, 0.12)
+	# Every phase transition now actually cross-fades (this used to be
+	# dead code: fade_rect was only ever created inside _start_fade(),
+	# which nothing called, so this branch never ran and every change
+	# was an instant, jarring cut).
+	_start_fade(_instantiate_phase.bind(new_phase))
 
 func _instantiate_phase(new_phase: String) -> void:
 	if current_phase_node:

@@ -56,9 +56,24 @@ var balance: float = 0.5       # 0-1, from oil/grindstone minigame
 var power: float = 0.5         # 0-1, from reforge minigame
 var mystic: float = 0.5        # 0-1, from exorcise minigame
 
-# --- Gear state (V2 compat — used for repair station routing) ---
+# --- Gear state — FLAVOR ONLY. This does not gate repair anymore (see
+# can_repair_at()). It exists purely to color history text and the dossier,
+# tracking *what kind* of damage a weapon has narratively taken. The single
+# mechanical truth for "can this be repaired, and how badly" is
+# wear_state/durability above. Keeping these fully separate used to produce
+# weapons stuck with no station willing to touch them: a weapon could be
+# dinged down in wear_state/durability while this field never moved off
+# Pristine, and every station used to gate on THIS field. Nothing gates on
+# it now.
 enum State { PRISTINE, BLOODIED, RUSTED, HAUNTED, CURSED, SHATTERED }
 var state: int = State.PRISTINE
+
+# How many deaths this weapon has witnessed without being cleansed at the
+# Exorcise Altar. This is the one place "state" flavor DOES have a real
+# mechanical consequence — see stat_multiplier() — and it's what makes the
+# Altar meaningful independent of physical wear repair: a weapon can be
+# fully repaired (wear_state PRISTINE) and still carry unexorcised dread.
+var unexorcised_deaths: int = 0
 
 const STATE_NAMES := {
 	State.PRISTINE: "Pristine",
@@ -76,14 +91,6 @@ const STATE_COLORS := {
 	State.HAUNTED: Palette.STATE_HAUNTED,
 	State.CURSED: Palette.STATE_CURSED,
 	State.SHATTERED: Palette.STATE_SHATTERED,
-}
-
-const REPAIR_TARGETS := {
-	State.BLOODIED: "polish",
-	State.RUSTED: "oil_grind",
-	State.HAUNTED: "exorcise",
-	State.CURSED: "exorcise",
-	State.SHATTERED: "reforge",
 }
 
 func _init(p_type: String = "sword", p_name: String = "Weapon", p_history: String = "") -> void:
@@ -107,22 +114,38 @@ func wear_name() -> String:
 func wear_color() -> Color:
 	return WEAR_COLORS[wear_state]
 
-func repair_target_station() -> String:
-	return REPAIR_TARGETS.get(state, "")
+## The single source of truth for "which stations can touch this weapon right
+## now." Wear-tier stations (polish/oil_grind/reforge) are mutually exclusive
+## — a weapon is at exactly one wear tier. The Altar is orthogonal: it's
+## available any time the weapon carries unexorcised deaths, regardless of
+## wear tier, so it never competes with physical repair for the player's
+## attention.
+func can_repair_at(station_key: String) -> bool:
+	match station_key:
+		"polish": return wear_state == WearState.WORN
+		"oil_grind": return wear_state == WearState.DAMAGED
+		"reforge": return wear_state == WearState.BROKEN
+		"exorcise": return is_haunted()
+	return false
 
-func is_cursed_variant() -> bool:
-	return state == State.CURSED
+## Which fingerprint stat a given station's minigame quality should write to.
+func fingerprint_stat_for_station(station_key: String) -> String:
+	match station_key:
+		"polish": return "sharpness"
+		"oil_grind": return "balance"
+		"reforge": return "power"
+		"exorcise": return "mystic"
+	return ""
+
+func is_haunted() -> bool:
+	return unexorcised_deaths > 0
 
 func stat_multiplier() -> float:
-	# Combined multiplier from state + wear + authoring
-	var state_mult := 1.0
-	match state:
-		State.PRISTINE: state_mult = 1.0
-		State.BLOODIED: state_mult = 0.8
-		State.RUSTED: state_mult = 0.7
-		State.HAUNTED: state_mult = 0.9
-		State.CURSED: state_mult = 0.6
-		State.SHATTERED: state_mult = 0.0
+	# Combined multiplier from wear + authoring + unexorcised dread.
+	# `state` no longer gates or scales anything mechanically — it's flavor
+	# text only, tracked so history/dossier prose reads correctly. The one
+	# real mechanical cost of a weapon's violent past is the haunting
+	# penalty below, which ONLY the Altar clears.
 	var wear_mult := 1.0
 	match wear_state:
 		WearState.PRISTINE: wear_mult = 1.0
@@ -132,7 +155,10 @@ func stat_multiplier() -> float:
 	# Authoring bonus (average of the 4 fingerprints, weighted)
 	var authoring := (sharpness + balance + power + mystic) / 4.0
 	var legendary_bonus := 0.05 if is_legendary else 0.0
-	return state_mult * wear_mult * (0.7 + authoring * 0.3 + legendary_bonus)
+	# -6% per unexorcised death, capped at -30% — real but never crippling,
+	# and always fully recoverable at the Altar in one visit.
+	var dread_penalty := clampf(float(unexorcised_deaths) * 0.06, 0.0, 0.30)
+	return wear_mult * (0.7 + authoring * 0.3 + legendary_bonus) * (1.0 - dread_penalty)
 
 func durability_pct() -> float:
 	if durability_max <= 0:
@@ -145,7 +171,12 @@ func take_durability_damage(amount: int, cause: String = "") -> void:
 	durability = max(0, durability - amount)
 	if cause != "":
 		history.append("Took %d durability damage: %s" % [amount, cause])
-	# Update wear state based on durability pct
+	recalculate_wear(cause)
+
+## Single source of truth for deriving wear_state from current durability_pct.
+## Called after ANY durability change (damage OR repair) so the two can never
+## drift out of sync with each other.
+func recalculate_wear(cause: String = "") -> void:
 	var pct := durability_pct()
 	var new_wear: int
 	if pct > 0.75:
@@ -156,10 +187,16 @@ func take_durability_damage(amount: int, cause: String = "") -> void:
 		new_wear = WearState.DAMAGED
 	else:
 		new_wear = WearState.BROKEN
-	if new_wear != wear_state:
-		wear_state = new_wear
-		if wear_state == WearState.BROKEN and not is_broken:
+	var was_broken := is_broken
+	wear_state = new_wear
+	if wear_state == WearState.BROKEN:
+		if not is_broken:
 			break_weapon(cause)
+	elif was_broken:
+		# Repaired back above 0% durability — it's no longer broken, though
+		# the chronicle keeps the record of having shattered once.
+		is_broken = false
+		history.append("%s has been mended — no longer shattered, though it remembers." % display_name)
 
 func break_weapon(cause: String = "") -> void:
 	is_broken = true
@@ -167,9 +204,45 @@ func break_weapon(cause: String = "") -> void:
 	durability = 0
 	var cause_text := cause if cause != "" else "catastrophic damage"
 	history.append("SHATTERED on Stage %d Wave %d from %s!" % [GameState.stage, GameState.wave, cause_text])
-	# Degrade state too
+	# Flavor only — does not gate anything.
 	if state != State.SHATTERED:
 		state = State.SHATTERED
+
+## Graduated repair: how much of durability_max a single minigame pass
+## restores, as a function of minigame quality (0-1) and the weapon's
+## CURRENT condition. Shaped as a logistic curve (steep through the middle,
+## flattening near both ends) rather than a binary threshold, so:
+##  - a poor pass (low quality) never fully saves a bad weapon in one go
+##  - a great pass still can't fully restore a heavily damaged weapon in a
+##    single visit — durability accumulates real cost across a run instead
+##    of resetting to full on any decent roll
+## Capped at 0.6 (60 percentage points of durability_max) per pass, and
+## further reduced when the weapon is nearly destroyed, so a Shattered
+## weapon realistically takes more than one trip to the Forge.
+func repair_curve(quality: float) -> float:
+	var q := clampf(quality, 0.0, 1.0)
+	var logistic := 1.0 / (1.0 + exp(-10.0 * (q - 0.5)))
+	var restore := logistic * 0.6
+	if durability_pct() < 0.15:
+		restore *= 0.7
+	return restore
+
+## Applies one repair pass at the given quality, restoring durability along
+## repair_curve() rather than snapping to full. Returns the actual amount of
+## durability restored (for feedback/juice scaling).
+func apply_repair(quality: float) -> int:
+	var restore_pct := repair_curve(quality)
+	var restored: int = int(durability_max * restore_pct)
+	durability = min(durability_max, durability + restored)
+	recalculate_wear()
+	return restored
+
+## Clears unexorcised dread — the Altar's actual job now that "exorcise"
+## doesn't gate on the old CURSED/HAUNTED state.
+func exorcise() -> void:
+	if unexorcised_deaths > 0:
+		history.append("Cleansed of %d unexorcised death(s) at the Altar." % unexorcised_deaths)
+		unexorcised_deaths = 0
 
 func record_kill(enemy_type: String) -> void:
 	kill_log.append(enemy_type)
@@ -196,6 +269,7 @@ func deliver_to(adventurer: Dictionary, all_party: Array = []) -> void:
 
 func apply_combat_damage(owner_died: bool) -> void:
 	if owner_died:
+		unexorcised_deaths += 1
 		match state:
 			State.PRISTINE: state = State.HAUNTED
 			State.BLOODIED: state = State.HAUNTED
@@ -237,6 +311,8 @@ func get_dossier_text() -> String:
 	lines.append("Kills: %d | Waves survived: %d" % [kill_log.size(), waves_survived])
 	if is_broken:
 		lines.append("[BROKEN — reforgable]")
+	if is_haunted():
+		lines.append("[%d unexorcised death(s) — Altar]" % unexorcised_deaths)
 	return "\n".join(lines)
 
 ## The FULL narrative log for the detail popup — every line ever appended to
