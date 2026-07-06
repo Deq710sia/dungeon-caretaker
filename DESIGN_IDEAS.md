@@ -1,70 +1,174 @@
-# Design Ideas — cut, half-built, or teased-but-not-delivered
+# Game Ideas — Player-Proposed Concepts Not Yet Implemented
 
-This file exists so that good ideas found lying around in old/dead code or
-implied-but-unbuilt UI don't just vanish during cleanup. Nothing here is
-required reading to run the game — it's a backlog.
+This file tracks ideas the player specifically proposed during development that were never coded, were cut for scope, or were put on the backburner for polish. These are the player's ideas — not AI-generated suggestions.
 
-## 1. "Dumb Ways to Die" cinematic QTE cutscene (recovered from `scripts/delivery/qte_cutscene.gd`)
+---
 
-The current salvage phase uses small, diegetic QTE bars drawn right at the
-hazard's position in the world (see `salvage.gd::_draw_qte_bar`). There used
-to be a second, fancier system: a full-screen, multi-beat cutscene — 3-5
-quick "beats" of a single verb (TAP / DODGE / JUMP...), each beat's timing
-window shrinking as you go, judged pass/fail by majority. It played as a big
-centered overlay with its own timing bar, separate from the world.
+## 1. Physical Delivery Gauntlet (from original V1/V2 design)
 
-That file was dead code (nothing called it) and has been removed, but the
-concept is worth keeping for later: it would make a great **escalation** for
-boss waves or a rare "big hazard" — something with more weight and comedy
-than the everyday in-world QTE, without replacing it. If revisited:
-- Reuse the diegetic QTE's input/scoring logic rather than the old file's
-  copy (which duplicated timing-bar code that now lives in `salvage.gd`).
-- Keep it rare — it was designed to be a set-piece, not the default.
+**Status:** Cut — replaced by diegetic planning room assignment.
 
-## 2. Boss waves are teased but not built
+The player originally wanted the "equipment running" to be done by the player physically, not off-screen. After repairing weapons, you'd carry them to adventurers through a hazard-filled gauntlet — a *Dumb Ways to Die*-style QTE cutscene sequence on the way back. Slip on slime, catch a falling sword, dodge a swinging blade, don't touch the cursed bell. 3-5 microgames per delivery, failure = gear takes damage (not run-ending).
 
-`planning.gd`'s map view labels the last wave of each stage "STAGE BOSS" in
-red, and the README's wave table implies bosses exist. Right now
-`battle.gd::_spawn_enemies()` treats every wave identically — same enemy mix,
-just scaled HP/ATK/count. There's no actual boss unit, no different fight
-shape, nothing that reads as "this one is special" beyond a bigger number.
+The delivery gauntlet was deleted when the planning room became diegetic (walk to adventurer, press E). The QTE cutscene concept survives in salvage hazards, but the "delivery" framing is gone. Could return as a set-piece between stages or as a mini-mode when assigning legendary gear.
 
-A real fix would add a distinct boss dictionary (bigger sprite scale, unique
-attack pattern/telegraph, a name) spawned only on `wave == WAVES_PER_STAGE`,
-replacing or supplementing the normal spawn. Left undone here because it
-touches combat pacing and deserves its own pass rather than being bolted on.
+---
 
-## 3. Haunted/Cursed states could have distinct combat behavior, not just a stat multiplier
+## 2. Salvage from Previous Party's Actual Gear (original core fantasy)
 
-The README describes Haunted as "-10% + jitter" and Cursed as "-40% +
-debuff," but in code both just reduce `stat_multiplier()` — there's no
-separate "jitter" (e.g. occasional wasted attacks / erratic movement) or
-"debuff" (e.g. a status effect applied to the wielder) beyond the flat
-percentage. Worth a follow-up pass if you want Haunted/Cursed to *feel*
-different in a fight, not just weaker.
+**Status:** Implemented in V2 — but was the #1 missing feature for 7 versions.
 
-## 4. Fallen adventurers currently get a counter, not individual memorials
+The player's original vision: "you're rarely making new gear, you're reusing and revitalizing the gear from the dead party from before." This was NOT implemented until V2 — salvage generated random weapons from random NPC corpses. The fix (battle.gd stores fallen_gear, salvage.gd reads it) was the single highest-leverage change in the project.
 
-The new recruiting shrine (`planning.gd`) shows "Fallen: N" as a simple
-count. A nicer version: keep a small list of `{name, class, stage, wave,
-cause}` for each death and let the shrine (or the win/lose chronicle) show
-individual epitaphs — "Here lies Wren the mage, Stage 3 Wave 2." This is a
-natural extension of the persistent-party system now in place; skipped for
-now to keep the recruiting feature itself scoped and testable.
+The player also wanted multiple sources for fresh gear when the salvage pit runs dry:
+- **Bare-Knuckle Run:** Send party in with nothing, they die fast, you keep whatever drops. (Partially implemented — party can go unequipped.)
+- **Hire Mercenary Martyrs:** Pay shards for a disposable party whose job is to die and leave gear. (Implemented as recruit shrine.)
+- **Wandering Haunt-Merchant:** A spectral peddler with rotating stock. (NOT built.)
+- **Dungeon Scavenging Runs:** Send ghost solo into a shallow level to grab loose gear. (NOT built.)
+- **Grateful Survivor Gifts:** Survivors return bearing pristine gear as thanks. (NOT built.)
+- **Cursed Lottery:** Gamble 100 shards for a chance at Overcharged or Shattered. (NOT built.)
 
-## 5. "Famous pairing" bonus for long-term wielder/weapon combos
+---
 
-Now that weapons track `wielder` and adventurers persist across a whole run,
-there's room for a small bonus (flavor text, or a minor stat nudge) when the
-same adventurer keeps the same weapon across several consecutive waves —
-rewarding *not* constantly reshuffling gear. Not implemented; flagged as a
-cheap, high-flavor addition for later.
+## 3. Ghost Phase / Incorporeal Verb (from Mina the Hollower discussion)
 
-## 6. Authoring fingerprints (sharpness/balance/power/mystic) now have a blurb, could go further
+**Status:** Not implemented — Priority 1 in DESIGN_PLAN.md.
 
-`Weapon.authoring_blurb()` (new) turns the four crafting-minigame scores into
-a one-line description shown in the dossier detail view. A further step
-would be surfacing individual fingerprint values directly in the repair
-minigames themselves (e.g. showing "Sharpness: 62%" live during the polish
-minigame instead of only after the fact), so players can see the number
-they're actually building toward while playing.
+The player identified Mina the Hollower's "hollow tunnel" as the reference for how to make top-down movement feel good. The lesson: give the ghost ONE signature verb that touches everything — a phase/incorporeal ability that lets the ghost briefly pass through hazards, move faster, and slow enemies in battle. The verb and the character concept are the same fact: a ghost that goes incorporeal.
+
+Also informed by UFO 50's design philosophy: "give the old genre skeleton exactly one new verb, and let it touch everything."
+
+---
+
+## 4. Stage-as-Puzzle: Efficiency Management (from Desktop Dungeons / incremental discussion)
+
+**Status:** Not implemented — Priority 6 in DESIGN_PLAN.md.
+
+The player wanted each stage to be "a bit of a puzzle in how you successfully manage the dungeon to make it efficient enough to pass." Not puzzle-vs-management, but puzzle-AS-management. There's a guaranteed floor (clear the wave) and an open-ended reward curve above it for exceeding expectations (more corpses, better repairs, tighter triage). The marginal cost rises faster than the reward, so pushing further is always tempting but never a no-brainer.
+
+The player explicitly clarified: "I'm not saying the direction of the game is as an incremental, but that incremental elements are showing that can be a direction to give rewards while keeping it roguelike+management which seem to be at odds."
+
+---
+
+## 5. System-Changing Repair Upgrades (from Satisfactory / camwing discussion)
+
+**Status:** Not implemented — Priority 3 in DESIGN_PLAN.md.
+
+The player wanted upgrades that "slightly change the gameplay and repair systems" during the repair phase. Inspired by Satisfactory's automation-unlock pattern: friction (manual repair) has a destination (upgrades that change HOW you repair, not just make it faster).
+
+The player explicitly pushed back on simple auto-repair: "if you use automation to solve tedium it just becomes its own tedium. The fundamental problem with incremental games is that they allow automation but not enough management mechanics to make managing the automation its own fun."
+
+Concrete concepts discussed:
+- **Cannibalize (Reforge):** Destroy one weapon to fully repair another.
+- **Cold Oil (Grindstone):** Oil stays in sweet spot 50% longer.
+- **Read the Sigil (Altar):** Show next 2 waypoints in advance.
+- **Twin Wipe (Polish):** Quick-repair quality rises from 40% to 55%.
+- **Quick Repair:** Fast auto-repair at 40% quality (no minigame) — creates a triage decision, doesn't delete the task.
+
+---
+
+## 6. Weapon Visibility in Minigames + Visible Transformation
+
+**Status:** Partially implemented — only reforge_furnace transforms the weapon.
+
+The player wanted: "you make the weapons visible in the minigames and interesting enough for upgrades in gameplay and visuals that this is what the player becomes most invested in." Weapons should visibly change during repair — blood wipes off, rust flakes away, ghostly aura fades. The player should SEE their work happening, not just get a quality score at the end.
+
+Also wanted: live authoring feedback during minigames (show "Sharpness: 62%" updating in real-time, not just after).
+
+---
+
+## 7. Durability Tension Across Waves
+
+**Status:** Partially implemented — durability exists but tension isn't felt.
+
+The player wanted: "ensuring you build and repair them so their durability lasts enough between rounds to clear a stage. It should take multiple rounds of adventurers dying before you get your weapons good enough."
+
+The game should make the player FEEL the tension of "will this weapon last 3 more waves?" — visible cracking, pre-break warnings at 25% durability, the decision to push a weapon or swap it mid-battle.
+
+---
+
+## 8. Boss Waves with Named Bosses
+
+**Status:** Teased in UI, not built — Priority 4 in DESIGN_PLAN.md.
+
+The player's original design doc included boss waves. The planning map labels wave 3 "STAGE BOSS" but battle.gd spawns identical enemies every wave. The player wanted named bosses with unique attack patterns and guaranteed weapon drops.
+
+---
+
+## 9. Diegetic Upgrade Shop (from "everything should be tactile" directive)
+
+**Status:** Not implemented — Priority 6 in DESIGN_PLAN.md.
+
+The player said: "everything should be animated, tactile, and stylistic." The upgrade shop is the one menu screen — a scrollable list with buy buttons. The player wanted it to be diegetic: walk to trinkets mounted on a wall, press E to buy. Current level shows as physical wear/notches on the plaque.
+
+---
+
+## 10. Ghost Personality / Voice
+
+**Status:** Not implemented — Priority 5 in DESIGN_PLAN.md.
+
+The player wanted: "I need to see more personality and creative visual design." The ghost has zero dialogue, zero reactions. The player wanted 1-line reactions to key events: death, weapon shatter, repair, recruit, run end.
+
+---
+
+## 11. Aftermath Scene Showing Previous Crew Dying
+
+**Status:** Partially implemented — aftermath shows names, not the death scene.
+
+The player wanted: "it should be like something visually showing the previous adventurer crew dying in the halls." The aftermath scene shows fallen names and "fell here" text, but doesn't show the death happening. The gate scene shows graves. Neither shows the actual death moment.
+
+---
+
+## 12. Camera Follows Party Through Dungeon (original battle vision)
+
+**Status:** Partially implemented — camera follows, but battle is slow and undramatic.
+
+The player wanted: "the camera follows the adventurer team as they go through and fun animations play while they get to the end and either die or beat the dungeon." The camera does follow, but movement is slow (25px/sec), there are no "fun animations," and the battle takes 30+ seconds of watching dots walk.
+
+---
+
+## 13. New Weapon Types Beyond Sword/Staff/Helm/Robe
+
+**Status:** Not implemented.
+
+The player mentioned wanting "new weapons" in the V2 directive. Currently only 4 gear types exist (sword, staff, helm, robe). The original design doc mentioned bows, shields, accessories. More weapon types would expand the triage and assignment decisions.
+
+---
+
+## 14. Cursed Weapon Effects Beyond Stat Penalties
+
+**Status:** Not implemented — cursed is just a flat multiplier.
+
+The player's original design doc described cursed weapons with "negative effect on wearer" and haunted weapons with "random stat jitter." Currently both are just percentage reductions. The player wanted them to FEEL different — cursed weapons could cause missed attacks, haunted weapons could cause erratic movement, etc.
+
+---
+
+## 15. Narrative Emergence from Weapon History
+
+**Status:** Infrastructure exists, surfacing doesn't.
+
+The player wanted the game to generate stories through systems, not scripted narrative. Weapon history (kill logs, death causes, repair records) exists and is readable in the dossier, but it's hidden behind a click. The player wanted these stories surfaced more prominently — mid-battle callouts, gate-screen memorials of legendary weapons, run-log chronicles that read like obituaries.
+
+---
+
+## 16. Multiple Waves Per Stage with Gear Persistence
+
+**Status:** Implemented.
+
+The player wanted "multiple waves of adventurers to beat a stage" with gear persisting between waves. This is now the core loop: 3 waves per stage, weapons carry forward, dead party members' gear goes to salvage.
+
+---
+
+## 17. The Ghost's Freedom (original narrative goal)
+
+**Status:** Not implemented — mentioned in flavor text only.
+
+The player's original premise: "you're a ghost haunting a dungeon, you want to be freed or something so you guide adventurers through it." The freedom motivation exists in the design doc but not in the game. No dialogue, no progression toward freedom, no ending that references it. The win screen says "VICTORY!" not "Free at last."
+
+---
+
+## 18. Real Pixel Art Assets ( eventual replacement for procedural sprites)
+
+**Status:** Not implemented — all sprites are procedurally generated.
+
+The player acknowledged the procedural sprites are placeholders: "you can make pixel sprites but look to see if any existing pixel sprites would fit or be better." Kenney.nl CC0 packs (Tiny Dungeon, Tiny Town, 1-Bit Pack) were identified as drop-in replacements for V1.1. The procedural system works but the art is generic.
