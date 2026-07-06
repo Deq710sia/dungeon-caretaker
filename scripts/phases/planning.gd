@@ -344,28 +344,12 @@ func _draw() -> void:
 		if adv.get("equipped_armor") != null:
 			var ar: Weapon = adv.equipped_armor
 			draw_texture(Sprites.get_weapon_sprite_wear(ar.type, ar.wear_state, ar.is_haunted()), a.pos + Vector2(-12, -4))
-	# Ghost (with squash/stretch)
-	var bob := sin(move.bob) * 1.5
-	var gp: Vector2 = move.pos + Vector2(0, bob)
-	draw_rect(Rect2(int(gp.x) - 5, int(move.pos.y) + 6, 10, 2), Color(0, 0, 0, 0.3), true)
-	var ghost_tex := Sprites.get_sprite("ghost")
-	var sw := int(16.0 / maxf(0.1, move.squash))
-	var sh := int(16 * move.squash)
-	# DESIGN_PLAN 1A: ghost trail, drawn before the main sprite.
-	Juice.trail_draw(self, ghost_tex, 16)
-	# DESIGN_PLAN 1B: semi-transparent ghost while phasing.
-	var ghost_mod := Color(1, 1, 1, 1)
-	if move.is_phasing():
-		var phase_pct := move.phase_active / GhostMovement.PHASE_DURATION
-		ghost_mod = Color(0.55, 0.75, 0.95, 0.5 + 0.15 * phase_pct)
-	draw_texture_rect(ghost_tex, Rect2(int(gp.x) - sw / 2, int(gp.y) - sh / 2, sw, sh), false, ghost_mod)
-	# DESIGN_PLAN 1B: cooldown ring.
-	if move.phase_cd > 0 and not move.is_phasing():
-		var cd_pct: float = 1.0 - (move.phase_cd / GhostMovement.PHASE_CD)
-		draw_arc(Vector2(int(gp.x), int(gp.y)), 12.0, -PI / 2, -PI / 2 + TAU * cd_pct, 16, Palette.TEXT_DIM, 1.5)
+	# Ghost (shared draw method)
+	GhostMovement.draw_ghost(self, move)
 	# Carried weapon
 	if carrying != null:
 		var item_tex := Sprites.get_weapon_sprite_wear(carrying.type, carrying.wear_state, carrying.is_haunted())
+		var gp: Vector2 = move.pos + Vector2(0, sin(move.bob) * 1.5)
 		draw_texture(item_tex, gp + Vector2(-8, -18))
 	# Particles
 	Juice.draw_particles(self)

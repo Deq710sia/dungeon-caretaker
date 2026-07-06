@@ -354,7 +354,7 @@ func _draw() -> void:
 	# Wall torches for ambient light
 	for x in [32, 160, 288]:
 		draw_texture(Sprites.get_sprite("torch"), Vector2(x, HUD_H))
-		_draw_glow(Vector2(x + 8, HUD_H + 8), 20, Palette.LIGHT_TORCH)
+		DrawUtils.draw_glow(self, Vector2(x + 8, HUD_H + 8), 20, Palette.LIGHT_TORCH)
 	# Stations
 	for st in STATIONS:
 		var tex := Sprites.get_sprite(st.sprite)
@@ -363,8 +363,8 @@ func _draw() -> void:
 		draw_texture(tex, _get_station_pos(st.key) - Vector2(8, 8))
 		# Ambient glow for specific stations
 		match st.key:
-			"furnace": _draw_glow(_get_station_pos(st.key), 24, Palette.LIGHT_FURNACE)
-			"exorcise": _draw_glow(_get_station_pos(st.key), 20, Palette.LIGHT_ALTAR)
+			"furnace": DrawUtils.draw_glow(self, _get_station_pos(st.key), 24, Palette.LIGHT_FURNACE)
+			"exorcise": DrawUtils.draw_glow(self, _get_station_pos(st.key), 20, Palette.LIGHT_ALTAR)
 		if near_station_key == st.key:
 			var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
 			draw_rect(Rect2(_get_station_pos(st.key).x - 12, _get_station_pos(st.key).y - 12, 24, 24), Color(0.95, 0.85, 0.40, pulse), false, 1)
@@ -386,40 +386,17 @@ func _draw() -> void:
 		if a.adv.get("equipped_weapon") != null:
 			var w: Weapon = a.adv.equipped_weapon
 			draw_texture(Sprites.get_weapon_sprite_wear(w.type, w.wear_state, w.is_haunted()), a.pos + Vector2(8, -4))
-	# Ghost
-	var bob := sin(move.bob) * 1.5
-	var gp: Vector2 = move.pos + Vector2(0, bob)
-	draw_rect(Rect2(int(gp.x) - 5, int(move.pos.y) + 6, 10, 2), Color(0, 0, 0, 0.3), true)
-	var ghost_tex := Sprites.get_sprite("ghost")
-	var sw := int(16.0 / maxf(0.1, move.squash))
-	var sh := int(16 * move.squash)
-	# DESIGN_PLAN 1A: ghost trail, drawn before the main sprite.
-	Juice.trail_draw(self, ghost_tex, 16)
-	# DESIGN_PLAN 1B: semi-transparent ghost while phasing.
-	var ghost_mod := Color(1, 1, 1, 1)
-	if move.is_phasing():
-		var phase_pct := move.phase_active / GhostMovement.PHASE_DURATION
-		ghost_mod = Color(0.55, 0.75, 0.95, 0.5 + 0.15 * phase_pct)
-	draw_texture_rect(ghost_tex, Rect2(int(gp.x) - sw / 2, int(gp.y) - sh / 2, sw, sh), false, ghost_mod)
-	# DESIGN_PLAN 1B: cooldown ring (only when on cd, not while active).
-	if move.phase_cd > 0 and not move.is_phasing():
-		var cd_pct: float = 1.0 - (move.phase_cd / GhostMovement.PHASE_CD)
-		draw_arc(Vector2(int(gp.x), int(gp.y)), 12.0, -PI / 2, -PI / 2 + TAU * cd_pct, 16, Palette.TEXT_DIM, 1.5)
+	# Ghost (shared draw method)
+	GhostMovement.draw_ghost(self, move)
 	# Carried weapon
 	if carrying != null:
 		var item_tex := Sprites.get_weapon_sprite_wear(carrying.type, carrying.wear_state, carrying.is_haunted())
+		var gp: Vector2 = move.pos + Vector2(0, sin(move.bob) * 1.5)
 		draw_texture(item_tex, gp + Vector2(-8, -16))
 	# Particles
 	Juice.draw_particles(self)
 	# Hint
 	GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 6), "WASD:move E:interact SPACE:phase TAB:inspect", 8, Palette.TEXT_DIM)
-
-func _draw_glow(pos: Vector2, radius: int, color: Color) -> void:
-	var center := Vector2(int(pos.x), int(pos.y))
-	for r in [radius, int(radius * 0.6), int(radius * 0.3)]:
-		var c := color
-		c.a = c.a * (1.0 - float(r) / float(radius)) * 0.8
-		draw_circle(center, r, c)
 
 func _show_weapon_inspect(w: Weapon) -> void:
 	if inspect_panel:

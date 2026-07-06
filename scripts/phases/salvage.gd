@@ -606,8 +606,8 @@ func _draw() -> void:
                         if y % 4 == 0:
                                 draw_texture(Sprites.get_sprite("torch"), Vector2(-TILE, y * TILE))
                                 draw_texture(Sprites.get_sprite("torch"), Vector2(corridor_w * TILE, y * TILE))
-                                _draw_torch_glow(Vector2(-TILE + 8, y * TILE + 8))
-                                _draw_torch_glow(Vector2(corridor_w * TILE + 8, y * TILE + 8))
+                                DrawUtils.draw_radial_glow(self, Vector2(-TILE + 8, y * TILE + 8), [20, 14, 8], Palette.LIGHT_TORCH, 0.8)
+                                DrawUtils.draw_radial_glow(self, Vector2(corridor_w * TILE + 8, y * TILE + 8), [20, 14, 8], Palette.LIGHT_TORCH, 0.8)
         # Props
         for prop in props:
                 if prop.pos.y > cam_top * TILE - 16 and prop.pos.y < cam_bot * TILE + 16:
@@ -622,7 +622,7 @@ func _draw() -> void:
                                         draw_texture(Sprites.get_sprite("pit"), Vector2(hx - 8, hy - 8))
                                 "fire":
                                         draw_texture(Sprites.get_sprite("torch"), Vector2(hx - 8, hy - 8))
-                                        _draw_fire_glow(h.pos)
+                                        DrawUtils.draw_radial_glow(self, h.pos, [16, 10, 5], Palette.LIGHT_FURNACE, 1.2)
                                 "spikes":
                                         draw_texture(Sprites.get_sprite("floor_crack"), Vector2(hx - 8, hy - 8))
                                         for i in 3:
@@ -654,7 +654,7 @@ func _draw() -> void:
                         else:
                                 gear_tex = Sprites.get_weapon_sprite(c.gear_type, c.gear_state)
                         draw_texture(gear_tex, Vector2(cx - 8, cy - 20 + bob))
-                        _draw_gear_glow(Vector2(cx, cy - 12 + bob))
+                        DrawUtils.draw_radial_glow(self, Vector2(cx, cy - 12 + bob), [8, 5, 3], Color(0.95, 0.85, 0.40, 0.15), 1.0)
                         if near_interactive == c:
                                 GameFont.draw_string_centered(self, Vector2(cx, cy - 32), c.corpse_name, 8, Palette.TEXT_GOLD)
                                 GameFont.draw_string_centered(self, Vector2(cx, cy - 26), c.gear_name, 8, Palette.TEXT_BLUE)
@@ -662,35 +662,11 @@ func _draw() -> void:
         var ex := int(exit_pos.x)
         var ey := int(exit_pos.y)
         draw_texture(Sprites.get_sprite("stairs"), Vector2(ex - 8, ey - 8))
-        _draw_exit_glow(exit_pos)
+        DrawUtils.draw_radial_glow(self, exit_pos, [16, 10, 5], Palette.LIGHT_EXIT, 1.5)
         var exit_pulse := 0.5 + 0.3 * sin(Time.get_ticks_msec() * 0.003)
         GameFont.draw_string_centered(self, Vector2(ex, ey - 16), "EXIT", 8, Color(0.55, 0.95, 0.75, exit_pulse))
-        # Ghost trail + ghost
-        var bob_val := int(sin(move.bob) * 1.5)
-        var gx := int(move.pos.x)
-        var gy := int(move.pos.y)
-        draw_rect(Rect2(gx - 5, gy + 6, 10, 2), Color(0, 0, 0, 0.3), true)
-        var ghost_tex := Sprites.get_sprite("ghost")
-        var sw := int(16.0 / maxf(0.1, move.squash))
-        var sh := int(16 * move.squash)
-        Juice.trail_draw(self, ghost_tex, 16)
-        # Phase verb: more transparent + blue tint while phasing.
-        # "Underground" effect: drop the alpha further and add a darker blue
-        # border so the ghost reads as sinking below the floor.
-        var ghost_mod := Color(1, 1, 1, 1)
-        if move.is_phasing():
-                var phase_pct := move.phase_active / GhostMovement.PHASE_DURATION
-                # Very transparent (0.3-0.45) + deep blue tint
-                ghost_mod = Color(0.35, 0.55, 0.85, 0.3 + 0.15 * phase_pct)
-        draw_texture_rect(ghost_tex, Rect2(gx - sw / 2, gy - sh / 2 + bob_val, sw, sh), false, ghost_mod)
-        # "Underground" border effect: draw a dark blue semi-transparent ring
-        # around the ghost when phasing, suggesting the floor is covering it
-        if move.is_phasing():
-                draw_arc(Vector2(gx, gy + bob_val), 10, 0, TAU, 16, Color(0.1, 0.15, 0.3, 0.5), 2)
-        # Cooldown ring
-        if move.phase_cd > 0 and not move.is_phasing():
-                var cd_pct: float = move.cooldown_pct()
-                draw_arc(Vector2(gx, gy), 12.0, -PI / 2, -PI / 2 + TAU * cd_pct, 16, Palette.TEXT_DIM, 1.5)
+        # Ghost trail + ghost (shared draw method — underground variant)
+        GhostMovement.draw_ghost(self, move, true)
         # QTE
         if not active_qte.is_empty():
                 _draw_qte()
@@ -700,33 +676,6 @@ func _draw() -> void:
         var progress := clampf(move.pos.y / (corridor_h * TILE), 0, 1)
         draw_rect(Rect2(VIEW_W - 6, 24, 2, VIEW_H - 30), Palette.DARK, true)
         draw_rect(Rect2(VIEW_W - 6, 24 + int((VIEW_H - 30) * (1 - progress)), 2, int((VIEW_H - 30) * progress)), Palette.SLIME, true)
-
-func _draw_torch_glow(pos: Vector2) -> void:
-        var center := Vector2(int(pos.x), int(pos.y))
-        for r in [20, 14, 8]:
-                var c := Palette.LIGHT_TORCH
-                c.a = c.a * (1.0 - float(r) / 20.0) * 0.8
-                draw_circle(center, r, c)
-
-func _draw_fire_glow(pos: Vector2) -> void:
-        var center := Vector2(int(pos.x), int(pos.y))
-        for r in [16, 10, 5]:
-                var c := Palette.LIGHT_FURNACE
-                c.a = c.a * (1.0 - float(r) / 16.0) * 1.2
-                draw_circle(center, r, c)
-
-func _draw_gear_glow(pos: Vector2) -> void:
-        var center := Vector2(int(pos.x), int(pos.y))
-        for r in [8, 5, 3]:
-                var c := Color(0.95, 0.85, 0.40, 0.15 * (1.0 - float(r) / 8.0))
-                draw_circle(center, r, c)
-
-func _draw_exit_glow(pos: Vector2) -> void:
-        var center := Vector2(int(pos.x), int(pos.y))
-        for r in [16, 10, 5]:
-                var c := Palette.LIGHT_EXIT
-                c.a = c.a * (1.0 - float(r) / 16.0) * 1.5
-                draw_circle(center, r, c)
 
 func _draw_qte() -> void:
         var h: Dictionary = active_qte.hazard

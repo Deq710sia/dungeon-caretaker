@@ -526,11 +526,11 @@ func _draw() -> void:
 		if y % 4 == 0:
 			draw_texture(Sprites.get_sprite("torch"), Vector2((bounds.x - 1) * TILE, y * TILE))
 			draw_texture(Sprites.get_sprite("torch"), Vector2(bounds.y * TILE, y * TILE))
-			_draw_glow(Vector2((bounds.x - 1) * TILE + 8, y * TILE + 8), 18, Palette.LIGHT_TORCH)
-			_draw_glow(Vector2(bounds.y * TILE + 8, y * TILE + 8), 18, Palette.LIGHT_TORCH)
+			DrawUtils.draw_glow(self, Vector2((bounds.x - 1) * TILE + 8, y * TILE + 8), 18, Palette.LIGHT_TORCH)
+			DrawUtils.draw_glow(self, Vector2(bounds.y * TILE + 8, y * TILE + 8), 18, Palette.LIGHT_TORCH)
 	# Exit
 	draw_texture(Sprites.get_sprite("door"), Vector2(CORRIDOR_W * TILE / 2 - 8, -TILE))
-	_draw_glow(Vector2(CORRIDOR_W * TILE / 2, -TILE + 8), 16, Palette.LIGHT_EXIT)
+	DrawUtils.draw_glow(self, Vector2(CORRIDOR_W * TILE / 2, -TILE + 8), 16, Palette.LIGHT_EXIT)
 	# Enemies — ALL positions snapped to integers
 	for e in enemies:
 		if e.alive:
@@ -587,13 +587,6 @@ func _draw() -> void:
 	GameFont.draw_string(self, hud_pos + Vector2(4, 148), phase_label, 8, cd_c)
 	if phase_active > 0:
 		GameFont.draw_string_centered(self, hud_pos + Vector2(VIEW_W / 2, 148), "PHASING!", 8, Palette.GLOW_BLUE)
-
-func _draw_glow(pos: Vector2, radius: int, color: Color) -> void:
-	var center := Vector2(int(pos.x), int(pos.y))
-	for r in [radius, int(radius * 0.6), int(radius * 0.3)]:
-		var c := color
-		c.a = c.a * (1.0 - float(r) / float(radius)) * 0.8
-		draw_circle(center, r, c)
 
 func _on_continue() -> void:
 	GameState.set_phase("results")

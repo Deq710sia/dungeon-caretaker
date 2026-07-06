@@ -129,3 +129,42 @@ func reset(p_pos: Vector2) -> void:
 	phase_bank = 0.0
 	_footstep_timer = 0.0
 	_last_input_dir = Vector2.ZERO
+
+## Draws the ghost sprite with trail, phase-verb visual, and cooldown ring.
+## Call this from the owning phase's _draw(). The `is_underground` param
+## selects between the normal phase visual (semi-transparent blue) and the
+## salvage "underground" visual (very transparent + dark border ring that
+## reads as sinking below the floor).
+##
+## This replaces ~15 lines of duplicated draw code that was copy-pasted
+## across salvage, workshop, and planning. Now any new walkable phase just
+## calls `move.draw_ghost(self)` — no copy-paste, no drift.
+static func draw_ghost(canvas: CanvasItem, mv: GhostMovement, is_underground: bool = false) -> void:
+	var bob_val := int(sin(mv.bob) * 1.5)
+	var gx := int(mv.pos.x)
+	var gy := int(mv.pos.y)
+	# Shadow
+	canvas.draw_rect(Rect2(gx - 5, gy + 6, 10, 2), Color(0, 0, 0, 0.3), true)
+	var ghost_tex := Sprites.get_sprite("ghost")
+	var sw := int(16.0 / maxf(0.1, mv.squash))
+	var sh := int(16 * mv.squash)
+	# Trail (drawn before the sprite so the current sprite sits on top)
+	Juice.trail_draw(canvas, ghost_tex, 16)
+	# Phase verb visual
+	var ghost_mod := Color(1, 1, 1, 1)
+	if mv.is_phasing():
+		var phase_pct := mv.phase_active / PHASE_DURATION
+		if is_underground:
+			# Salvage: very transparent + deep blue (reads as sinking below floor)
+			ghost_mod = Color(0.35, 0.55, 0.85, 0.3 + 0.15 * phase_pct)
+		else:
+			# Workshop/planning: semi-transparent blue
+			ghost_mod = Color(0.55, 0.75, 0.95, 0.5 + 0.15 * phase_pct)
+	canvas.draw_texture_rect(ghost_tex, Rect2(gx - sw / 2, gy - sh / 2 + bob_val, sw, sh), false, ghost_mod)
+	# Underground border ring (salvage only — suggests the floor is covering the ghost)
+	if is_underground and mv.is_phasing():
+		canvas.draw_arc(Vector2(gx, gy + bob_val), 10, 0, TAU, 16, Color(0.1, 0.15, 0.3, 0.5), 2)
+	# Cooldown ring (shown when on cooldown, not while active)
+	if mv.phase_cd > 0 and not mv.is_phasing():
+		var cd_pct: float = mv.cooldown_pct()
+		canvas.draw_arc(Vector2(gx, gy), 12.0, -PI / 2, -PI / 2 + TAU * cd_pct, 16, Palette.TEXT_DIM, 1.5)
