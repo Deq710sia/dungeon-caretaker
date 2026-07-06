@@ -182,6 +182,25 @@ func _process(delta: float) -> void:
 		phase_active = max(0, phase_active - delta)
 		if phase_active == 0:
 			SFX.play("phase_out", 1.0, -3.0)
+	# DESIGN_PLAN 1B: Phase verb activation. Checked in _process (not _input)
+	# using Input.is_action_just_pressed so it works with ANY input source
+	# that maps to the "phase" action — physical keyboard, gamepad, remapped
+	# keys, or the PlaytestDriver's Input.action_press. The old _input(event)
+	# approach only fired on physical InputEventKey presses, silently
+	# breaking gamepad support and playtest automation.
+	if Input.is_action_just_pressed("phase") and phase_cd <= 0 and phase_active <= 0:
+		if GameState.soul_shards < PHASE_COST:
+			SFX.play("deny")
+			log_label.text = "Not enough shards to phase (need %d)" % PHASE_COST
+		else:
+			GameState.soul_shards -= PHASE_COST
+			GameState.shards_changed.emit(GameState.soul_shards)
+			phase_cd = PHASE_CD
+			phase_active = PHASE_DURATION
+			Juice.add_trauma(0.2)
+			Juice.spawn_particles(Vector2(VIEW_W / 2, VIEW_H / 2), 12, Palette.GLOW_BLUE, 40.0, 0.5)
+			SFX.play("phase_in", 1.0, -2.0)
+			log_label.text = "Ghost phases — enemies slow!"
 	for u in party_units:
 		if u.alive:
 			u.walk_anim += delta * 8
@@ -513,27 +532,6 @@ func _draw_glow(pos: Vector2, radius: int, color: Color) -> void:
 		var c := color
 		c.a = c.a * (1.0 - float(r) / float(radius)) * 0.8
 		draw_circle(center, r, c)
-
-func _input(event: InputEvent) -> void:
-	if battle_over:
-		return
-	# DESIGN_PLAN 1B: Phase verb. SPACE activates (was '1' for Haunt).
-	# Costs 1 soul shard per use, 4s cooldown, 1.5s duration. Slows all
-	# enemies while active (handled in _process via phase_active).
-	if event is InputEventKey and event.pressed and event.keycode == KEY_SPACE:
-		if phase_cd <= 0 and phase_active <= 0:
-			if GameState.soul_shards < PHASE_COST:
-				SFX.play("deny")
-				log_label.text = "Not enough shards to phase (need %d)" % PHASE_COST
-				return
-			GameState.soul_shards -= PHASE_COST
-			GameState.shards_changed.emit(GameState.soul_shards)
-			phase_cd = PHASE_CD
-			phase_active = PHASE_DURATION
-			Juice.add_trauma(0.2)
-			Juice.spawn_particles(Vector2(VIEW_W / 2, VIEW_H / 2), 12, Palette.GLOW_BLUE, 40.0, 0.5)
-			SFX.play("phase_in", 1.0, -2.0)
-			log_label.text = "Ghost phases — enemies slow!"
 
 func _on_continue() -> void:
 	GameState.set_phase("results")
