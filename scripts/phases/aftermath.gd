@@ -44,11 +44,11 @@ func _draw() -> void:
 	if fallen_names.is_empty():
 		GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, 30), "S%d W%d — AFTERMATH" % [GameState.last_battle_result.get("stage", GameState.stage), GameState.last_battle_result.get("wave", GameState.wave)], 8, Palette.TEXT_GOLD)
 		GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H / 2 - 6), "The party returns, weary but whole.", 8, Palette.TEXT)
-		GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H / 2 + 10), "Their gear still needs tending before the next wave.", 7, Palette.TEXT_DIM)
+		GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H / 2 + 10), "Their gear still needs tending before the next wave.", 8, Palette.TEXT_DIM)
 	else:
 		GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, 30), "S%d W%d — THE FALLEN" % [GameState.last_battle_result.get("stage", GameState.stage), GameState.last_battle_result.get("wave", GameState.wave)], 8, Palette.TEXT_RED)
 		var start_y: float = 55.0
-		var spacing: float = 90.0
+		var spacing: float = min(90.0, 280.0 / max(1, fallen_names.size()))
 		var start_x: float = ROOM_W / 2.0 - (fallen_names.size() - 1) * spacing / 2.0
 		for i in fallen_names.size():
 			var fname: String = fallen_names[i]
@@ -58,12 +58,12 @@ func _draw() -> void:
 			draw_rect(Rect2(pos.x - 10, pos.y + 4, 20, 5), Color(0.4, 0.02, 0.02, 0.5), true)
 			var tex := Sprites.get_sprite("knight" if i % 2 == 0 else "mage")
 			draw_texture_rect(tex, Rect2(pos.x - 9, pos.y - 4, 18, 10), false, Color(0.5, 0.45, 0.5, 1.0))
-			GameFont.draw_string_centered(self, pos + Vector2(0, 20), fname, 7, Palette.TEXT_DIM)
-			GameFont.draw_string_centered(self, pos + Vector2(0, 30), "fell here", 7, Palette.TEXT_DIM)
+			GameFont.draw_string_centered(self, pos + Vector2(0, 20), fname, 8, Palette.TEXT_DIM)
+			GameFont.draw_string_centered(self, pos + Vector2(0, 30), "fell here", 8, Palette.TEXT_DIM)
 		if GameState.last_battle_result.get("retreated", false):
-			GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H / 2 + 24), "The rest retreated, carrying what they could.", 7, Palette.TEXT)
+			GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H / 2 + 24), "The rest retreated, carrying what they could.", 8, Palette.TEXT)
 		else:
-			GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H / 2 + 24), "The dungeon takes its due.", 7, Palette.TEXT)
+			GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H / 2 + 24), "The dungeon takes its due.", 8, Palette.TEXT)
 
 func _on_continue() -> void:
 	GameState.set_phase("gate")

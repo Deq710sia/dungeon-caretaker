@@ -40,7 +40,7 @@ func _build_graves() -> void:
 		names = ["Toren the Bold", "Yselde the Wise"]
 	else:
 		names = []  # a clean wave — no fresh graves to add
-	var spacing: float = 70.0
+	var spacing: float = min(70.0, 280.0 / max(1, names.size()))
 	var start_x: float = ROOM_W / 2.0 - (names.size() - 1) * spacing / 2.0
 	for i in names.size():
 		graves.append({"pos": Vector2(start_x + i * spacing, 100), "name": names[i]})
@@ -71,7 +71,7 @@ func _process(delta: float) -> void:
 		ghost_vel = ghost_vel.move_toward(Vector2.ZERO, 300.0 * delta)
 	ghost_pos += ghost_vel * delta
 	ghost_pos.x = clampf(ghost_pos.x, 12, ROOM_W - 12)
-	ghost_pos.y = clampf(ghost_pos.y, 24, ROOM_H - 12)
+	ghost_pos.y = clampf(ghost_pos.y, 24, ROOM_H - 20)
 	near_gate = ghost_pos.distance_to(GATE_POS) < GATE_RADIUS
 	if near_gate and Input.is_action_just_pressed("interact"):
 		_open_gate()
@@ -107,7 +107,7 @@ func _draw() -> void:
 		draw_rect(Rect2(p.x - 6, p.y + 2, 12, 3), Color(0.25, 0.22, 0.2), true)  # mound
 		draw_line(p + Vector2(0, -8), p + Vector2(0, 2), Color(0.5, 0.42, 0.3), 2.0)
 		draw_line(p + Vector2(-4, -4), p + Vector2(4, -4), Color(0.5, 0.42, 0.3), 2.0)
-		GameFont.draw_string_centered(self, p + Vector2(0, 14), g.name, 6, Palette.TEXT_DIM)
+		GameFont.draw_string_centered(self, p + Vector2(0, 14), g.name, 8, Palette.TEXT_DIM)
 	# Ghost
 	var gp := ghost_pos
 	draw_rect(Rect2(int(gp.x) - 5, int(gp.y) + 6, 10, 2), Color(0, 0, 0, 0.3), true)

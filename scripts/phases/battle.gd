@@ -449,7 +449,7 @@ func _draw() -> void:
                 var alpha: float = d.life / d.max_life
                 var c: Color = d.color
                 c.a = alpha
-                GameFont.draw_string_centered(self, Vector2(int(d.pos.x), int(d.pos.y)), d.text, 7, c)
+                GameFont.draw_string_centered(self, Vector2(int(d.pos.x), int(d.pos.y)), d.text, 8, c)
         # Ghost ability HUD — snapped
         var hud_pos := cam.get_screen_center_position() - Vector2(VIEW_W / 2, VIEW_H / 2)
         hud_pos = Vector2(int(hud_pos.x), int(hud_pos.y))
@@ -457,7 +457,7 @@ func _draw() -> void:
         var cd_c := Palette.TEXT_GREEN if ghost_ability_cd <= 0 else Palette.TEXT_DIM
         draw_rect(Rect2(hud_pos + Vector2(4, 150), Vector2(40, 5)), Palette.DARK, true)
         draw_rect(Rect2(hud_pos + Vector2(4, 150), Vector2(int(40 * cd_pct), 5)), cd_c, true)
-        GameFont.draw_string(self, hud_pos + Vector2(4, 148), "[1]Haunt", 6, cd_c)
+        GameFont.draw_string(self, hud_pos + Vector2(4, 148), "[1]Haunt", 8, cd_c)
         if ghost_ability_active > 0:
                 GameFont.draw_string_centered(self, hud_pos + Vector2(VIEW_W / 2, 148), "HAUNTING!", 8, Palette.GLOW_BLUE)
 

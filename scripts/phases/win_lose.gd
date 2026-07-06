@@ -25,7 +25,7 @@ func _ready() -> void:
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(sub)
 	var stats := Label.new()
-	stats.text = "Survivors: %d    Shards: %d    Arsenal: %d weapons" % [survivors, GameState.soul_shards, GameState.arsenal.size()]
+	stats.text = "Survivors: %d  Shards: %d  Weapons: %d" % [survivors, GameState.soul_shards, GameState.arsenal.size()]
 	stats.add_theme_font_size_override("font_size", 8)
 	stats.add_theme_color_override("font_color", Palette.TEXT)
 	stats.position = Vector2(0, 46)

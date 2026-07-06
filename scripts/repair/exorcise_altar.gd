@@ -77,7 +77,7 @@ func _draw() -> void:
 		# Weapon
 		draw_texture_rect(weapon_tex, Rect2(wpos.x, wpos.y, wsize, wsize), false)
 		# Weapon name
-		draw_string(GameFont.get_font(), Vector2(vp.x / 2 - 50, vp.y / 2 + 40), gear.display_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 7, gear.wear_color())
+		draw_string(GameFont.get_font(), Vector2(vp.x / 2 - 50, vp.y / 2 + 40), gear.display_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 8, gear.wear_color())
 	# Sigil lines (faded)
 	for i in sigil_points.size():
 		var j := (i + 1) % sigil_points.size()

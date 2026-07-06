@@ -111,7 +111,7 @@ func _process(delta: float) -> void:
                 ghost.vel = ghost.vel.move_toward(Vector2.ZERO, ghost.accel * delta)
         ghost.pos += ghost.vel * delta
         ghost.pos.x = clampf(ghost.pos.x, 12, ROOM_W - 12)
-        ghost.pos.y = clampf(ghost.pos.y, HUD_H + 20, ROOM_H - 12)
+        ghost.pos.y = clampf(ghost.pos.y, HUD_H + 30, ROOM_H - 12)
         _find_nearest_interactive()
         if Input.is_action_just_pressed("interact") and not interact_pressed:
                 interact_pressed = true
@@ -292,7 +292,7 @@ func _draw() -> void:
         if near_interactive == "map":
                 var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
                 draw_rect(Rect2(MAP_TABLE_POS.x - 12, MAP_TABLE_POS.y - 12, 24, 24), Color(0.95, 0.85, 0.40, pulse), false, 1)
-        GameFont.draw_string_centered(self, MAP_TABLE_POS + Vector2(0, 22), "MAP", 6, Palette.TEXT)
+        GameFont.draw_string_centered(self, MAP_TABLE_POS + Vector2(0, 22), "MAP", 8, Palette.TEXT)
         # Weapon rack
         draw_texture(Sprites.get_sprite("weapon_rack"), WEAPON_RACK_POS - Vector2(8, 8))
         if near_interactive == "rack":
@@ -304,22 +304,22 @@ func _draw() -> void:
                 var w: Weapon = GameState.arsenal[page_start + i]
                 var wp := WEAPON_RACK_POS + Vector2(-8 + i * 8, -12)
                 draw_texture(Sprites.get_weapon_sprite(w.type, w.state), wp)
-        GameFont.draw_string_centered(self, WEAPON_RACK_POS + Vector2(0, 22), "RACK", 6, Palette.TEXT)
+        GameFont.draw_string_centered(self, WEAPON_RACK_POS + Vector2(0, 22), "RACK", 8, Palette.TEXT)
         # Bell
         draw_texture(Sprites.get_sprite("bell"), BELL_POS - Vector2(8, 8))
         if near_interactive == "bell":
                 var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
                 draw_rect(Rect2(BELL_POS.x - 12, BELL_POS.y - 12, 24, 24), Color(0.95, 0.85, 0.40, pulse), false, 1)
-        GameFont.draw_string_centered(self, BELL_POS + Vector2(0, 22), "BELL", 6, Palette.TEXT)
+        GameFont.draw_string_centered(self, BELL_POS + Vector2(0, 22), "BELL", 8, Palette.TEXT)
         # Recruiting shrine
         draw_texture(Sprites.get_sprite("shrine"), RECRUIT_POS - Vector2(8, 8))
         if near_interactive == "recruit":
                 var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
                 draw_rect(Rect2(RECRUIT_POS.x - 12, RECRUIT_POS.y - 12, 24, 24), Color(0.65, 0.40, 0.85, pulse), false, 1)
-        GameFont.draw_string_centered(self, RECRUIT_POS + Vector2(0, 22), "SHRINE", 6, Palette.TEXT)
+        GameFont.draw_string_centered(self, RECRUIT_POS + Vector2(0, 22), "SHRINE", 8, Palette.TEXT)
         var fallen_count := GameState.party.size() - GameState.living_party_count()
         if fallen_count > 0:
-                GameFont.draw_string_centered(self, RECRUIT_POS + Vector2(0, -20), "Fallen: %d" % fallen_count, 6, Palette.TEXT_DIM)
+                GameFont.draw_string_centered(self, RECRUIT_POS + Vector2(0, -20), "Fallen: %d" % fallen_count, 8, Palette.TEXT_DIM)
         # Adventurers
         for a in adventurers:
                 var tex := Sprites.get_sprite(a.sprite)
@@ -330,7 +330,7 @@ func _draw() -> void:
                         var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
                         draw_rect(Rect2(a.pos.x - 12, a.pos.y - 12, 24, 24), Color(0.55, 0.95, 0.55, pulse), false, 1)
                 # Name
-                GameFont.draw_string_centered(self, a.pos + Vector2(0, -14), a.adv.name, 6, Palette.TEXT)
+                GameFont.draw_string_centered(self, a.pos + Vector2(0, -14), a.adv.name, 8, Palette.TEXT)
                 # Equipped weapon indicator
                 var adv: Dictionary = a.adv
                 if adv.get("equipped_weapon") != null:
@@ -357,7 +357,7 @@ func _draw() -> void:
         if map_view_active:
                 _draw_map_view()
         # Bottom hint
-        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 2), "WASD: move | E: interact", 6, Palette.TEXT_DIM)
+        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 6), "WASD: move | E: interact", 8, Palette.TEXT_DIM)
 
 func _draw_map_view() -> void:
         # Dim background
@@ -378,24 +378,24 @@ func _draw_map_view() -> void:
                 var color := Palette.TEXT_RED if is_boss else Palette.TEXT_GREEN
                 if i == 0:
                         color = Palette.TEXT_GOLD
-                GameFont.draw_string_centered(self, Vector2(path_x + i * node_spacing, path_y), label, 7, color)
+                GameFont.draw_string_centered(self, Vector2(path_x + i * node_spacing, path_y), label, 8, color)
                 if i < 2:
-                        GameFont.draw_string(self, Vector2(path_x + i * node_spacing + 30, path_y), "->", 7, Palette.TEXT_DIM)
+                        GameFont.draw_string(self, Vector2(path_x + i * node_spacing + 30, path_y), "->", 8, Palette.TEXT_DIM)
         # Intel
         var intel_y: float = 90
         var enemy_count := GameState.get_enemy_count()
         var enemy_hp := GameState.get_enemy_hp()
-        GameFont.draw_string(self, Vector2(20, intel_y), "ENEMIES: %d" % enemy_count, 7, Palette.TEXT_RED)
-        GameFont.draw_string(self, Vector2(20, intel_y + 12), "HP: ~%d each" % enemy_hp, 7, Palette.TEXT)
-        GameFont.draw_string(self, Vector2(20, intel_y + 24), "ATK: ~%d each" % GameState.get_enemy_atk(), 7, Palette.TEXT)
+        GameFont.draw_string(self, Vector2(20, intel_y), "ENEMIES: %d" % enemy_count, 8, Palette.TEXT_RED)
+        GameFont.draw_string(self, Vector2(20, intel_y + 12), "HP: ~%d each" % enemy_hp, 8, Palette.TEXT)
+        GameFont.draw_string(self, Vector2(20, intel_y + 24), "ATK: ~%d each" % GameState.get_enemy_atk(), 8, Palette.TEXT)
         # Enemy types
         var types := []
         if GameState.stage >= 1: types.append("Slime")
         if GameState.stage >= 2: types.append("Skeleton")
         if GameState.stage >= 3: types.append("Bat")
-        GameFont.draw_string(self, Vector2(160, intel_y), "TYPES:", 7, Palette.TEXT_BLUE)
-        GameFont.draw_string(self, Vector2(160, intel_y + 12), ", ".join(types), 7, Palette.TEXT)
+        GameFont.draw_string(self, Vector2(160, intel_y), "TYPES:", 8, Palette.TEXT_BLUE)
+        GameFont.draw_string(self, Vector2(160, intel_y + 12), ", ".join(types), 8, Palette.TEXT)
         # Arsenal count
-        GameFont.draw_string(self, Vector2(160, intel_y + 24), "ARSENAL: %d weapons" % GameState.arsenal.size(), 7, Palette.TEXT)
+        GameFont.draw_string(self, Vector2(160, intel_y + 24), "ARSENAL: %d weapons" % GameState.arsenal.size(), 8, Palette.TEXT)
         # Close hint
-        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 14), "[E] Close map", 7, Palette.TEXT_GOLD)
+        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 14), "[E] Close map", 8, Palette.TEXT_GOLD)

@@ -75,28 +75,28 @@ func _build_hud() -> void:
         hud_stage.add_theme_font_size_override("font_size", 8)
         hud_stage.add_theme_color_override("font_color", Palette.TEXT_GOLD)
         hud_stage.position = Vector2(2, 2)
-        hud_stage.size = Vector2(120, 10)
+        hud_stage.size = Vector2(88, 10)
         panel.add_child(hud_stage)
         hud_bell = Label.new()
         hud_bell.text = "Bell: 75s"
         hud_bell.add_theme_font_size_override("font_size", 8)
         hud_bell.add_theme_color_override("font_color", Palette.TEXT_RED)
-        hud_bell.position = Vector2(125, 2)
-        hud_bell.size = Vector2(50, 10)
+        hud_bell.position = Vector2(92, 2)
+        hud_bell.size = Vector2(60, 10)
         panel.add_child(hud_bell)
         hud_shards = Label.new()
         hud_shards.text = "Shards: 0"
         hud_shards.add_theme_font_size_override("font_size", 8)
         hud_shards.add_theme_color_override("font_color", Palette.TEXT_BLUE)
-        hud_shards.position = Vector2(180, 2)
+        hud_shards.position = Vector2(154, 2)
         hud_shards.size = Vector2(60, 10)
         panel.add_child(hud_shards)
         hud_carrying = Label.new()
         hud_carrying.text = "Carry: -"
         hud_carrying.add_theme_font_size_override("font_size", 8)
         hud_carrying.add_theme_color_override("font_color", Palette.TEXT_DIM)
-        hud_carrying.position = Vector2(240, 2)
-        hud_carrying.size = Vector2(76, 10)
+        hud_carrying.position = Vector2(216, 2)
+        hud_carrying.size = Vector2(100, 10)
         panel.add_child(hud_carrying)
         prompt_label = Label.new()
         prompt_label.text = ""
@@ -336,7 +336,7 @@ func _draw() -> void:
                 if near_station_key == st.key:
                         var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
                         draw_rect(Rect2(st.pos.x - 12, st.pos.y - 12, 24, 24), Color(0.95, 0.85, 0.40, pulse), false, 1)
-                GameFont.draw_string_centered(self, st.pos + Vector2(0, 18), st.name, 6, Palette.TEXT)
+                GameFont.draw_string_centered(self, st.pos + Vector2(0, 18), st.name, 8, Palette.TEXT)
                 # Arsenal weapon pile
                 if st.key == "arsenal" and GameState.arsenal.size() > 0:
                         var pile_count: int = min(GameState.arsenal.size(), 3)
@@ -349,7 +349,7 @@ func _draw() -> void:
                 var tex := Sprites.get_sprite(a.sprite)
                 draw_rect(Rect2(int(a.pos.x) - 5, int(a.pos.y) + 6, 10, 2), Color(0, 0, 0, 0.3), true)
                 draw_texture(tex, a.pos - Vector2(8, 8))
-                GameFont.draw_string_centered(self, a.pos + Vector2(0, -12), a.adv.name, 5, Palette.TEXT)
+                GameFont.draw_string_centered(self, a.pos + Vector2(0, -12), a.adv.name, 8, Palette.TEXT)
                 # Equipped weapon
                 if a.adv.get("equipped_weapon") != null:
                         var w: Weapon = a.adv.equipped_weapon
@@ -369,7 +369,7 @@ func _draw() -> void:
         # Particles
         Juice.draw_particles(self)
         # Hint
-        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 2), "WASD: move | E: interact | TAB: inspect weapon", 5, Palette.TEXT_DIM)
+        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 6), "WASD: move | E: interact | TAB: inspect weapon", 8, Palette.TEXT_DIM)
 
 func _draw_glow(pos: Vector2, radius: int, color: Color) -> void:
         var center := Vector2(int(pos.x), int(pos.y))
@@ -395,28 +395,28 @@ func _show_weapon_inspect(w: Weapon) -> void:
         inspect_panel.add_child(title)
         var state_line := Label.new()
         state_line.text = "State: %s | Wear: %s" % [w.state_name(), w.wear_name()]
-        state_line.add_theme_font_size_override("font_size", 7)
+        state_line.add_theme_font_size_override("font_size", 8)
         state_line.add_theme_color_override("font_color", Palette.TEXT)
         state_line.position = Vector2(8, 18)
         state_line.size = Vector2(224, 10)
         inspect_panel.add_child(state_line)
         var dur_line := Label.new()
         dur_line.text = "Durability: %d/%d" % [w.durability, w.durability_max]
-        dur_line.add_theme_font_size_override("font_size", 7)
+        dur_line.add_theme_font_size_override("font_size", 8)
         dur_line.add_theme_color_override("font_color", Palette.TEXT)
         dur_line.position = Vector2(8, 30)
         dur_line.size = Vector2(224, 10)
         inspect_panel.add_child(dur_line)
         var stats := Label.new()
         stats.text = "SHP:%d%% BAL:%d%% PWR:%d%% MYS:%d%%" % [int(w.sharpness*100), int(w.balance*100), int(w.power*100), int(w.mystic*100)]
-        stats.add_theme_font_size_override("font_size", 7)
+        stats.add_theme_font_size_override("font_size", 8)
         stats.add_theme_color_override("font_color", Palette.TEXT_BLUE)
         stats.position = Vector2(8, 42)
         stats.size = Vector2(224, 10)
         inspect_panel.add_child(stats)
         var blurb := Label.new()
         blurb.text = w.authoring_blurb()
-        blurb.add_theme_font_size_override("font_size", 6)
+        blurb.add_theme_font_size_override("font_size", 8)
         blurb.add_theme_color_override("font_color", Palette.TEXT_DIM)
         blurb.position = Vector2(8, 54)
         blurb.size = Vector2(224, 20)
@@ -424,14 +424,14 @@ func _show_weapon_inspect(w: Weapon) -> void:
         inspect_panel.add_child(blurb)
         var wielder := Label.new()
         wielder.text = "Wielder: %s | Kills: %d" % [w.wielder if w.wielder != "" else "unassigned", w.kill_log.size()]
-        wielder.add_theme_font_size_override("font_size", 6)
+        wielder.add_theme_font_size_override("font_size", 8)
         wielder.add_theme_color_override("font_color", Palette.TEXT_DIM)
         wielder.position = Vector2(8, 76)
         wielder.size = Vector2(224, 10)
         inspect_panel.add_child(wielder)
         var hint := Label.new()
         hint.text = "[TAB] close"
-        hint.add_theme_font_size_override("font_size", 6)
+        hint.add_theme_font_size_override("font_size", 8)
         hint.add_theme_color_override("font_color", Palette.TEXT_GOLD)
         hint.position = Vector2(8, 104)
         hint.size = Vector2(224, 10)

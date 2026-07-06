@@ -436,8 +436,8 @@ func _draw() -> void:
                         draw_texture(gear_tex, Vector2(cx - 8, cy - 20 + bob))
                         _draw_gear_glow(Vector2(cx, cy - 12 + bob))
                         if near_interactive == c:
-                                GameFont.draw_string_centered(self, Vector2(cx, cy - 32), c.corpse_name, 6, Palette.TEXT_GOLD)
-                                GameFont.draw_string_centered(self, Vector2(cx, cy - 26), c.gear_name, 6, Palette.TEXT_BLUE)
+                                GameFont.draw_string_centered(self, Vector2(cx, cy - 32), c.corpse_name, 8, Palette.TEXT_GOLD)
+                                GameFont.draw_string_centered(self, Vector2(cx, cy - 26), c.gear_name, 8, Palette.TEXT_BLUE)
         # Exit — snapped
         var ex := int(exit_pos.x)
         var ey := int(exit_pos.y)
@@ -459,7 +459,7 @@ func _draw() -> void:
                 _draw_qte_bar()
         # Particles
         Juice.draw_particles(self)
-        # Progress bar — snapped
+        # Progress bar (fixed at right edge of screen)
         var progress := clampf(ghost_pos.y / (CORRIDOR_H * TILE), 0, 1)
         draw_rect(Rect2(VIEW_W - 4, 16, 2, VIEW_H - 30), Palette.DARK, true)
         draw_rect(Rect2(VIEW_W - 4, 16 + int((VIEW_H - 30) * (1 - progress)), 2, int((VIEW_H - 30) * progress)), Palette.SLIME, true)
@@ -502,4 +502,4 @@ func _draw_qte_bar() -> void:
         draw_rect(Rect2(tz_x, int(bar_center.y), int(bar_w * 0.30), bar_h), Palette.SLIME, true)
         var mx := int(bar_center.x) - bar_w / 2 + int(bar_w * active_qte.marker_x)
         draw_rect(Rect2(mx, int(bar_center.y) - 1, 2, bar_h + 2), Palette.TEXT_GOLD, true)
-        GameFont.draw_string_centered(self, bar_center + Vector2(0, -6), active_qte.verb, 6, Palette.TEXT_GOLD)
+        GameFont.draw_string_centered(self, bar_center + Vector2(0, -6), active_qte.verb, 8, Palette.TEXT_GOLD)
