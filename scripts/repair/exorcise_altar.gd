@@ -67,7 +67,7 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, vp), Color(0.05, 0.03, 0.08, 1.0), true)
 	# Draw the WEAPON in the center (the centerpiece!)
 	if gear != null:
-		var weapon_tex := Sprites.get_weapon_sprite(gear.type, gear.state)
+		var weapon_tex := Sprites.get_weapon_sprite_wear(gear.type, gear.wear_state, gear.is_haunted())
 		var wsize := 56
 		var wpos := Vector2(vp.x / 2 - wsize / 2, vp.y / 2 - wsize / 2 + 5)
 		# Mystical glow around weapon

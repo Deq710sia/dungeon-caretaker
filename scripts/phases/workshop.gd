@@ -212,7 +212,13 @@ func _try_activate_phase() -> void:
         # DESIGN_PLAN 1B: Phase verb — workshop QoL version. 2x movement only,
         # no hazard bypass (workshop has no hazards). Same cost/cd/duration
         # as salvage so the verb is unified.
-        if phase_active > 0 or phase_cd > 0:
+        # Toggle: press SPACE again while phasing to snap back early.
+        if phase_active > 0:
+                phase_active = 0.0
+                Juice.trail_phasing = false
+                SFX.play("phase_out", 1.0, -3.0)
+                return
+        if phase_cd > 0:
                 return
         if GameState.soul_shards < PHASE_COST:
                 SFX.play("deny")
@@ -354,14 +360,17 @@ func _on_minigame_completed(quality: float) -> void:
                         SFX.play("repair")
                         ghost.squash = 1.1 + quality * 0.2
         GameState.arsenal_changed.emit()
-        # V2 FIX: After repair, return the weapon to the arsenal automatically.
-        # The player can then pick up the next weapon that needs work.
-        # Without this, the weapon stayed in ghost.carrying forever — the player
-        # was stuck carrying a weapon no station would accept, unable to pick up
-        # a new one.
-        if ghost.carrying != null:
-                GameState.add_weapon(ghost.carrying)
-                ghost.carrying = null
+        # Keep the weapon in the ghost's hands after repair. The player can
+        # see the repaired weapon, take it to another station (e.g. grind then
+        # altar), or drop it at the arsenal (press E at arsenal while carrying).
+        #
+        # The previous code auto-returned the weapon to arsenal, which caused
+        # the "item disappears" bug: the weapon went back to the arsenal pile
+        # but the player couldn't tell which weapon it was or easily pick it
+        # up again (the arsenal picker prefers weapons that still need work,
+        # so a freshly-repaired PRISTINE weapon would never be re-selected).
+        # Keeping it visible in the ghost's hands is clearer and gives the
+        # player agency over where the weapon goes next.
         current_weapon = null
         current_station_key = ""
 
@@ -420,7 +429,7 @@ func _draw() -> void:
                         var pile_count: int = min(GameState.arsenal.size(), 3)
                         for i in pile_count:
                                 var w: Weapon = GameState.arsenal[i]
-                                var gear_tex := Sprites.get_weapon_sprite(w.type, w.state)
+                                var gear_tex := Sprites.get_weapon_sprite_wear(w.type, w.wear_state, w.is_haunted())
                                 draw_texture(gear_tex, st.pos + Vector2(-12 + i * 8, -18))
         # Adventurers
         for a in adventurers:
@@ -431,7 +440,7 @@ func _draw() -> void:
                 # Equipped weapon
                 if a.adv.get("equipped_weapon") != null:
                         var w: Weapon = a.adv.equipped_weapon
-                        draw_texture(Sprites.get_weapon_sprite(w.type, w.state), a.pos + Vector2(8, -4))
+                        draw_texture(Sprites.get_weapon_sprite_wear(w.type, w.wear_state, w.is_haunted()), a.pos + Vector2(8, -4))
         # Ghost
         var bob := sin(ghost.bob) * 1.5
         var gp: Vector2 = ghost.pos + Vector2(0, bob)
@@ -453,7 +462,7 @@ func _draw() -> void:
                 draw_arc(Vector2(int(gp.x), int(gp.y)), 12.0, -PI / 2, -PI / 2 + TAU * cd_pct, 16, Palette.TEXT_DIM, 1.5)
         # Carried weapon
         if ghost.carrying != null:
-                var item_tex := Sprites.get_weapon_sprite(ghost.carrying.type, ghost.carrying.state)
+                var item_tex := Sprites.get_weapon_sprite_wear(ghost.carrying.type, ghost.carrying.wear_state, ghost.carrying.is_haunted())
                 draw_texture(item_tex, gp + Vector2(-8, -16))
         # Particles
         Juice.draw_particles(self)

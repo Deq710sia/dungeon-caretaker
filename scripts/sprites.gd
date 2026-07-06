@@ -1008,3 +1008,67 @@ static func get_weapon_sprite(type: String, state: int) -> ImageTexture:
 	var tex := ImageTexture.create_from_image(img)
 	_cache[key] = tex
 	return tex
+
+## Weapon sprite colored by WEAR STATE (the mechanical truth that gates
+## which station accepts the weapon), with haunted wisps as an overlay.
+##
+## This replaces get_weapon_sprite(type, state) for all gameplay contexts.
+## The old function used the flavor State enum (BLOODIED/RUSTED/HAUNTED/
+## CURSED) for tinting, which caused a visual disconnect: a HAUNTED weapon
+## showed blue even when it needed grinding (DAMAGED wear state = orange).
+## Players couldn't tell at a glance which station to use.
+##
+## Color mapping (matches WEAR_* palette + station colors):
+##   PRISTINE  — clean/bright (no tint needed, weapon is fine)
+##   WORN      — yellow tint  (needs POLISH)
+##   DAMAGED   — orange tint  (needs GRIND)
+##   BROKEN    — dark red + crack lines (needs FORGE)
+##
+## Haunted overlay: if is_haunted, blue wisps are added ON TOP of the
+## wear tint so the player knows to also visit the Altar. This is
+## orthogonal to wear state (a weapon can be DAMAGED + haunted).
+static func get_weapon_sprite_wear(type: String, wear_state: int, is_haunted: bool) -> ImageTexture:
+	var key := "ww_%s_%d_%d" % [type, wear_state, 1 if is_haunted else 0]
+	if _cache.has(key):
+		return _cache[key]
+	var base := get_sprite(type)
+	var img := base.get_image()
+	# Wear-state tint — the PRIMARY color the player reads to know
+	# which station to use. Matches the WEAR_* palette colors.
+	var tint: Color = Color.WHITE
+	match wear_state:
+		Weapon.WearState.PRISTINE: tint = Color.WHITE  # clean, no tint
+		Weapon.WearState.WORN:     tint = Color(1.2, 1.05, 0.55, 1.0)  # yellow = polish
+		Weapon.WearState.DAMAGED:  tint = Color(1.3, 0.75, 0.45, 1.0)  # orange = grind
+		Weapon.WearState.BROKEN:   tint = Color(0.75, 0.45, 0.45, 1.0) # dark red = forge
+	if tint != Color.WHITE:
+		for y in 16:
+			for x in 16:
+				var c := img.get_pixel(x, y)
+				if c.a > 0:
+					var nc := Color(c.r * tint.r, c.g * tint.g, c.b * tint.b, c.a)
+					img.set_pixel(x, y, nc)
+	# Wear-state overlays — visual feedback for damage level
+	match wear_state:
+		Weapon.WearState.WORN:
+			# Subtle dust/film on the weapon
+			for i in 3:
+				_px(img, 3 + i * 4, 5 + (i % 2) * 3, Color(0.7, 0.65, 0.4, 0.5))
+		Weapon.WearState.DAMAGED:
+			# Rust flecks
+			for i in 5:
+				_px(img, 2 + (i * 3) % 12, 3 + (i * 2) % 10, Palette.RUST)
+		Weapon.WearState.BROKEN:
+			# Crack lines
+			_line(img, 2, 4, 8, 8, Palette.VOID)
+			_line(img, 8, 8, 14, 12, Palette.VOID)
+			_line(img, 8, 8, 6, 14, Palette.VOID)
+	# Haunted overlay — blue wisps ON TOP of the wear tint. This is
+	# orthogonal to wear state: a weapon can be DAMAGED (orange) + haunted
+	# (blue wisps), telling the player "needs grind AND altar."
+	if is_haunted:
+		for i in 4:
+			_px(img, 4 + i * 3, 2 + (i % 2) * 6, Color(0.6, 0.85, 1.0, 0.7))
+	var tex := ImageTexture.create_from_image(img)
+	_cache[key] = tex
+	return tex

@@ -188,19 +188,28 @@ func _process(delta: float) -> void:
 	# keys, or the PlaytestDriver's Input.action_press. The old _input(event)
 	# approach only fired on physical InputEventKey presses, silently
 	# breaking gamepad support and playtest automation.
-	if Input.is_action_just_pressed("phase") and phase_cd <= 0 and phase_active <= 0:
-		if GameState.soul_shards < PHASE_COST:
-			SFX.play("deny")
-			log_label.text = "Not enough shards to phase (need %d)" % PHASE_COST
-		else:
-			GameState.soul_shards -= PHASE_COST
-			GameState.shards_changed.emit(GameState.soul_shards)
-			phase_cd = PHASE_CD
-			phase_active = PHASE_DURATION
-			Juice.add_trauma(0.2)
-			Juice.spawn_particles(Vector2(VIEW_W / 2, VIEW_H / 2), 12, Palette.GLOW_BLUE, 40.0, 0.5)
-			SFX.play("phase_in", 1.0, -2.0)
-			log_label.text = "Ghost phases — enemies slow!"
+	#
+	# Toggle: press SPACE again while phasing to snap back early. The
+	# cooldown still applies from when you started, so early-exit doesn't
+	# refund the shard — it just cuts the slow-enemy duration short.
+	if Input.is_action_just_pressed("phase"):
+		if phase_active > 0:
+			phase_active = 0.0
+			SFX.play("phase_out", 1.0, -3.0)
+			log_label.text = "Ghost snaps back — phasing ended early."
+		elif phase_cd <= 0:
+			if GameState.soul_shards < PHASE_COST:
+				SFX.play("deny")
+				log_label.text = "Not enough shards to phase (need %d)" % PHASE_COST
+			else:
+				GameState.soul_shards -= PHASE_COST
+				GameState.shards_changed.emit(GameState.soul_shards)
+				phase_cd = PHASE_CD
+				phase_active = PHASE_DURATION
+				Juice.add_trauma(0.2)
+				Juice.spawn_particles(Vector2(VIEW_W / 2, VIEW_H / 2), 12, Palette.GLOW_BLUE, 40.0, 0.5)
+				SFX.play("phase_in", 1.0, -2.0)
+				log_label.text = "Ghost phases — enemies slow!"
 	for u in party_units:
 		if u.alive:
 			u.walk_anim += delta * 8
@@ -500,7 +509,7 @@ func _draw() -> void:
 			var adv: Dictionary = u.adv
 			if adv.get("equipped_weapon") != null:
 				var w: Weapon = adv.equipped_weapon
-				draw_texture(Sprites.get_weapon_sprite(w.type, w.state), Vector2(ux + 6, uy - 4))
+				draw_texture(Sprites.get_weapon_sprite_wear(w.type, w.wear_state, w.is_haunted()), Vector2(ux + 6, uy - 4))
 				var dpct: float = w.durability_pct()
 				draw_rect(Rect2(ux + 5, uy - 8, 8, 1), Palette.DARK, true)
 				draw_rect(Rect2(ux + 5, uy - 8, int(8 * dpct), 1), w.wear_color(), true)

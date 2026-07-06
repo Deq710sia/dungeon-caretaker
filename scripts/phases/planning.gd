@@ -174,7 +174,13 @@ func _process(delta: float) -> void:
 
 func _try_activate_phase() -> void:
 	# DESIGN_PLAN 1B: Phase verb — planning QoL version. 2x movement only.
-	if phase_active > 0 or phase_cd > 0:
+	# Toggle: press SPACE again while phasing to snap back early.
+	if phase_active > 0:
+		phase_active = 0.0
+		Juice.trail_phasing = false
+		SFX.play("phase_out", 1.0, -3.0)
+		return
+	if phase_cd > 0:
 		return
 	if GameState.soul_shards < PHASE_COST:
 		SFX.play("deny")
@@ -369,7 +375,7 @@ func _draw() -> void:
 	for i in min(3, GameState.arsenal.size() - page_start):
 		var w: Weapon = GameState.arsenal[page_start + i]
 		var wp := WEAPON_RACK_POS + Vector2(-8 + i * 8, -12)
-		draw_texture(Sprites.get_weapon_sprite(w.type, w.state), wp)
+		draw_texture(Sprites.get_weapon_sprite_wear(w.type, w.wear_state, w.is_haunted()), wp)
 	GameFont.draw_string_centered(self, WEAPON_RACK_POS + Vector2(0, 22), "RACK", 8, Palette.TEXT)
 	# Bell
 	draw_texture(Sprites.get_sprite("bell"), BELL_POS - Vector2(8, 8))
@@ -401,10 +407,10 @@ func _draw() -> void:
 		var adv: Dictionary = a.adv
 		if adv.get("equipped_weapon") != null:
 			var w: Weapon = adv.equipped_weapon
-			draw_texture(Sprites.get_weapon_sprite(w.type, w.state), a.pos + Vector2(8, -4))
+			draw_texture(Sprites.get_weapon_sprite_wear(w.type, w.wear_state, w.is_haunted()), a.pos + Vector2(8, -4))
 		if adv.get("equipped_armor") != null:
 			var ar: Weapon = adv.equipped_armor
-			draw_texture(Sprites.get_weapon_sprite(ar.type, ar.state), a.pos + Vector2(-12, -4))
+			draw_texture(Sprites.get_weapon_sprite_wear(ar.type, ar.wear_state, ar.is_haunted()), a.pos + Vector2(-12, -4))
 	# Ghost (with squash/stretch)
 	var bob := sin(ghost.bob) * 1.5
 	var gp: Vector2 = ghost.pos + Vector2(0, bob)
@@ -426,7 +432,7 @@ func _draw() -> void:
 		draw_arc(Vector2(int(gp.x), int(gp.y)), 12.0, -PI / 2, -PI / 2 + TAU * cd_pct, 16, Palette.TEXT_DIM, 1.5)
 	# Carried weapon
 	if ghost.carrying != null:
-		var item_tex := Sprites.get_weapon_sprite(ghost.carrying.type, ghost.carrying.state)
+		var item_tex := Sprites.get_weapon_sprite_wear(ghost.carrying.type, ghost.carrying.wear_state, ghost.carrying.is_haunted())
 		draw_texture(item_tex, gp + Vector2(-8, -18))
 	# Particles
 	Juice.draw_particles(self)

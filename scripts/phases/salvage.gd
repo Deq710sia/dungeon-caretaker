@@ -359,7 +359,17 @@ func _try_activate_phase() -> void:
         # While active: 2x speed (handled in _physics_process), semi-transparent
         # (handled in _draw), bypasses fire/spikes (handled in
         # _find_nearest_interactive). Pits are NOT bypassed — you still fall.
-        if phase_active > 0 or phase_cd > 0:
+        #
+        # Toggle: if already phasing, press SPACE again to snap back early.
+        # The cooldown still applies from the moment you started, so early-exit
+        # doesn't refund the shard or reset the cd — it just cuts the duration
+        # short. This gives the player agency over the verb's timing.
+        if phase_active > 0:
+                phase_active = 0.0
+                Juice.trail_phasing = false
+                SFX.play("phase_out", 1.0, -3.0)
+                return
+        if phase_cd > 0:
                 return
         if GameState.soul_shards < PHASE_COST:
                 SFX.play("deny")

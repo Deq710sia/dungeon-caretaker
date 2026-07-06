@@ -85,7 +85,7 @@ func _draw() -> void:
                         draw_circle(sp, 2, Color(1.0, 0.85, 0.30, 0.8))
         # Weapon (rotating on the wheel — the centerpiece!)
         if gear != null:
-                var weapon_tex := Sprites.get_weapon_sprite(gear.type, gear.state)
+                var weapon_tex := Sprites.get_weapon_sprite_wear(gear.type, gear.wear_state, gear.is_haunted())
                 # Draw weapon rotated, positioned on top of the wheel
                 var wpos := wheel_center + Vector2(0, -wheel_r - 10)
                 var tex_size := 64
