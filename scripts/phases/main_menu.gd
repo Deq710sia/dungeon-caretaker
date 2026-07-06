@@ -47,7 +47,7 @@ func _ready() -> void:
 	# Hint
 	var hint := Label.new()
 	hint.text = "WASD: move | E: interact | ESC: menu"
-	hint.add_theme_font_size_override("font_size", 6)
+	hint.add_theme_font_size_override("font_size", 8)
 	hint.add_theme_color_override("font_color", Palette.TEXT_DIM)
 	hint.position = Vector2(10, 168)
 	hint.size = Vector2(300, 7)
@@ -56,7 +56,7 @@ func _ready() -> void:
 
 func _on_start() -> void:
 	GameState.start_new_run()
-	GameState.set_phase("planning")
+	GameState.set_phase("gate")
 
 func _on_quit() -> void:
 	get_tree().quit()

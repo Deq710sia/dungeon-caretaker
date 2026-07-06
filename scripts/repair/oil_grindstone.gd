@@ -27,7 +27,7 @@ func _ready() -> void:
 		gear = p.ghost.carrying
 	var lbl := Label.new()
 	lbl.text = "OIL & GRINDSTONE — Hold mouse to pour. Keep meter GREEN!"
-	lbl.add_theme_font_size_override("font_size", 7)
+	lbl.add_theme_font_size_override("font_size", 8)
 	lbl.add_theme_color_override("font_color", Color(0.95, 0.85, 0.40))
 	lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0))
 	lbl.add_theme_constant_override("outline_size", 2)

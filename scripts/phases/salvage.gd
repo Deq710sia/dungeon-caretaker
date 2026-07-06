@@ -117,10 +117,17 @@ func _gen_weapon_name(type: String) -> String:
         return "%s %s" % [prefixes[randi() % prefixes.size()], bases.get(type, "Item")]
 
 func _build_hud() -> void:
+        # Same fix as battle.gd: this room has a moving Camera2D, so anything not
+        # in a CanvasLayer gets dragged along with it. Without this, the stage/
+        # wave label (and the collected count) would drift and eventually scroll
+        # out of view as the ghost explores — looking exactly like a label that
+        # "never updates" even though its text is correct underneath.
+        var hud_layer := CanvasLayer.new()
+        add_child(hud_layer)
         var panel := Panel.new()
         panel.position = Vector2(0, 0)
         panel.size = Vector2(VIEW_W, 14)
-        add_child(panel)
+        hud_layer.add_child(panel)
         hud_stage = Label.new()
         hud_stage.text = "S%d W%d SALVAGE" % [GameState.stage, GameState.wave]
         hud_stage.add_theme_font_size_override("font_size", 8)
@@ -138,12 +145,12 @@ func _build_hud() -> void:
         panel.add_child(hud_collected)
         hud_hint = Label.new()
         hud_hint.text = "WASD: move | E: interact"
-        hud_hint.add_theme_font_size_override("font_size", 6)
+        hud_hint.add_theme_font_size_override("font_size", 8)
         hud_hint.add_theme_color_override("font_color", Palette.TEXT_DIM)
         hud_hint.position = Vector2(0, VIEW_H - 8)
         hud_hint.size = Vector2(VIEW_W, 7)
         hud_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-        add_child(hud_hint)
+        hud_layer.add_child(hud_hint)
 
 func _physics_process(delta: float) -> void:
         if finished:

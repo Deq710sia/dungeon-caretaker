@@ -26,7 +26,7 @@ func _ready() -> void:
 	var instruction := "TRACE FORWARD!" if not is_cursed else "TRACE IN REVERSE!"
 	var lbl := Label.new()
 	lbl.text = "EXORCISE ALTAR — %s" % instruction
-	lbl.add_theme_font_size_override("font_size", 7)
+	lbl.add_theme_font_size_override("font_size", 8)
 	lbl.add_theme_color_override("font_color", Color(0.85, 0.55, 0.95) if is_cursed else Color(0.55, 0.75, 0.95))
 	lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0))
 	lbl.add_theme_constant_override("outline_size", 2)

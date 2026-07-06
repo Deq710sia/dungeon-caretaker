@@ -8,7 +8,7 @@ var continue_btn: Button
 func _ready() -> void:
 	var header := Label.new()
 	header.text = "UPGRADE SHOP"
-	header.add_theme_font_size_override("font_size", 10)
+	header.add_theme_font_size_override("font_size", 16)
 	header.add_theme_color_override("font_color", Palette.TEXT_GOLD)
 	header.add_theme_color_override("font_outline_color", Palette.VOID)
 	header.add_theme_constant_override("outline_size", 2)
@@ -58,13 +58,13 @@ func _refresh() -> void:
 		row.add_theme_constant_override("separation", 4)
 		var name_lbl := Label.new()
 		name_lbl.text = "%s L%d/%d" % [def.name, lvl, def.max]
-		name_lbl.add_theme_font_size_override("font_size", 7)
+		name_lbl.add_theme_font_size_override("font_size", 8)
 		name_lbl.add_theme_color_override("font_color", Palette.TEXT if not maxed else Palette.TEXT_GREEN)
 		name_lbl.custom_minimum_size = Vector2(100, 16)
 		row.add_child(name_lbl)
 		var desc_lbl := Label.new()
 		desc_lbl.text = def.desc
-		desc_lbl.add_theme_font_size_override("font_size", 6)
+		desc_lbl.add_theme_font_size_override("font_size", 8)
 		desc_lbl.add_theme_color_override("font_color", Palette.TEXT_DIM)
 		desc_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		desc_lbl.custom_minimum_size = Vector2(120, 16)
@@ -76,7 +76,7 @@ func _refresh() -> void:
 		else:
 			buy_btn.text = "%d" % cost
 			buy_btn.disabled = GameState.soul_shards < cost
-		buy_btn.add_theme_font_size_override("font_size", 7)
+		buy_btn.add_theme_font_size_override("font_size", 8)
 		buy_btn.custom_minimum_size = Vector2(40, 16)
 		buy_btn.pressed.connect(_on_buy.bind(key))
 		row.add_child(buy_btn)

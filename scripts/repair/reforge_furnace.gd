@@ -51,7 +51,7 @@ func _ready() -> void:
 	pour_target_x = randf_range(0.25, 0.75)
 	var lbl := Label.new()
 	lbl.text = "REFORGE FURNACE — 3 stages: Melt > Pour > Hammer"
-	lbl.add_theme_font_size_override("font_size", 7)
+	lbl.add_theme_font_size_override("font_size", 8)
 	lbl.add_theme_color_override("font_color", Color(0.95, 0.55, 0.30))
 	lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0))
 	lbl.add_theme_constant_override("outline_size", 2)

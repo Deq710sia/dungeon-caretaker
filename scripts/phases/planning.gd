@@ -83,7 +83,7 @@ func _build_hud() -> void:
 
         prompt_label = Label.new()
         prompt_label.text = ""
-        prompt_label.add_theme_font_size_override("font_size", 7)
+        prompt_label.add_theme_font_size_override("font_size", 8)
         prompt_label.add_theme_color_override("font_color", Palette.TEXT_GOLD)
         prompt_label.add_theme_color_override("font_outline_color", Palette.VOID)
         prompt_label.add_theme_constant_override("outline_size", 1)
@@ -276,7 +276,7 @@ func _ring_bell() -> void:
         Juice.hit_stop(0.1)
         Juice.spawn_particles(BELL_POS, 12, Palette.TEXT_GOLD, 40.0, 0.6)
         await get_tree().create_timer(0.3).timeout
-        GameState.set_phase("salvage")
+        GameState.set_phase("battle")
 
 func _draw() -> void:
         # Floor

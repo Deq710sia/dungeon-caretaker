@@ -3,7 +3,6 @@ extends Node2D
 ## plus a chronicle line so the run_log actually gets read by someone.
 
 var continue_btn: Button
-var upgrade_btn: Button
 var detail_overlay: Panel = null
 
 func _ready() -> void:
@@ -14,7 +13,7 @@ func _ready() -> void:
         var shards: int = res.get("shards_earned", 0)
         var header := Label.new()
         header.text = "S%d W%d %s" % [GameState.stage, GameState.wave, "VICTORY!" if won else "DEFEAT..."]
-        header.add_theme_font_size_override("font_size", 12)
+        header.add_theme_font_size_override("font_size", 16)
         header.add_theme_color_override("font_color", Palette.TEXT_GREEN if won else Palette.TEXT_RED)
         header.add_theme_color_override("font_outline_color", Palette.VOID)
         header.add_theme_constant_override("outline_size", 2)
@@ -34,7 +33,7 @@ func _ready() -> void:
         # wave actually gets read by the player instead of sitting unused forever.
         var chronicle := Label.new()
         chronicle.text = _latest_log_line()
-        chronicle.add_theme_font_size_override("font_size", 7)
+        chronicle.add_theme_font_size_override("font_size", 8)
         chronicle.add_theme_color_override("font_color", Palette.TEXT_DIM)
         chronicle.position = Vector2(10, 42)
         chronicle.size = Vector2(300, 9)
@@ -44,7 +43,7 @@ func _ready() -> void:
         # Weapon dossiers (scrollable, clickable for full history)
         var dossier_title := Label.new()
         dossier_title.text = "WEAPON DOSSIERS — click for full history"
-        dossier_title.add_theme_font_size_override("font_size", 7)
+        dossier_title.add_theme_font_size_override("font_size", 8)
         dossier_title.add_theme_color_override("font_color", Palette.TEXT_GOLD)
         dossier_title.position = Vector2(0, 54)
         dossier_title.size = Vector2(320, 9)
@@ -61,19 +60,12 @@ func _ready() -> void:
         for w in GameState.arsenal:
                 var card := _make_dossier(w)
                 vbox.add_child(card)
-        upgrade_btn = Button.new()
-        upgrade_btn.text = "Upgrades"
-        upgrade_btn.add_theme_font_size_override("font_size", 8)
-        upgrade_btn.position = Vector2(30, 158)
-        upgrade_btn.size = Vector2(120, 16)
-        upgrade_btn.pressed.connect(_on_upgrade)
-        add_child(upgrade_btn)
         continue_btn = Button.new()
         # If the party wiped, make the button text reflect the end of the run
         var is_wipe := (survivors == 0)
         continue_btn.text = "End Run >" if is_wipe else "Continue >"
         continue_btn.add_theme_font_size_override("font_size", 8)
-        continue_btn.position = Vector2(170, 158)
+        continue_btn.position = Vector2(100, 158)
         continue_btn.size = Vector2(120, 16)
         continue_btn.pressed.connect(_on_continue)
         add_child(continue_btn)
@@ -89,7 +81,7 @@ func _make_dossier(w: Weapon) -> Button:
         var kills := " K:%d" % w.kill_log.size() if w.kill_log.size() > 0 else ""
         var star := "★ " if w.is_legendary else ""
         btn.text = "%s%s [%s]%s%s  D:%d/%d" % [star, w.display_name, w.wear_name(), broken, kills, w.durability, w.durability_max]
-        btn.add_theme_font_size_override("font_size", 7)
+        btn.add_theme_font_size_override("font_size", 8)
         var col := w.wear_color() if not w.is_broken else Palette.TEXT_RED
         btn.add_theme_color_override("font_color", col)
         btn.add_theme_color_override("font_color_hover", Palette.TEXT_GOLD)
@@ -108,7 +100,7 @@ func _show_detail(w: Weapon) -> void:
         add_child(detail_overlay)
         var text := Label.new()
         text.text = w.get_full_history()
-        text.add_theme_font_size_override("font_size", 7)
+        text.add_theme_font_size_override("font_size", 8)
         text.add_theme_color_override("font_color", Palette.TEXT)
         text.position = Vector2(8, 8)
         text.size = Vector2(264, 108)
@@ -116,14 +108,11 @@ func _show_detail(w: Weapon) -> void:
         detail_overlay.add_child(text)
         var close_btn := Button.new()
         close_btn.text = "Close"
-        close_btn.add_theme_font_size_override("font_size", 7)
+        close_btn.add_theme_font_size_override("font_size", 8)
         close_btn.position = Vector2(100, 120)
         close_btn.size = Vector2(80, 14)
         close_btn.pressed.connect(func(): detail_overlay.queue_free(); detail_overlay = null)
         detail_overlay.add_child(close_btn)
-
-func _on_upgrade() -> void:
-        GameState.set_phase("upgrade")
 
 func _on_continue() -> void:
         # Check the loss condition BEFORE advancing — a full party wipe ends the
@@ -136,4 +125,8 @@ func _on_continue() -> void:
         if status == "win":
                 GameState.set_phase("win_lose")
         else:
-                GameState.set_phase("planning")
+                # aftermath -> salvage -> workshop -> upgrade -> planning -> battle.
+                # Gear gets collected and repaired before the player ever assigns
+                # it, instead of the old order where planning happened first and
+                # this wave's salvage/repairs only became usable next wave.
+                GameState.set_phase("aftermath")

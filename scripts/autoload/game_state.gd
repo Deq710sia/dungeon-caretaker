@@ -1,7 +1,9 @@
 extends Node
-## GameState V5 — weapon-centric model with persistent party + recruit system.
+## GameState V6 — weapon-centric model with persistent party + recruit system.
 ## The weapon is the persistent, named, degrading object the player invests in.
-## Structure: 5 stages, each with a planning -> salvage -> workshop -> battle -> results loop.
+## Structure: 5 stages, each wave running a battle -> results -> aftermath ->
+## salvage -> workshop -> upgrade -> planning loop (gear is collected and
+## repaired BEFORE it's assigned and taken into the next battle).
 ##
 ## V5 changes:
 ## - Party persists across waves (no more party.clear() in next_wave()).
@@ -243,11 +245,15 @@ func is_run_over() -> String:
 	return ""
 
 # === ENEMY DIFFICULTY ===
+# Tuned so Stage 1 is a real fight against starter gear, not a formality —
+# the whole loop is built around losing crew and gradually improving weapons
+# across several attempts, so the first breakthrough should take a few
+# failed (or retreated-from) waves, not one clean run.
 func get_enemy_hp() -> int:
-	return 25 + stage * 8 + wave * 3
+	return 34 + stage * 10 + wave * 4
 
 func get_enemy_atk() -> int:
-	return 8 + stage * 2 + wave
+	return 11 + stage * 3 + wave * 2
 
 func get_enemy_count() -> int:
-	return 2 + stage + int(wave / 2)
+	return 3 + stage + int(wave / 2)

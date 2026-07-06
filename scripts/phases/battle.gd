@@ -13,12 +13,15 @@ var camera_y: float = 0.0
 var cam: Camera2D
 var battle_over: bool = false
 var battle_won: bool = false
+var retreated: bool = false
+var starting_party_count: int = 0
 var elapsed: float = 0.0
 var ghost_ability_cd: float = 0.0
 var ghost_ability_active: float = 0.0
 var damage_numbers: Array = []
 var continue_btn: Button
 var log_label: Label
+var hud_layer: CanvasLayer
 
 const GHOST_ABILITY_CD: float = 20.0
 const GHOST_ABILITY_DURATION: float = 4.0
@@ -27,8 +30,14 @@ func _ready() -> void:
         cam = Camera2D.new()
         cam.position = Vector2(CORRIDOR_W * TILE / 2, 0)
         cam.enabled = true
-        cam.position_smoothing_enabled = true
-        cam.position_smoothing_speed = 5.0
+        # IMPORTANT: Camera2D's own smoothing is OFF on purpose. We already do our
+        # own exponential smoothing on camera_y below and int-snap the result before
+        # handing it to the camera. If Camera2D smoothing were also enabled, it would
+        # add a SECOND, independently-timed interpolation on top of ours (and on top
+        # of the engine's global pixel snapping), which is what caused sprites/HUD
+        # text to visibly jitter/disconnect from the background — the two smoothing
+        # passes drift out of phase with each other across frames.
+        cam.position_smoothing_enabled = false
         add_child(cam)
         _spawn_party_units()
         _spawn_enemies()
@@ -36,6 +45,7 @@ func _ready() -> void:
 
 func _spawn_party_units() -> void:
         party_units.clear()
+        retreated = false
         for i in GameState.party.size():
                 var adv: Dictionary = GameState.party[i]
                 if not adv.get("alive", true):
@@ -66,6 +76,7 @@ func _spawn_party_units() -> void:
                         "walk_anim": 0.0,
                         "flash": 0.0,
                 })
+        starting_party_count = party_units.size()
 
 func _spawn_enemies() -> void:
         enemies.clear()
@@ -85,18 +96,36 @@ func _spawn_enemies() -> void:
                         "atk": GameState.get_enemy_atk(),
                         "def": 4,
                         "sprite": sprite_name,
-                        "atk_cd": 2.0,
+                        # Randomized so enemy attacks don't land in lockstep. With every
+                        # enemy starting on the exact same cooldown, several of them would
+                        # reach melee range around the same time and then land killing
+                        # blows on multiple party members in the same instant — which is
+                        # what made a single bad moment look like the whole party dying
+                        # from "one hit."
+                        "atk_cd": 2.0 + randf() * 1.5,
                         "alive": true,
                         "walk_anim": randf() * TAU,
                 })
 
 func _build_hud() -> void:
+        # Everything here goes into a CanvasLayer. Without one, these Control nodes
+        # are just regular children of this Node2D, so the Camera2D transform drags
+        # them along with the world exactly like the floor and sprites — meaning as
+        # soon as the camera scrolls away from its starting position (which happens
+        # in every real battle as the party chases enemies down the corridor), the
+        # status bar, log text, and — critically — the Continue button scroll off
+        # screen with it. That's what made the end-of-battle screen look "frozen":
+        # the button was still there and still worked, just no longer visible or
+        # reachable. A CanvasLayer renders independent of the camera, so this HUD
+        # now stays fixed to the screen no matter where the battle has scrolled to.
+        hud_layer = CanvasLayer.new()
+        add_child(hud_layer)
         var panel := Panel.new()
         panel.position = Vector2(0, 0)
         panel.size = Vector2(VIEW_W, 14)
-        add_child(panel)
+        hud_layer.add_child(panel)
         var lbl := Label.new()
-        lbl.text = "S%d W%d BATTLE [1]Haunt" % [GameState.stage, GameState.wave]
+        lbl.text = "S%d W%d BATTLE" % [GameState.stage, GameState.wave]
         lbl.add_theme_font_size_override("font_size", 8)
         lbl.add_theme_color_override("font_color", Palette.TEXT_GOLD)
         lbl.position = Vector2(2, 2)
@@ -109,16 +138,24 @@ func _build_hud() -> void:
         continue_btn.size = Vector2(80, 16)
         continue_btn.visible = false
         continue_btn.pressed.connect(_on_continue)
-        add_child(continue_btn)
+        hud_layer.add_child(continue_btn)
         log_label = Label.new()
         log_label.text = "The party descends..."
-        log_label.add_theme_font_size_override("font_size", 7)
+        log_label.add_theme_font_size_override("font_size", 8)
         log_label.add_theme_color_override("font_color", Palette.TEXT)
         log_label.position = Vector2(2, VIEW_H - 10)
         log_label.size = Vector2(VIEW_W, 8)
-        add_child(log_label)
+        hud_layer.add_child(log_label)
 
-func _physics_process(delta: float) -> void:
+func _process(delta: float) -> void:
+        # NOTE: this used to be _physics_process. Everything here is hand-rolled
+        # simulation drawn manually via _draw() — there are no RigidBody/CharacterBody
+        # physics queries involved. Running it on the fixed physics tick while the
+        # Camera2D and Juice's hit-stop timer (see juice.gd) update on the render/idle
+        # tick meant the two clocks drifted apart whenever the display refresh rate
+        # didn't match the physics FPS, which is what produced the jitter/desync
+        # between sprites, HUD text, and the background. Running everything on the
+        # same (render) clock keeps it all perfectly in lockstep.
         if battle_over:
                 return
         if Juice.is_hit_stopped():
@@ -174,7 +211,7 @@ func _physics_process(delta: float) -> void:
                                 if ghost_ability_active > 0:
                                         e.atk_cd -= delta * 0.5
                                 if e.atk_cd <= 0:
-                                        e.atk_cd = 2.5
+                                        e.atk_cd = 2.5 + randf() * 0.6
                                         _attack_party(e, nearest)
         var front_y: float = CORRIDOR_H * TILE
         for u in party_units:
@@ -185,10 +222,11 @@ func _physics_process(delta: float) -> void:
         cam.position = Vector2(CORRIDOR_W * TILE / 2, int(camera_y))
         cam.offset = Vector2(0, 30) + Juice.get_shake_offset()
         var party_alive := false
+        var alive_count := 0
         for u in party_units:
                 if u.alive:
                         party_alive = true
-                        break
+                        alive_count += 1
         var enemies_alive := false
         for e in enemies:
                 if e.alive:
@@ -202,6 +240,28 @@ func _physics_process(delta: float) -> void:
                 battle_over = true
                 battle_won = false
                 _end_battle()
+        elif alive_count == 1 and starting_party_count > 1:
+                # Last-standing-survivor retreat: previously, a wave was only ever
+                # "lost" once literally every party member had died — meaning any
+                # failed wave always wiped the entire active roster and ended the
+                # run. That made a single death near the end of a fight feel like it
+                # had killed the whole party, and made it impossible to test wave
+                # progression across a failed run. Now, once only one fighter is
+                # left standing (out of a party that started with more than one)
+                # and they're badly hurt, they pull back instead of being forced to
+                # fight to the death — the wave is lost, but that survivor lives on
+                # into the next planning phase.
+                for u in party_units:
+                        if u.alive:
+                                var hp_pct: float = float(u.hp) / float(u.hp_max)
+                                if hp_pct <= 0.3:
+                                        battle_over = true
+                                        battle_won = false
+                                        retreated = true
+                                        log_label.text = "%s retreats — wounded, but alive!" % u.adv.name
+                                break
+                if battle_over:
+                        _end_battle()
         for d in damage_numbers:
                 d.life -= delta
                 d.pos.y -= 15 * delta
@@ -267,6 +327,10 @@ func _end_battle() -> void:
         for adv in GameState.party:
                 if adv.get("alive", false):
                         survivors += 1
+        var fallen_names: Array = []
+        for u in party_units:
+                if not u.alive:
+                        fallen_names.append(str(u.adv.name))
         GameState.last_battle_result = {
                 "won": battle_won,
                 "survivors": survivors,
@@ -274,6 +338,8 @@ func _end_battle() -> void:
                 "shards_earned": 0,
                 "stage": GameState.stage,
                 "wave": GameState.wave,
+                "fallen_names": fallen_names,
+                "retreated": retreated,
         }
         var shards := 0
         if battle_won:
@@ -285,6 +351,8 @@ func _end_battle() -> void:
                 shards += (GameState.party.size() - survivors) * 8
                 if survivors == 0:
                         GameState.run_log.append("Stage %d Wave %d — PARTY WIPED. The dungeon claims them all." % [GameState.stage, GameState.wave])
+                elif retreated:
+                        GameState.run_log.append("Stage %d Wave %d — Forced to retreat, %d survivor(s)." % [GameState.stage, GameState.wave, survivors])
                 else:
                         GameState.run_log.append("Stage %d Wave %d — Party wiped." % [GameState.stage, GameState.wave])
         GameState.last_battle_result.shards_earned = shards
@@ -292,6 +360,8 @@ func _end_battle() -> void:
         continue_btn.visible = true
         if survivors == 0:
                 log_label.text = "PARTY WIPED — the run is over."
+        elif retreated:
+                log_label.text = "Retreated with %d survivor(s). +%d shards." % [survivors, shards]
         else:
                 log_label.text = "Battle %s! +%d shards." % ["WON" if battle_won else "LOST", shards]
 

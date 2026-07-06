@@ -26,7 +26,7 @@ func _ready() -> void:
 	add_child(sub)
 	var stats := Label.new()
 	stats.text = "Survivors: %d    Shards: %d    Arsenal: %d weapons" % [survivors, GameState.soul_shards, GameState.arsenal.size()]
-	stats.add_theme_font_size_override("font_size", 7)
+	stats.add_theme_font_size_override("font_size", 8)
 	stats.add_theme_color_override("font_color", Palette.TEXT)
 	stats.position = Vector2(0, 46)
 	stats.size = Vector2(320, 10)
@@ -35,7 +35,7 @@ func _ready() -> void:
 	# The chronicle — the run's full run_log, finally shown to someone.
 	var chronicle_title := Label.new()
 	chronicle_title.text = "THE CHRONICLE" if is_win else "HOW IT ENDED"
-	chronicle_title.add_theme_font_size_override("font_size", 7)
+	chronicle_title.add_theme_font_size_override("font_size", 8)
 	chronicle_title.add_theme_color_override("font_color", Palette.TEXT_GOLD)
 	chronicle_title.position = Vector2(0, 58)
 	chronicle_title.size = Vector2(320, 9)
@@ -47,7 +47,7 @@ func _ready() -> void:
 	add_child(scroll)
 	var log_label := Label.new()
 	log_label.text = "\n".join(GameState.run_log)
-	log_label.add_theme_font_size_override("font_size", 7)
+	log_label.add_theme_font_size_override("font_size", 8)
 	log_label.add_theme_color_override("font_color", Palette.TEXT_DIM)
 	log_label.custom_minimum_size = Vector2(270, 8 * max(1, GameState.run_log.size()))
 	scroll.add_child(log_label)
@@ -67,7 +67,7 @@ func _ready() -> void:
 	add_child(menu_btn)
 	var hint := Label.new()
 	hint.text = "Meta-upgrades carry over."
-	hint.add_theme_font_size_override("font_size", 6)
+	hint.add_theme_font_size_override("font_size", 8)
 	hint.add_theme_color_override("font_color", Palette.TEXT_DIM)
 	hint.position = Vector2(0, 152)
 	hint.size = Vector2(320, 7)
@@ -76,7 +76,7 @@ func _ready() -> void:
 
 func _on_restart() -> void:
 	GameState.start_new_run()
-	GameState.set_phase("planning")
+	GameState.set_phase("gate")
 
 func _on_menu() -> void:
 	GameState.set_phase("menu")

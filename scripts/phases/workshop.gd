@@ -1,6 +1,7 @@
 extends Node2D
 ## Phase: workshop V4 — 320x180, palette-disciplined, juice.
-## Walk between stations. Repair minigames show weapon large. Ring bell to battle.
+## Walk between stations. Repair minigames show weapon large. Ring bell to
+## move on to the upgrade shop, then planning to assign the gear you just fixed.
 
 const ROOM_W: int = 320
 const ROOM_H: int = 180
@@ -90,14 +91,14 @@ func _build_hud() -> void:
         panel.add_child(hud_shards)
         hud_carrying = Label.new()
         hud_carrying.text = "Carry: -"
-        hud_carrying.add_theme_font_size_override("font_size", 7)
+        hud_carrying.add_theme_font_size_override("font_size", 8)
         hud_carrying.add_theme_color_override("font_color", Palette.TEXT_DIM)
         hud_carrying.position = Vector2(240, 2)
         hud_carrying.size = Vector2(76, 10)
         panel.add_child(hud_carrying)
         prompt_label = Label.new()
         prompt_label.text = ""
-        prompt_label.add_theme_font_size_override("font_size", 7)
+        prompt_label.add_theme_font_size_override("font_size", 8)
         prompt_label.add_theme_color_override("font_color", Palette.TEXT_GOLD)
         prompt_label.add_theme_color_override("font_outline_color", Palette.VOID)
         prompt_label.add_theme_constant_override("outline_size", 1)
@@ -107,7 +108,7 @@ func _build_hud() -> void:
         add_child(prompt_label)
         ring_bell_btn = Button.new()
         ring_bell_btn.text = "Ring Bell"
-        ring_bell_btn.add_theme_font_size_override("font_size", 7)
+        ring_bell_btn.add_theme_font_size_override("font_size", 8)
         ring_bell_btn.position = Vector2(250, 160)
         ring_bell_btn.size = Vector2(60, 14)
         ring_bell_btn.pressed.connect(_on_ring_bell)
@@ -294,7 +295,7 @@ func _bell_tolls() -> void:
                 GameState.add_weapon(ghost.carrying)
                 ghost.carrying = null
         await get_tree().create_timer(0.3).timeout
-        GameState.set_phase("battle")
+        GameState.set_phase("upgrade")
 
 func _draw() -> void:
         # Floor with subtle variation
