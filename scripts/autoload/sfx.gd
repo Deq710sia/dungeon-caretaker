@@ -76,6 +76,13 @@ func _prerender_all() -> void:
 	_streams["death"] = _render(_death)
 	_streams["repair"] = _render(_repair)
 	_streams["recruit"] = _render(_recruit)
+	# DESIGN_PLAN 1A: soft "whoosh" footfall tied to velocity. Short low blip,
+	# pitched low enough to read as a spectral footfall rather than a UI tick.
+	_streams["footstep"] = _render(_footstep)
+	# DESIGN_PLAN 1B: Phase verb SFX. Descending sweep on enter (ghost going
+	# incorporeal), soft rising chime on exit (snapping back to corporeal).
+	_streams["phase_in"] = _render(_phase_in)
+	_streams["phase_out"] = _render(_phase_out)
 
 func _blip() -> PackedFloat32Array:
 	var n := int(0.12 * SR); var e := _env(n, 0.005, 0.06); var o := PackedFloat32Array(); o.resize(n)
@@ -169,4 +176,38 @@ func _recruit() -> PackedFloat32Array:
 		var t := float(i)/SR
 		var f := 523.0 if i < n/2 else 784.0
 		o[i] = sin(TAU*f*t) * e[i] * 0.25
+	return o
+
+func _footstep() -> PackedFloat32Array:
+	# Soft low blip, ~80ms, low-passed sine + a touch of noise. Reads as a
+	# ghostly footfall rather than a UI tick. Pitch is jittered by the
+	# caller (SFX.play) so consecutive footsteps don't sound mechanical.
+	var n := int(0.08 * SR); var e := _env(n, 0.003, 0.04); var o := PackedFloat32Array(); o.resize(n)
+	var ph := 0.0
+	for i in n:
+		ph += (180.0 - 60.0 * float(i) / n) / SR
+		o[i] = (sin(ph) * 0.6 + randf_range(-1, 1) * 0.25) * e[i] * 0.18
+	return o
+
+func _phase_in() -> PackedFloat32Array:
+	# Descending sweep ~250ms, 880Hz -> 220Hz. Sine + filtered noise swell.
+	# Reads as the ghost thinning out / dropping into the spectral layer.
+	var n := int(0.25 * SR); var e := _env(n, 0.005, 0.18); var o := PackedFloat32Array(); o.resize(n)
+	var ph := 0.0
+	for i in n:
+		var t := float(i) / SR
+		var f := 880.0 - 660.0 * (float(i) / n)
+		ph += f / SR
+		o[i] = (sin(ph) * 0.4 + randf_range(-1, 1) * 0.25 * (1.0 - float(i) / n)) * e[i] * 0.32
+	return o
+
+func _phase_out() -> PackedFloat32Array:
+	# Soft rising chime ~200ms, 330Hz -> 660Hz. The snap-back from
+	# incorporeal — brighter and shorter than phase_in.
+	var n := int(0.20 * SR); var e := _env(n, 0.004, 0.14); var o := PackedFloat32Array(); o.resize(n)
+	var ph := 0.0
+	for i in n:
+		var f := 330.0 + 330.0 * (float(i) / n)
+		ph += f / SR
+		o[i] = (sin(ph) * 0.5 + 0.3 * sin(ph * 2.0)) * e[i] * 0.25
 	return o

@@ -11,8 +11,13 @@ const VIEW_H: int = 270
 var ghost_pos: Vector2 = Vector2(CORRIDOR_W * TILE / 2, 48)
 var ghost_vel: Vector2 = Vector2.ZERO
 var ghost_speed: float = 55.0
-var ghost_accel: float = 300.0
-var ghost_friction: float = 12.0
+# DESIGN_PLAN 1A: reduce acceleration, increase friction so the ghost stops
+# when you release keys. Was accel=300, friction=12 (with a weird
+# `friction*delta*speed/10` formula that gave ~66/s decel — much slower
+# than accel, which is why it felt slippery). Now both use the same rate,
+# matched to workshop/planning, so the ghost accelerates and stops at the
+# same snappy tempo. Floaty but precise — it's a ghost, not a tank.
+var ghost_accel: float = 220.0
 var ghost_bob: float = 0.0
 var ghost_squash: float = 1.0
 var ghost_facing: Vector2 = Vector2.DOWN  # for look-ahead
@@ -23,6 +28,19 @@ const INTERACT_RADIUS: float = 16.0  # matches workshop.gd's STATION_RADIUS
 var ghost_invuln: float = 0.0  # i-frames after taking damage
 var camera_y: float = 0.0
 var cam: Camera2D
+
+# DESIGN_PLAN 1B: Phase verb — the ghost's signature action. Goes
+# incorporeal for PHASE_DURATION seconds: 2x speed, semi-transparent,
+# bypasses fire/spikes (but NOT pits — you still fall). PHASE_CD cooldown
+# after each use. Each activation costs PHASE_COST soul shards.
+const PHASE_DURATION: float = 1.5
+const PHASE_CD: float = 4.0
+const PHASE_COST: int = 1
+var phase_active: float = 0.0  # counts down from PHASE_DURATION
+var phase_cd: float = 0.0      # counts down from PHASE_CD
+# DESIGN_PLAN 1A: footstep whoosh tied to velocity. Interval scales with
+# speed — faster ghost = faster footsteps, but capped to avoid noise spam.
+var _footstep_timer: float = 0.0
 
 var corpses: Array = []
 var hazards: Array = []
@@ -40,6 +58,7 @@ var hud_stage: Label
 var hud_collected: Label
 var hud_hint: Label
 var hud_hp: Label  # V6: ghost health display
+var hud_phase: Label  # DESIGN_PLAN 1B: phase verb status indicator
 
 const CORPSE_NAMES := [
         "Bram the Bold", "Wren the Swift", "Cael the Steady", "Mira the Wise",
@@ -232,22 +251,47 @@ func _build_hud() -> void:
         hud_hp.size = Vector2(120, 12)
         panel.add_child(hud_hp)
         hud_hint = Label.new()
-        hud_hint.text = "WASD: move | E: interact"
+        hud_hint.text = "WASD:move E:interact SPACE:phase"
         hud_hint.add_theme_font_size_override("font_size", 8)
         hud_hint.add_theme_color_override("font_color", Palette.TEXT_DIM)
         hud_hint.position = Vector2(0, VIEW_H - 12)
         hud_hint.size = Vector2(VIEW_W, 10)
         hud_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
         hud_layer.add_child(hud_hint)
+        # DESIGN_PLAN 1B: Phase verb status indicator. Bottom-left, just above
+        # the hint bar. Shows ready/cooldown/no-shards/phasing state so the
+        # player can read phase availability at a glance.
+        hud_phase = Label.new()
+        hud_phase.text = "[SPACE] PHASE ready"
+        hud_phase.add_theme_font_size_override("font_size", 8)
+        hud_phase.add_theme_color_override("font_color", Palette.TEXT_GREEN)
+        hud_phase.position = Vector2(2, VIEW_H - 24)
+        hud_phase.size = Vector2(160, 10)
+        hud_layer.add_child(hud_phase)
 
 func _physics_process(delta: float) -> void:
         if finished:
                 return
         if Juice.is_hit_stopped():
                 return
-        ghost_bob += delta * 6.0
+        # DESIGN_PLAN 1B: Phase verb timers. Active counts down duration, cd
+        # counts down cooldown. When phase ends, swap trail tint back.
+        phase_cd = max(0, phase_cd - delta)
+        if phase_active > 0:
+                phase_active = max(0, phase_active - delta)
+                if phase_active == 0:
+                        Juice.trail_phasing = false
+                        SFX.play("phase_out", 1.0, -3.0)
+        # DESIGN_PLAN 1A: velocity-driven camera bob. Was fixed `delta * 6.0`
+        # (always bobbing at the same rate regardless of motion). Now bobs at
+        # 3Hz idle (slow spectral hover) up to ~9Hz at top speed.
+        var speed_pct: float = ghost_vel.length() / ghost_speed
+        ghost_bob += delta * (3.0 + speed_pct * 6.0)
         ghost_squash = lerp(ghost_squash, 1.0, 1.0 - exp(-delta * 8.0))
-        # Movement with acceleration + friction (momentum-based, not instant)
+        # Movement with acceleration + friction (matched rate, so the ghost
+        # accelerates and stops at the same tempo — floaty but precise).
+        # Phase verb doubles target speed while active.
+        var target_speed: float = ghost_speed * (2.0 if phase_active > 0 else 1.0)
         var input_dir := Vector2.ZERO
         if active_qte.is_empty():
                 if Input.is_action_pressed("move_left"):  input_dir.x -= 1
@@ -257,12 +301,22 @@ func _physics_process(delta: float) -> void:
         if input_dir != Vector2.ZERO:
                 input_dir = input_dir.normalized()
                 ghost_facing = input_dir
-                ghost_vel = ghost_vel.move_toward(input_dir * ghost_speed, ghost_accel * delta)
+                ghost_vel = ghost_vel.move_toward(input_dir * target_speed, ghost_accel * delta)
         else:
-                ghost_vel = ghost_vel.move_toward(Vector2.ZERO, ghost_friction * delta * ghost_speed / 10.0)
+                ghost_vel = ghost_vel.move_toward(Vector2.ZERO, ghost_accel * delta)
         ghost_pos += ghost_vel * delta
         ghost_pos.x = clampf(ghost_pos.x, TILE, (CORRIDOR_W - 1) * TILE)
         ghost_pos.y = clampf(ghost_pos.y, 22, (CORRIDOR_H - 1) * TILE)
+        # DESIGN_PLAN 1A: footstep whoosh tied to velocity. Faster ghost =
+        # faster footsteps, but bounded so it doesn't devolve into noise.
+        _footstep_timer += delta
+        if speed_pct > 0.25 and _footstep_timer > 0.30 / maxf(0.4, speed_pct):
+                _footstep_timer = 0.0
+                SFX.play("footstep", 0.85 + randf() * 0.25, -8.0, 0.04)
+        # DESIGN_PLAN 1A: ghost trail. Sample every frame; Juice throttles to
+        # its own TRAIL_INTERVAL. Phasing ghosts sample denser + bluer (set
+        # via Juice.trail_phasing on phase start).
+        Juice.trail_sample(ghost_pos)
         # Camera: smooth follow with look-ahead in movement direction
         # Look-ahead offset based on velocity (not just fixed +40)
         var look_ahead := ghost_facing * 24.0
@@ -279,6 +333,11 @@ func _physics_process(delta: float) -> void:
                 _handle_interact()
         if not Input.is_action_pressed("interact"):
                 interact_pressed = false
+        # DESIGN_PLAN 1B: Phase verb activation. Space is now its own input
+        # action (project.godot), separate from interact (E only). Can only
+        # fire when no QTE is active — during a QTE, Space is the timing tap.
+        if active_qte.is_empty() and Input.is_action_just_pressed("phase"):
+                _try_activate_phase()
         # V2: Hazards do NOT damage on touch — only on QTE failure.
         for h in hazards:
                 h.cooldown = max(0, h.cooldown - delta)
@@ -289,9 +348,44 @@ func _physics_process(delta: float) -> void:
         # QTE
         if not active_qte.is_empty():
                 _update_qte(delta)
+        # Update phase HUD indicator
+        _update_phase_hud()
         # Particles
         Juice.update_particles(delta)
         queue_redraw()
+
+func _try_activate_phase() -> void:
+        # DESIGN_PLAN 1B: Phase verb. Costs 1 shard, 4s cooldown, 1.5s duration.
+        # While active: 2x speed (handled in _physics_process), semi-transparent
+        # (handled in _draw), bypasses fire/spikes (handled in
+        # _find_nearest_interactive). Pits are NOT bypassed — you still fall.
+        if phase_active > 0 or phase_cd > 0:
+                return
+        if GameState.soul_shards < PHASE_COST:
+                SFX.play("deny")
+                return
+        GameState.soul_shards -= PHASE_COST
+        GameState.shards_changed.emit(GameState.soul_shards)
+        phase_active = PHASE_DURATION
+        phase_cd = PHASE_CD
+        Juice.trail_phasing = true
+        Juice.add_trauma(0.15)
+        Juice.spawn_particles(ghost_pos, 8, Palette.GLOW_BLUE, 35.0, 0.5)
+        SFX.play("phase_in", 1.0, -2.0)
+
+func _update_phase_hud() -> void:
+        if phase_active > 0:
+                hud_phase.text = "PHASING! %.1fs" % phase_active
+                hud_phase.add_theme_color_override("font_color", Palette.GLOW_BLUE)
+        elif phase_cd > 0:
+                hud_phase.text = "[SPACE] phase cd %.1fs" % phase_cd
+                hud_phase.add_theme_color_override("font_color", Palette.TEXT_DIM)
+        elif GameState.soul_shards < PHASE_COST:
+                hud_phase.text = "[SPACE] phase — need %d shard" % PHASE_COST
+                hud_phase.add_theme_color_override("font_color", Palette.TEXT_RED)
+        else:
+                hud_phase.text = "[SPACE] PHASE ready"
+                hud_phase.add_theme_color_override("font_color", Palette.TEXT_GREEN)
 
 func _find_nearest_interactive() -> void:
         near_interactive = null
@@ -303,7 +397,14 @@ func _find_nearest_interactive() -> void:
                         best_dist = ghost_pos.distance_to(c.pos)
                         near_interactive = c
         for h in hazards:
-                if h.active and ghost_pos.distance_to(h.pos) < best_dist:
+                if not h.active:
+                        continue
+                # DESIGN_PLAN 1B: Phase verb bypasses fire and spikes — while
+                # phasing, the ghost walks straight through them (no QTE prompt,
+                # no trigger). Pits are NOT bypassed — you still fall.
+                if phase_active > 0 and h.type in ["fire", "spikes"]:
+                        continue
+                if ghost_pos.distance_to(h.pos) < best_dist:
                         best_dist = ghost_pos.distance_to(h.pos)
                         near_interactive = h
         if near_interactive is Dictionary:
@@ -312,7 +413,7 @@ func _find_nearest_interactive() -> void:
                 elif near_interactive.has("type"):
                         hud_hint.text = "Hazard: %s — step away or [E] to disarm" % near_interactive.type.to_upper()
         else:
-                hud_hint.text = "WASD:move E:interact Find exit"
+                hud_hint.text = "WASD:move E:interact SPACE:phase Find exit"
 
 func _handle_interact() -> void:
         if near_interactive is Dictionary:
@@ -531,7 +632,25 @@ func _draw() -> void:
         var ghost_tex := Sprites.get_sprite("ghost")
         var sw := int(16.0 / maxf(0.1, ghost_squash))
         var sh := int(16 * ghost_squash)
-        draw_texture_rect(ghost_tex, Rect2(gx - sw / 2, gy - sh / 2 + bob, sw, sh), false)
+        # DESIGN_PLAN 1A: ghost trail. Drawn BEFORE the main ghost so the
+        # current sprite sits on top of its afterimages.
+        Juice.trail_draw(self, ghost_tex, 16)
+        # DESIGN_PLAN 1B: Phase verb. While phasing, the ghost is drawn
+        # semi-transparent ( incorporeal ) with a blue tint. Otherwise
+        # drawn opaque as before. draw_texture_rect's 4th arg is modulate.
+        var ghost_mod := Color(1, 1, 1, 1)
+        if phase_active > 0:
+                var phase_pct := phase_active / PHASE_DURATION
+                ghost_mod = Color(0.55, 0.75, 0.95, 0.5 + 0.15 * phase_pct)
+        draw_texture_rect(ghost_tex, Rect2(gx - sw / 2, gy - sh / 2 + bob, sw, sh), false, ghost_mod)
+        # DESIGN_PLAN 1B: Phase cooldown ring. Shrinks as cd counts down.
+        # Drawn just below the ghost — a thin arc that fills back up as the
+        # verb becomes available again. Only shown when on cooldown.
+        if phase_cd > 0 and phase_active == 0:
+                var cd_pct: float = 1.0 - (phase_cd / PHASE_CD)
+                var ring_r: float = 12.0
+                var ring_color: Color = Palette.TEXT_DIM
+                draw_arc(Vector2(gx, gy), ring_r, -PI / 2, -PI / 2 + TAU * cd_pct, 16, ring_color, 1.5)
         # QTE bar
         if not active_qte.is_empty():
                 _draw_qte_bar()

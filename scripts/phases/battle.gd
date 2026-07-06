@@ -16,15 +16,24 @@ var battle_won: bool = false
 var retreated: bool = false
 var starting_party_count: int = 0
 var elapsed: float = 0.0
-var ghost_ability_cd: float = 0.0
-var ghost_ability_active: float = 0.0
+# DESIGN_PLAN 1B: Phase verb (replaces the old '1'-key Haunt ability).
+# Same mechanical effect — slows all enemies while active — but now
+# unified with the salvage/workshop/planning verb: SPACE to activate,
+# 1.5s duration, 4s cooldown, 1 soul shard cost. The verb and the
+# character concept are the same fact: a ghost that goes incorporeal.
+var phase_cd: float = 0.0
+var phase_active: float = 0.0
 var damage_numbers: Array = []
 var continue_btn: Button
 var log_label: Label
 var hud_layer: CanvasLayer
 
-const GHOST_ABILITY_CD: float = 20.0
-const GHOST_ABILITY_DURATION: float = 4.0
+# DESIGN_PLAN 1B: Phase verb timings. Was 20s cd / 4s duration for the
+# old Haunt — too long for a 15-20s battle. Now 4s cd / 1.5s duration,
+# matched to salvage so the verb feels the same everywhere.
+const PHASE_CD: float = 4.0
+const PHASE_DURATION: float = 1.5
+const PHASE_COST: int = 1
 
 func _ready() -> void:
 	cam = Camera2D.new()
@@ -168,8 +177,11 @@ func _process(delta: float) -> void:
 	if Juice.is_hit_stopped():
 		return
 	elapsed += delta
-	ghost_ability_cd = max(0, ghost_ability_cd - delta)
-	ghost_ability_active = max(0, ghost_ability_active - delta)
+	phase_cd = max(0, phase_cd - delta)
+	if phase_active > 0:
+		phase_active = max(0, phase_active - delta)
+		if phase_active == 0:
+			SFX.play("phase_out", 1.0, -3.0)
 	for u in party_units:
 		if u.alive:
 			u.walk_anim += delta * 8
@@ -209,13 +221,13 @@ func _process(delta: float) -> void:
 		if not nearest.is_empty():
 			if nearest_dist > 16:
 				var spd := 15.0
-				if ghost_ability_active > 0:
+				if phase_active > 0:
 					spd = 6.0
 				var dir: Vector2 = (nearest.pos - e.pos).normalized()
 				e.pos += dir * spd * delta
 			else:
 				e.atk_cd -= delta
-				if ghost_ability_active > 0:
+				if phase_active > 0:
 					e.atk_cd -= delta * 0.5
 				if e.atk_cd <= 0:
 					e.atk_cd = 2.5 + randf() * 0.6
@@ -484,13 +496,16 @@ func _draw() -> void:
 	# Ghost ability HUD — snapped
 	var hud_pos := cam.get_screen_center_position() - Vector2(VIEW_W / 2, VIEW_H / 2)
 	hud_pos = Vector2(int(hud_pos.x), int(hud_pos.y))
-	var cd_pct: float = 1.0 - (ghost_ability_cd / GHOST_ABILITY_CD) if ghost_ability_cd > 0 else 1.0
-	var cd_c := Palette.TEXT_GREEN if ghost_ability_cd <= 0 else Palette.TEXT_DIM
+	var cd_pct: float = 1.0 - (phase_cd / PHASE_CD) if phase_cd > 0 else 1.0
+	var cd_c := Palette.TEXT_GREEN if phase_cd <= 0 else Palette.TEXT_DIM
 	draw_rect(Rect2(hud_pos + Vector2(4, 150), Vector2(40, 5)), Palette.DARK, true)
 	draw_rect(Rect2(hud_pos + Vector2(4, 150), Vector2(int(40 * cd_pct), 5)), cd_c, true)
-	GameFont.draw_string(self, hud_pos + Vector2(4, 148), "[1]Haunt", 8, cd_c)
-	if ghost_ability_active > 0:
-		GameFont.draw_string_centered(self, hud_pos + Vector2(VIEW_W / 2, 148), "HAUNTING!", 8, Palette.GLOW_BLUE)
+	# DESIGN_PLAN 1B: Phase verb — unified verb label, matches salvage.
+	# Was "[1]Haunt". Now shows shard cost so the player sees the price.
+	var phase_label := "[SPACE]PHASE -%ds" % PHASE_COST if phase_cd <= 0 else "[SPACE]phase %.1fs" % phase_cd
+	GameFont.draw_string(self, hud_pos + Vector2(4, 148), phase_label, 8, cd_c)
+	if phase_active > 0:
+		GameFont.draw_string_centered(self, hud_pos + Vector2(VIEW_W / 2, 148), "PHASING!", 8, Palette.GLOW_BLUE)
 
 func _draw_glow(pos: Vector2, radius: int, color: Color) -> void:
 	var center := Vector2(int(pos.x), int(pos.y))
@@ -502,11 +517,23 @@ func _draw_glow(pos: Vector2, radius: int, color: Color) -> void:
 func _input(event: InputEvent) -> void:
 	if battle_over:
 		return
-	if event is InputEventKey and event.pressed and event.keycode == KEY_1:
-		if ghost_ability_cd <= 0:
-			ghost_ability_cd = GHOST_ABILITY_CD
-			ghost_ability_active = GHOST_ABILITY_DURATION
-			log_label.text = "Ghost haunts — enemies slow!"
+	# DESIGN_PLAN 1B: Phase verb. SPACE activates (was '1' for Haunt).
+	# Costs 1 soul shard per use, 4s cooldown, 1.5s duration. Slows all
+	# enemies while active (handled in _process via phase_active).
+	if event is InputEventKey and event.pressed and event.keycode == KEY_SPACE:
+		if phase_cd <= 0 and phase_active <= 0:
+			if GameState.soul_shards < PHASE_COST:
+				SFX.play("deny")
+				log_label.text = "Not enough shards to phase (need %d)" % PHASE_COST
+				return
+			GameState.soul_shards -= PHASE_COST
+			GameState.shards_changed.emit(GameState.soul_shards)
+			phase_cd = PHASE_CD
+			phase_active = PHASE_DURATION
+			Juice.add_trauma(0.2)
+			Juice.spawn_particles(Vector2(VIEW_W / 2, VIEW_H / 2), 12, Palette.GLOW_BLUE, 40.0, 0.5)
+			SFX.play("phase_in", 1.0, -2.0)
+			log_label.text = "Ghost phases — enemies slow!"
 
 func _on_continue() -> void:
 	GameState.set_phase("results")

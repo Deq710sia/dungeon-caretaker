@@ -24,11 +24,20 @@ var ghost: Dictionary = {
         "pos": Vector2(240, 160),
         "vel": Vector2.ZERO,
         "speed": 55.0,
-        "accel": 300.0,
+        "accel": 220.0,  # DESIGN_PLAN 1A: was 300 — lowered for tighter feel
         "carrying": null,
         "bob": 0.0,
         "squash": 1.0,
 }
+# DESIGN_PLAN 1B: Phase verb. In workshop, phasing only grants 2x speed
+# (no hazards to bypass here). Same input, cost, cooldown, duration as
+# salvage so the verb feels unified across every walkable phase.
+const PHASE_DURATION: float = 1.5
+const PHASE_CD: float = 4.0
+const PHASE_COST: int = 1
+var phase_active: float = 0.0
+var phase_cd: float = 0.0
+var _footstep_timer: float = 0.0
 var bell_timer: float = 90.0  # placeholder only — _ready() sets the real value
 var bell_rang: bool = false
 var minigame_active: bool = false
@@ -148,9 +157,19 @@ func _process(delta: float) -> void:
                 bell_timer = 0
                 _bell_tolls()
                 return
-        ghost.bob += delta * 6
+        # DESIGN_PLAN 1B: Phase verb timers.
+        phase_cd = max(0, phase_cd - delta)
+        if phase_active > 0:
+                phase_active = max(0, phase_active - delta)
+                if phase_active == 0:
+                        Juice.trail_phasing = false
+                        SFX.play("phase_out", 1.0, -3.0)
+        # DESIGN_PLAN 1A: velocity-driven camera bob. Idle 3Hz, top speed ~9Hz.
+        var speed_pct: float = ghost.vel.length() / ghost.speed
+        ghost.bob += delta * (3.0 + speed_pct * 6.0)
         ghost.squash = lerp(ghost.squash, 1.0, 1.0 - exp(-delta * 8.0))
-        # Momentum-based movement
+        # Movement — phase verb doubles target speed while active.
+        var target_speed: float = ghost.speed * (2.0 if phase_active > 0 else 1.0)
         var input_dir := Vector2.ZERO
         if Input.is_action_pressed("move_left"):  input_dir.x -= 1
         if Input.is_action_pressed("move_right"): input_dir.x += 1
@@ -158,18 +177,28 @@ func _process(delta: float) -> void:
         if Input.is_action_pressed("move_down"):  input_dir.y += 1
         if input_dir != Vector2.ZERO:
                 input_dir = input_dir.normalized()
-                ghost.vel = ghost.vel.move_toward(input_dir * ghost.speed, ghost.accel * delta)
+                ghost.vel = ghost.vel.move_toward(input_dir * target_speed, ghost.accel * delta)
         else:
                 ghost.vel = ghost.vel.move_toward(Vector2.ZERO, ghost.accel * delta)
         ghost.pos += ghost.vel * delta
         ghost.pos.x = clampf(ghost.pos.x, 12, ROOM_W - 12)
         ghost.pos.y = clampf(ghost.pos.y, HUD_H + 30, ROOM_H - 40)
+        # DESIGN_PLAN 1A: footstep whoosh tied to velocity.
+        _footstep_timer += delta
+        if speed_pct > 0.25 and _footstep_timer > 0.30 / maxf(0.4, speed_pct):
+                _footstep_timer = 0.0
+                SFX.play("footstep", 0.85 + randf() * 0.25, -8.0, 0.04)
+        # DESIGN_PLAN 1A: ghost trail.
+        Juice.trail_sample(ghost.pos)
         _find_nearest_interactive()
         if Input.is_action_just_pressed("interact") and not interact_pressed:
                 interact_pressed = true
                 _handle_interact()
         if not Input.is_action_pressed("interact"):
                 interact_pressed = false
+        # DESIGN_PLAN 1B: Phase verb activation.
+        if Input.is_action_just_pressed("phase"):
+                _try_activate_phase()
         # V6: Press TAB to inspect carried weapon
         if Input.is_key_pressed(KEY_TAB) and ghost.carrying != null and not inspect_visible:
                 _show_weapon_inspect(ghost.carrying)
@@ -178,6 +207,24 @@ func _process(delta: float) -> void:
         Juice.update_particles(delta)
         _update_hud()
         queue_redraw()
+
+func _try_activate_phase() -> void:
+        # DESIGN_PLAN 1B: Phase verb — workshop QoL version. 2x movement only,
+        # no hazard bypass (workshop has no hazards). Same cost/cd/duration
+        # as salvage so the verb is unified.
+        if phase_active > 0 or phase_cd > 0:
+                return
+        if GameState.soul_shards < PHASE_COST:
+                SFX.play("deny")
+                return
+        GameState.soul_shards -= PHASE_COST
+        GameState.shards_changed.emit(GameState.soul_shards)
+        phase_active = PHASE_DURATION
+        phase_cd = PHASE_CD
+        Juice.trail_phasing = true
+        Juice.add_trauma(0.15)
+        Juice.spawn_particles(ghost.pos, 8, Palette.GLOW_BLUE, 35.0, 0.5)
+        SFX.play("phase_in", 1.0, -2.0)
 
 func _find_nearest_interactive() -> void:
         near_station_key = ""
@@ -392,7 +439,18 @@ func _draw() -> void:
         var ghost_tex := Sprites.get_sprite("ghost")
         var sw := int(16.0 / maxf(0.1, ghost.squash))
         var sh := int(16 * ghost.squash)
-        draw_texture_rect(ghost_tex, Rect2(int(gp.x) - sw / 2, int(gp.y) - sh / 2, sw, sh), false)
+        # DESIGN_PLAN 1A: ghost trail, drawn before the main sprite.
+        Juice.trail_draw(self, ghost_tex, 16)
+        # DESIGN_PLAN 1B: semi-transparent ghost while phasing.
+        var ghost_mod := Color(1, 1, 1, 1)
+        if phase_active > 0:
+                var phase_pct := phase_active / PHASE_DURATION
+                ghost_mod = Color(0.55, 0.75, 0.95, 0.5 + 0.15 * phase_pct)
+        draw_texture_rect(ghost_tex, Rect2(int(gp.x) - sw / 2, int(gp.y) - sh / 2, sw, sh), false, ghost_mod)
+        # DESIGN_PLAN 1B: cooldown ring (only when on cd, not while active).
+        if phase_cd > 0 and phase_active == 0:
+                var cd_pct: float = 1.0 - (phase_cd / PHASE_CD)
+                draw_arc(Vector2(int(gp.x), int(gp.y)), 12.0, -PI / 2, -PI / 2 + TAU * cd_pct, 16, Palette.TEXT_DIM, 1.5)
         # Carried weapon
         if ghost.carrying != null:
                 var item_tex := Sprites.get_weapon_sprite(ghost.carrying.type, ghost.carrying.state)
@@ -400,7 +458,7 @@ func _draw() -> void:
         # Particles
         Juice.draw_particles(self)
         # Hint
-        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 6), "WASD:move E:interact TAB:inspect", 8, Palette.TEXT_DIM)
+        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 6), "WASD:move E:interact SPACE:phase TAB:inspect", 8, Palette.TEXT_DIM)
 
 func _draw_glow(pos: Vector2, radius: int, color: Color) -> void:
         var center := Vector2(int(pos.x), int(pos.y))
