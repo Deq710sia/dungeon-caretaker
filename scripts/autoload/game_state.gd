@@ -110,6 +110,7 @@ func next_wave() -> void:
                 stage += 1
                 wave = 1
                 if stage > MAX_STAGE:
+                        run_log.append("Stage %d cleared — the dungeon is conquered!" % (stage - 1))
                         return
                 run_log.append("Stage %d cleared! Descending..." % (stage - 1))
         else:

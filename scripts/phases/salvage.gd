@@ -31,6 +31,7 @@ var near_interactive: Variant = null
 var interact_pressed: bool = false
 var active_qte: Dictionary = {}
 var qte_cooldown: float = 0.0
+var _qte_resolved_this_frame: bool = false
 
 # Decorative props (placed once, drawn every frame)
 var props: Array = []  # {pos, sprite}
@@ -508,7 +509,7 @@ func _draw() -> void:
 	var gy := int(ghost_pos.y)
 	draw_rect(Rect2(gx - 5, gy + 6, 10, 2), Color(0, 0, 0, 0.3), true)
 	var ghost_tex := Sprites.get_sprite("ghost")
-	var sw := int(16 / ghost_squash)
+	var sw := int(16.0 / maxf(0.1, ghost_squash))
 	var sh := int(16 * ghost_squash)
 	draw_texture_rect(ghost_tex, Rect2(gx - sw / 2, gy - sh / 2 + bob, sw, sh), false)
 	# QTE bar

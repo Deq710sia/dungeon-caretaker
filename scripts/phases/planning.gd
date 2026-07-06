@@ -30,8 +30,8 @@ var near_interactive: String = ""  # "map", "rack", "bell", "adv_<name>", ""
 var interact_pressed: bool = false
 var map_view_active: bool = false
 var rack_page: int = 0
-var _q_pressed: bool = false
-var _e_pressed: bool = false
+var _bracket_left_pressed: bool = false
+var _bracket_right_pressed: bool = false
 var particles: Array = []
 
 # HUD
@@ -121,20 +121,20 @@ func _process(delta: float) -> void:
 	if not Input.is_action_pressed("interact"):
 		interact_pressed = false
 	# V2: Rack paging — Q/E or bracket keys to cycle through arsenal pages
-	if Input.is_key_pressed(KEY_Q) and not _q_pressed:
-		_q_pressed = true
+	if Input.is_key_pressed(KEY_BRACKETLEFT) and not _bracket_left_pressed:
+		_bracket_left_pressed = true
 		var max_pages := maxi(1, (GameState.arsenal.size() + 2) / 3)
 		rack_page = (rack_page - 1 + max_pages) % max_pages
 		SFX.play("select")
-	if Input.is_key_pressed(KEY_E) and not _e_pressed:
-		_e_pressed = true
+	if Input.is_key_pressed(KEY_BRACKETRIGHT) and not _bracket_right_pressed:
+		_bracket_right_pressed = true
 		var max_pages := maxi(1, (GameState.arsenal.size() + 2) / 3)
 		rack_page = (rack_page + 1) % max_pages
 		SFX.play("select")
-	if not Input.is_key_pressed(KEY_Q):
-		_q_pressed = false
-	if not Input.is_key_pressed(KEY_E):
-		_e_pressed = false
+	if not Input.is_key_pressed(KEY_BRACKETLEFT):
+		_bracket_left_pressed = false
+	if not Input.is_key_pressed(KEY_BRACKETRIGHT):
+		_bracket_right_pressed = false
 	# Map view controls
 	if map_view_active:
 		if Input.is_action_just_pressed("interact") and not interact_pressed:
@@ -176,7 +176,7 @@ func _find_nearest_interactive() -> void:
 			prompt_label.text = "[E] View wave map & intel"
 		"rack":
 			if ghost.carrying == null:
-				prompt_label.text = "[E] Pick up weapon (page %d)" % rack_page
+				prompt_label.text = "[E] Pick up weapon (page %d) [[]/] to cycle" % rack_page
 			else:
 				prompt_label.text = "[E] Put weapon back"
 		"bell":
@@ -365,7 +365,7 @@ func _draw() -> void:
 	var gp: Vector2 = ghost.pos + Vector2(0, bob)
 	draw_rect(Rect2(int(gp.x) - 5, int(ghost.pos.y) + 6, 10, 2), Color(0, 0, 0, 0.3), true)
 	var ghost_tex := Sprites.get_sprite("ghost")
-	var sw := int(16 / ghost.squash)
+	var sw := int(16.0 / maxf(0.1, ghost.squash))
 	var sh := int(16 * ghost.squash)
 	draw_texture_rect(ghost_tex, Rect2(int(gp.x) - sw / 2, int(gp.y) - sh / 2, sw, sh), false)
 	# Carried weapon
@@ -420,3 +420,9 @@ func _draw_map_view() -> void:
 	GameFont.draw_string(self, Vector2(160, intel_y + 24), "ARSENAL: %d weapons" % GameState.arsenal.size(), 8, Palette.TEXT)
 	# Close hint
 	GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 14), "[E] Close map", 8, Palette.TEXT_GOLD)
+
+func _on_phase_exit() -> void:
+	if ghost.carrying != null:
+		GameState.add_weapon(ghost.carrying)
+		ghost.carrying = null
+
