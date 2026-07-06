@@ -34,6 +34,18 @@ func _ready() -> void:
         DisplayServer.window_set_title("Dungeon Caretaker: A Ghost's Salvage")
 
 func _on_phase_changed(new_phase: String) -> void:
+        if fade_rect == null:
+                _instantiate_phase(new_phase)
+                return
+        # Fade out, swap phase, fade in
+        if fade_tween:
+                fade_tween.kill()
+        fade_tween = create_tween()
+        fade_tween.tween_property(fade_rect, "color:a", 1.0, 0.12)
+        fade_tween.tween_callback(_instantiate_phase.bind(new_phase))
+        fade_tween.tween_property(fade_rect, "color:a", 0.0, 0.12)
+
+func _instantiate_phase(new_phase: String) -> void:
         if current_phase_node:
                 current_phase_node.queue_free()
                 current_phase_node = null
@@ -55,3 +67,22 @@ func _input(event: InputEvent) -> void:
         if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
                 if GameState.current_phase != "menu":
                         GameState.set_phase("menu")
+
+# V2: Screen fade transition between phases
+var fade_rect: ColorRect
+var fade_tween: Tween
+
+func _start_fade(callback: Callable) -> void:
+        if fade_rect == null:
+                fade_rect = ColorRect.new()
+                fade_rect.color = Color(0, 0, 0, 0)
+                fade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+                fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+                fade_rect.z_index = 100
+                add_child(fade_rect)
+        if fade_tween:
+                fade_tween.kill()
+        fade_tween = create_tween()
+        fade_tween.tween_property(fade_rect, "color:a", 1.0, 0.15)
+        fade_tween.tween_callback(callback)
+        fade_tween.tween_property(fade_rect, "color:a", 0.0, 0.15)
