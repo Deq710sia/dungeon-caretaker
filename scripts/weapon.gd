@@ -102,6 +102,85 @@ func _init(p_type: String = "sword", p_name: String = "Weapon", p_history: Strin
 	if p_history != "":
 		history.append(p_history)
 
+## Rolls a type-weighted affliction for a weapon. Returns a dict with:
+##   state: int (flavor State enum)
+##   wear_state: int (WearState enum — the mechanical truth that gates stations)
+##   unexorcised_deaths: int (0 or 1 — whether it needs the Altar)
+##   durability_pct: float (0.0-1.0 — starting durability as fraction of max)
+##
+## Type weights (player feedback polish):
+##   - Everything has a baseline ~30% chance to be DAMAGED (needs grind).
+##     This is the consistent baseline across all items — the player can
+##     always expect some grind work.
+##   - Weapons (sword, staff) skew toward BLOODIED flavor.
+##   - Armor (helm, robe) skew slightly toward BROKEN/shattered (low-ish
+##     chance, but higher than weapons).
+##   - Mage gear (staff, robe) skews toward HAUNTED (needs Altar) —
+##     magical gear holds more dread.
+##   - Warrior gear (sword, helm) skews toward BLOODIED.
+##
+## Haunt is rolled ORTHOGONALLY — a weapon can be DAMAGED (needs grind)
+## AND haunted (needs Altar). The blue wisps overlay on the sprite
+## communicates this dual need.
+static func roll_affliction(type: String) -> Dictionary:
+	# --- Wear state weights (determines primary station need) ---
+	# Baseline DAMAGED=30 for all types. Armor gets +5 BROKEN.
+	var wear_weights: Dictionary = {
+		"sword": {WearState.PRISTINE: 5, WearState.WORN: 15, WearState.DAMAGED: 30, WearState.BROKEN: 10},
+		"staff": {WearState.PRISTINE: 5, WearState.WORN: 15, WearState.DAMAGED: 30, WearState.BROKEN: 8},
+		"helm":  {WearState.PRISTINE: 5, WearState.WORN: 15, WearState.DAMAGED: 30, WearState.BROKEN: 15},
+		"robe":  {WearState.PRISTINE: 5, WearState.WORN: 15, WearState.DAMAGED: 30, WearState.BROKEN: 15},
+	}
+	var weights: Dictionary = wear_weights.get(type, wear_weights["sword"])
+	var total := 0
+	for w in weights.values():
+		total += w
+	var roll := randi() % total
+	var wear: int = WearState.DAMAGED
+	var accumulated := 0
+	for ws in weights:
+		accumulated += weights[ws]
+		if roll < accumulated:
+			wear = ws
+			break
+	# --- Haunt chance (orthogonal — mage gear more likely) ---
+	var haunt_chance: Dictionary = {
+		"sword": 0.15,
+		"staff": 0.35,
+		"helm":  0.15,
+		"robe":  0.35,
+	}
+	var haunted: bool = randf() < haunt_chance.get(type, 0.20)
+	# --- Durability from wear state ---
+	var dur_pct: float
+	match wear:
+		WearState.PRISTINE: dur_pct = 0.85
+		WearState.WORN:     dur_pct = 0.50
+		WearState.DAMAGED:  dur_pct = 0.35
+		WearState.BROKEN:   dur_pct = 0.0
+		_:                  dur_pct = 0.35
+	# --- Flavor state from wear + haunt ---
+	# BROKEN overrides everything (shattered is the most visible state).
+	# Haunted overrides non-broken wear (blue tint reads as "needs altar").
+	# Otherwise, weapons skew BLOODIED, armor skews RUSTED.
+	var flavor: int
+	if wear == WearState.BROKEN:
+		flavor = State.SHATTERED
+	elif haunted:
+		flavor = State.HAUNTED
+	elif wear == WearState.PRISTINE:
+		flavor = State.PRISTINE
+	elif type in ["sword", "staff"]:
+		flavor = State.BLOODIED
+	else:
+		flavor = State.RUSTED
+	return {
+		"state": flavor,
+		"wear_state": wear,
+		"unexorcised_deaths": 1 if haunted else 0,
+		"durability_pct": dur_pct,
+	}
+
 func state_name() -> String:
 	return STATE_NAMES[state]
 

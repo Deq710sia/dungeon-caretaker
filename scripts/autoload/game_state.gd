@@ -64,33 +64,50 @@ func start_new_run() -> void:
         party.clear()
         last_battle_result.clear()
         run_log.clear()
-        # Starter weapons — in BAD states to force the repair loop.
-        # The player should NOT be able to clear stage 1 without repairing first.
-        # Polish: 2 of 4 start haunted (unexorcised_deaths=1) so the Altar
-        # is a real station to visit, not just grind+polish. Was: all 4 at
-        # 30% durability (all DAMAGED = grind only), 0 haunted.
+        # Starter weapons — use the weighted roll_affliction system.
+        # No more hardcoded states or guaranteed haunts. Each starter rolls
+        # independently, so every run starts with a different mix of stations
+        # to visit. The roll biases toward bad states (PRISTINE is rare), so
+        # starters will always need repair — just different stations each run.
+        #
+        # Type weights (see Weapon.roll_affliction):
+        #   - All types: ~30% baseline DAMAGED (needs grind)
+        #   - Weapons (sword, staff): skew BLOODIED flavor
+        #   - Armor (helm, robe): slightly more BROKEN (shattered)
+        #   - Mage gear (staff, robe): 35% haunt chance (needs Altar)
+        #   - Warrior gear (sword, helm): 15% haunt chance
         var w1 := Weapon.new("sword", "Rusted Longsword", "Found at the dungeon entrance, blood still wet.")
-        w1.state = Weapon.State.RUSTED
+        var a1 := Weapon.roll_affliction("sword")
+        w1.state = a1.state
+        w1.wear_state = a1.wear_state
+        w1.unexorcised_deaths = a1.unexorcised_deaths
         w1.sharpness = 0.2
         w1.balance = 0.3
         w1.power = 0.2
         w1.mystic = 0.2
         var w2 := Weapon.new("staff", "Whispering Staff", "Last wielder screams faintly at night.")
-        w2.state = Weapon.State.HAUNTED
-        w2.unexorcised_deaths = 1  # haunted — needs Altar
+        var a2 := Weapon.roll_affliction("staff")
+        w2.state = a2.state
+        w2.wear_state = a2.wear_state
+        w2.unexorcised_deaths = a2.unexorcised_deaths
         w2.sharpness = 0.3
         w2.balance = 0.2
         w2.power = 0.3
         w2.mystic = 0.2
         var w3 := Weapon.new("helm", "Pitted Helm", "Sat in standing water for a season.")
-        w3.state = Weapon.State.RUSTED
+        var a3 := Weapon.roll_affliction("helm")
+        w3.state = a3.state
+        w3.wear_state = a3.wear_state
+        w3.unexorcised_deaths = a3.unexorcised_deaths
         w3.sharpness = 0.2
         w3.balance = 0.2
         w3.power = 0.2
         w3.mystic = 0.3
         var w4 := Weapon.new("robe", "Traveler's Robe", "Miraculously intact. Smells of lavender.")
-        w4.state = Weapon.State.BLOODIED
-        w4.unexorcised_deaths = 1  # haunted — needs Altar
+        var a4 := Weapon.roll_affliction("robe")
+        w4.state = a4.state
+        w4.wear_state = a4.wear_state
+        w4.unexorcised_deaths = a4.unexorcised_deaths
         w4.sharpness = 0.3
         w4.balance = 0.3
         w4.power = 0.2
@@ -99,15 +116,18 @@ func start_new_run() -> void:
         arsenal.append(w2)
         arsenal.append(w3)
         arsenal.append(w4)
-        # Apply upgrades — varied durability so different stations are needed.
-        # Was: all at 30% (all DAMAGED = grind). Now: spread across wear tiers
-        # so the player sees polish/grind/forge variety from the start.
-        var durabilities := [0.45, 0.30, 0.55, 0.10]  # WORN, DAMAGED, WORN, BROKEN
+        # Apply durability from the rolled affliction. Set is_broken directly
+        # for BROKEN weapons (avoids the break_weapon history entry which
+        # would say "SHATTERED on Stage 1 Wave 1 from catastrophic damage" —
+        # these weapons START broken, they didn't break in combat).
+        var afflictions := [a1, a2, a3, a4]
         for i in arsenal.size():
                 var w: Weapon = arsenal[i]
+                var a: Dictionary = afflictions[i]
                 w.durability_max = Weapon.BASE_DURABILITY + meta_upgrades["sturdy_grip"] * 25
-                w.durability = int(w.durability_max * durabilities[i])
-                w.recalculate_wear()
+                w.durability = int(w.durability_max * a.durability_pct)
+                if a.wear_state == Weapon.WearState.BROKEN:
+                        w.is_broken = true
         # Spawn the initial party
         spawn_party()
         run_log.append("Stage 1, Wave 1 — A new run begins.")

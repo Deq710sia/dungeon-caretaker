@@ -459,26 +459,18 @@ func _collect_corpse(c: Dictionary) -> void:
         if w == null:
                 # Bonus corpse — create a new random weapon
                 w = Weapon.new(c.gear_type, c.gear_name, "Salvaged from %s, %s." % [c.corpse_name, c.death_cause])
-                w.state = c.gear_state
+                # Use the unified roll_affliction system — same type-weighted
+                # probabilities as starter weapons. No more separate random roll
+                # here; the Weapon.roll_affliction function is the single source
+                # of truth for how gear enters the arsenal.
+                var affliction := Weapon.roll_affliction(c.gear_type)
+                w.state = affliction.state
+                w.wear_state = affliction.wear_state
+                w.unexorcised_deaths = affliction.unexorcised_deaths
                 w.durability_max = Weapon.BASE_DURABILITY + GameState.meta_upgrades["sturdy_grip"] * 25
-                # Polish: varied durability so different stations get used.
-                # Was: always 50% (always DAMAGED = grind). Now spread across
-                # wear tiers with some haunted, so the player isn't always grinding.
-                var roll := randf()
-                if roll < 0.25:
-                        w.durability = int(w.durability_max * 0.55)  # WORN — polish
-                elif roll < 0.55:
-                        w.durability = int(w.durability_max * 0.35)  # DAMAGED — grind
-                elif roll < 0.75:
-                        w.durability = int(w.durability_max * 0.10)  # BROKEN — forge
-                else:
-                        w.durability = int(w.durability_max * 0.70)  # decent — maybe just haunted
-                # 40% chance to be haunted (unexorcised_deaths=1) — the weapon
-                # was present for someone's death, so it carries dread. This makes
-                # the Altar a regular station to visit, not a rare event.
-                if randf() < 0.40:
-                        w.unexorcised_deaths = 1
-                w.recalculate_wear()
+                w.durability = int(w.durability_max * affliction.durability_pct)
+                if affliction.wear_state == Weapon.WearState.BROKEN:
+                        w.is_broken = true
                 w.sharpness = randf_range(0.3, 0.6)
                 w.balance = randf_range(0.3, 0.6)
                 w.power = randf_range(0.3, 0.6)
