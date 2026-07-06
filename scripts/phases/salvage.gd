@@ -36,8 +36,10 @@ var cam: Camera2D
 const PHASE_DURATION: float = 1.5
 const PHASE_CD: float = 4.0
 const PHASE_COST: int = 1
-var phase_active: float = 0.0  # counts down from PHASE_DURATION
+const PHASE_BANK_MAX: float = 3.0  # max banked time that can accumulate
+var phase_active: float = 0.0  # counts down from PHASE_DURATION (+ banked)
 var phase_cd: float = 0.0      # counts down from PHASE_CD
+var phase_bank: float = 0.0    # banked time from early cancels (DESIGN_PLAN polish)
 # DESIGN_PLAN 1A: footstep whoosh tied to velocity. Interval scales with
 # speed — faster ghost = faster footsteps, but capped to avoid noise spam.
 var _footstep_timer: float = 0.0
@@ -355,19 +357,31 @@ func _physics_process(delta: float) -> void:
         queue_redraw()
 
 func _try_activate_phase() -> void:
-        # DESIGN_PLAN 1B: Phase verb. Costs 1 shard, 4s cooldown, 1.5s duration.
-        # While active: 2x speed (handled in _physics_process), semi-transparent
-        # (handled in _draw), bypasses fire/spikes (handled in
-        # _find_nearest_interactive). Pits are NOT bypassed — you still fall.
+        # DESIGN_PLAN 1B: Phase verb. Costs 1 shard, 4s cooldown, 1.5s duration
+        # (+ any banked time from early cancels). While active: 2x speed,
+        # semi-transparent, bypasses fire/spikes. Pits are NOT bypassed.
         #
         # Toggle: if already phasing, press SPACE again to snap back early.
-        # The cooldown still applies from the moment you started, so early-exit
-        # doesn't refund the shard or reset the cd — it just cuts the duration
-        # short. This gives the player agency over the verb's timing.
+        # The remaining phase_active time is BANKED — next activation gets it
+        # added on top (capped at PHASE_BANK_MAX). This rewards skillful
+        # early-canceling: cancel with 0.8s left, next phase lasts 2.3s.
+        # The cooldown still applies from activation, so early-exit doesn't
+        # refund the shard.
+        #
+        # Momentum boost: on manual cancel, the ghost gets a velocity burst
+        # in its current facing direction — a "dash out" that makes manual
+        # cancel feel rewarding and tactical.
         if phase_active > 0:
+                var remaining := phase_active
+                phase_bank = minf(PHASE_BANK_MAX, phase_bank + remaining)
                 phase_active = 0.0
                 Juice.trail_phasing = false
                 SFX.play("phase_out", 1.0, -3.0)
+                # Momentum boost — 1.8x normal speed in the current facing dir.
+                # Only if the ghost is actually moving (has a facing input).
+                if ghost_facing != Vector2.ZERO:
+                        ghost_vel = ghost_facing * ghost_speed * 1.8
+                        Juice.spawn_particles(ghost_pos, 6, Palette.GLOW_BLUE, 30.0, 0.4)
                 return
         if phase_cd > 0:
                 return
@@ -376,7 +390,9 @@ func _try_activate_phase() -> void:
                 return
         GameState.soul_shards -= PHASE_COST
         GameState.shards_changed.emit(GameState.soul_shards)
-        phase_active = PHASE_DURATION
+        # Consume banked time: duration = base + bank (capped). Bank resets.
+        phase_active = PHASE_DURATION + phase_bank
+        phase_bank = 0.0
         phase_cd = PHASE_CD
         Juice.trail_phasing = true
         Juice.add_trauma(0.15)
@@ -445,7 +461,24 @@ func _collect_corpse(c: Dictionary) -> void:
                 w = Weapon.new(c.gear_type, c.gear_name, "Salvaged from %s, %s." % [c.corpse_name, c.death_cause])
                 w.state = c.gear_state
                 w.durability_max = Weapon.BASE_DURABILITY + GameState.meta_upgrades["sturdy_grip"] * 25
-                w.durability = int(w.durability_max * 0.5)
+                # Polish: varied durability so different stations get used.
+                # Was: always 50% (always DAMAGED = grind). Now spread across
+                # wear tiers with some haunted, so the player isn't always grinding.
+                var roll := randf()
+                if roll < 0.25:
+                        w.durability = int(w.durability_max * 0.55)  # WORN — polish
+                elif roll < 0.55:
+                        w.durability = int(w.durability_max * 0.35)  # DAMAGED — grind
+                elif roll < 0.75:
+                        w.durability = int(w.durability_max * 0.10)  # BROKEN — forge
+                else:
+                        w.durability = int(w.durability_max * 0.70)  # decent — maybe just haunted
+                # 40% chance to be haunted (unexorcised_deaths=1) — the weapon
+                # was present for someone's death, so it carries dread. This makes
+                # the Altar a regular station to visit, not a rare event.
+                if randf() < 0.40:
+                        w.unexorcised_deaths = 1
+                w.recalculate_wear()
                 w.sharpness = randf_range(0.3, 0.6)
                 w.balance = randf_range(0.3, 0.6)
                 w.power = randf_range(0.3, 0.6)
@@ -565,8 +598,11 @@ func _draw() -> void:
                         var p := Vector2(x * TILE, y * TILE)
                         var hash := (x * 7 + y * 13) % 31
                         if x < 0 or x >= CORRIDOR_W:
-                                # Beyond walls — draw dark stone (cavern background)
-                                draw_texture(Sprites.get_sprite("wall"), p)
+                                # Beyond walls — draw dark void gradient (skybox) instead
+                                # of flat gray wall. Reads as "open cavern/void" beyond
+                                # the play field rather than "more wall."
+                                var void_t := float(y) / float(CORRIDOR_H)
+                                draw_rect(Rect2(p, Vector2(TILE, TILE)), Color(0.03 + void_t * 0.02, 0.02 + void_t * 0.015, 0.06 + void_t * 0.03), true)
                         elif hash < 3 and y > 5:
                                 draw_texture(Sprites.get_sprite("floor_moss"), p)
                         elif hash < 6 and y > 8:

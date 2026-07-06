@@ -31,9 +31,13 @@ var hud_layer: CanvasLayer
 # DESIGN_PLAN 1B: Phase verb timings. Was 20s cd / 4s duration for the
 # old Haunt — too long for a 15-20s battle. Now 4s cd / 1.5s duration,
 # matched to salvage so the verb feels the same everywhere.
+# Polish: banked time on manual cancel (no momentum boost — battle has
+# no ghost movement, just the slow-enemy effect).
 const PHASE_CD: float = 4.0
 const PHASE_DURATION: float = 1.5
 const PHASE_COST: int = 1
+const PHASE_BANK_MAX: float = 3.0
+var phase_bank: float = 0.0
 
 func _ready() -> void:
 	cam = Camera2D.new()
@@ -190,10 +194,12 @@ func _process(delta: float) -> void:
 	# breaking gamepad support and playtest automation.
 	#
 	# Toggle: press SPACE again while phasing to snap back early. The
-	# cooldown still applies from when you started, so early-exit doesn't
-	# refund the shard — it just cuts the slow-enemy duration short.
+	# remaining duration is BANKED — next activation gets it added on top.
+	# No momentum boost in battle (ghost doesn't move here).
 	if Input.is_action_just_pressed("phase"):
 		if phase_active > 0:
+			var remaining := phase_active
+			phase_bank = minf(PHASE_BANK_MAX, phase_bank + remaining)
 			phase_active = 0.0
 			SFX.play("phase_out", 1.0, -3.0)
 			log_label.text = "Ghost snaps back — phasing ended early."
@@ -205,7 +211,8 @@ func _process(delta: float) -> void:
 				GameState.soul_shards -= PHASE_COST
 				GameState.shards_changed.emit(GameState.soul_shards)
 				phase_cd = PHASE_CD
-				phase_active = PHASE_DURATION
+				phase_active = PHASE_DURATION + phase_bank
+				phase_bank = 0.0
 				Juice.add_trauma(0.2)
 				Juice.spawn_particles(Vector2(VIEW_W / 2, VIEW_H / 2), 12, Palette.GLOW_BLUE, 40.0, 0.5)
 				SFX.play("phase_in", 1.0, -2.0)
@@ -455,8 +462,10 @@ func _draw() -> void:
 			var p := Vector2(x * TILE, y * TILE)
 			var hash := (x * 7 + y * 13) % 31
 			if x < 0 or x >= CORRIDOR_W:
-				# Beyond walls — draw dark stone (cavern background)
-				draw_texture(Sprites.get_sprite("wall"), p)
+				# Beyond walls — dark void gradient (skybox) instead of
+				# flat gray wall.
+				var void_t := float(y) / float(CORRIDOR_H)
+				draw_rect(Rect2(p, Vector2(TILE, TILE)), Color(0.03 + void_t * 0.02, 0.02 + void_t * 0.015, 0.06 + void_t * 0.03), true)
 			elif hash < 3 and y > 5:
 				draw_texture(Sprites.get_sprite("floor_crack"), p)
 			elif hash < 5 and y > 8:

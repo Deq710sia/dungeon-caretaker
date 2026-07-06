@@ -32,12 +32,16 @@ var ghost: Dictionary = {
 # DESIGN_PLAN 1B: Phase verb. In workshop, phasing only grants 2x speed
 # (no hazards to bypass here). Same input, cost, cooldown, duration as
 # salvage so the verb feels unified across every walkable phase.
+# Polish: banked time + momentum boost on manual cancel (see _try_activate_phase).
 const PHASE_DURATION: float = 1.5
 const PHASE_CD: float = 4.0
 const PHASE_COST: int = 1
+const PHASE_BANK_MAX: float = 3.0
 var phase_active: float = 0.0
 var phase_cd: float = 0.0
+var phase_bank: float = 0.0
 var _footstep_timer: float = 0.0
+var _last_input_dir: Vector2 = Vector2.ZERO  # for momentum boost on cancel
 var bell_timer: float = 90.0  # placeholder only — _ready() sets the real value
 var bell_rang: bool = false
 var minigame_active: bool = false
@@ -177,6 +181,7 @@ func _process(delta: float) -> void:
         if Input.is_action_pressed("move_down"):  input_dir.y += 1
         if input_dir != Vector2.ZERO:
                 input_dir = input_dir.normalized()
+                _last_input_dir = input_dir  # remember for momentum boost on cancel
                 ghost.vel = ghost.vel.move_toward(input_dir * target_speed, ghost.accel * delta)
         else:
                 ghost.vel = ghost.vel.move_toward(Vector2.ZERO, ghost.accel * delta)
@@ -212,11 +217,17 @@ func _try_activate_phase() -> void:
         # DESIGN_PLAN 1B: Phase verb — workshop QoL version. 2x movement only,
         # no hazard bypass (workshop has no hazards). Same cost/cd/duration
         # as salvage so the verb is unified.
-        # Toggle: press SPACE again while phasing to snap back early.
+        # Polish: banked time + momentum boost on manual cancel.
         if phase_active > 0:
+                var remaining := phase_active
+                phase_bank = minf(PHASE_BANK_MAX, phase_bank + remaining)
                 phase_active = 0.0
                 Juice.trail_phasing = false
                 SFX.play("phase_out", 1.0, -3.0)
+                # Momentum boost in last input direction.
+                if _last_input_dir != Vector2.ZERO:
+                        ghost.vel = _last_input_dir * ghost.speed * 1.8
+                        Juice.spawn_particles(ghost.pos, 6, Palette.GLOW_BLUE, 30.0, 0.4)
                 return
         if phase_cd > 0:
                 return
@@ -225,7 +236,8 @@ func _try_activate_phase() -> void:
                 return
         GameState.soul_shards -= PHASE_COST
         GameState.shards_changed.emit(GameState.soul_shards)
-        phase_active = PHASE_DURATION
+        phase_active = PHASE_DURATION + phase_bank
+        phase_bank = 0.0
         phase_cd = PHASE_CD
         Juice.trail_phasing = true
         Juice.add_trauma(0.15)

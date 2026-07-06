@@ -66,6 +66,9 @@ func start_new_run() -> void:
         run_log.clear()
         # Starter weapons — in BAD states to force the repair loop.
         # The player should NOT be able to clear stage 1 without repairing first.
+        # Polish: 2 of 4 start haunted (unexorcised_deaths=1) so the Altar
+        # is a real station to visit, not just grind+polish. Was: all 4 at
+        # 30% durability (all DAMAGED = grind only), 0 haunted.
         var w1 := Weapon.new("sword", "Rusted Longsword", "Found at the dungeon entrance, blood still wet.")
         w1.state = Weapon.State.RUSTED
         w1.sharpness = 0.2
@@ -74,6 +77,7 @@ func start_new_run() -> void:
         w1.mystic = 0.2
         var w2 := Weapon.new("staff", "Whispering Staff", "Last wielder screams faintly at night.")
         w2.state = Weapon.State.HAUNTED
+        w2.unexorcised_deaths = 1  # haunted — needs Altar
         w2.sharpness = 0.3
         w2.balance = 0.2
         w2.power = 0.3
@@ -86,6 +90,7 @@ func start_new_run() -> void:
         w3.mystic = 0.3
         var w4 := Weapon.new("robe", "Traveler's Robe", "Miraculously intact. Smells of lavender.")
         w4.state = Weapon.State.BLOODIED
+        w4.unexorcised_deaths = 1  # haunted — needs Altar
         w4.sharpness = 0.3
         w4.balance = 0.3
         w4.power = 0.2
@@ -94,10 +99,14 @@ func start_new_run() -> void:
         arsenal.append(w2)
         arsenal.append(w3)
         arsenal.append(w4)
-        # Apply upgrades
-        for w in arsenal:
+        # Apply upgrades — varied durability so different stations are needed.
+        # Was: all at 30% (all DAMAGED = grind). Now: spread across wear tiers
+        # so the player sees polish/grind/forge variety from the start.
+        var durabilities := [0.45, 0.30, 0.55, 0.10]  # WORN, DAMAGED, WORN, BROKEN
+        for i in arsenal.size():
+                var w: Weapon = arsenal[i]
                 w.durability_max = Weapon.BASE_DURABILITY + meta_upgrades["sturdy_grip"] * 25
-                w.durability = int(w.durability_max * 0.3)
+                w.durability = int(w.durability_max * durabilities[i])
                 w.recalculate_wear()
         # Spawn the initial party
         spawn_party()

@@ -21,6 +21,8 @@ const PHASE_SCRIPTS := {
 
 var current_phase_node: Node2D = null
 var background: ColorRect
+var pause_overlay: CanvasLayer = null
+var is_paused: bool = false
 
 func _ready() -> void:
 	background = ColorRect.new()
@@ -64,8 +66,91 @@ func _instantiate_phase(new_phase: String) -> void:
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		if GameState.current_phase != "menu":
-			GameState.set_phase("menu")
+		# ESC pauses the game instead of quitting to menu. The pause overlay
+		# shows Resume + Quit to Menu buttons. The run state is fully
+		# preserved — resuming picks up exactly where you left off.
+		# Previously ESC called GameState.set_phase("menu") which abandoned
+		# the current phase (and any carried weapon) mid-action.
+		if GameState.current_phase == "menu":
+			return  # already at menu, ESC does nothing
+		if is_paused:
+			_unpause()
+		else:
+			_pause()
+
+func _pause() -> void:
+	if is_paused:
+		return
+	is_paused = true
+	get_tree().paused = true
+	pause_overlay = CanvasLayer.new()
+	pause_overlay.name = "PauseOverlay"
+	pause_overlay.layer = 200
+	add_child(pause_overlay)
+	# Dim background
+	var dim := ColorRect.new()
+	dim.color = Color(0, 0, 0, 0.7)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pause_overlay.add_child(dim)
+	# Title
+	var title := Label.new()
+	title.text = "PAUSED"
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", Palette.TEXT)
+	title.add_theme_color_override("font_outline_color", Palette.VOID)
+	title.add_theme_constant_override("outline_size", 2)
+	title.position = Vector2(160, 90)
+	title.size = Vector2(160, 20)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pause_overlay.add_child(title)
+	# Resume button
+	var resume_btn := Button.new()
+	resume_btn.text = "Resume"
+	resume_btn.add_theme_font_size_override("font_size", 8)
+	resume_btn.position = Vector2(160, 130)
+	resume_btn.size = Vector2(160, 20)
+	resume_btn.pressed.connect(_unpause)
+	pause_overlay.add_child(resume_btn)
+	# Quit to menu button
+	var quit_btn := Button.new()
+	quit_btn.text = "Quit to Menu"
+	quit_btn.add_theme_font_size_override("font_size", 8)
+	quit_btn.position = Vector2(160, 155)
+	quit_btn.size = Vector2(160, 18)
+	quit_btn.pressed.connect(_quit_to_menu)
+	pause_overlay.add_child(quit_btn)
+	# Hint
+	var hint := Label.new()
+	hint.text = "ESC: resume"
+	hint.add_theme_font_size_override("font_size", 8)
+	hint.add_theme_color_override("font_color", Palette.TEXT_DIM)
+	hint.position = Vector2(160, 180)
+	hint.size = Vector2(160, 10)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pause_overlay.add_child(hint)
+	resume_btn.grab_focus()
+
+func _unpause() -> void:
+	if not is_paused:
+		return
+	is_paused = false
+	get_tree().paused = false
+	if pause_overlay:
+		pause_overlay.queue_free()
+		pause_overlay = null
+
+func _quit_to_menu() -> void:
+	# Quit to menu — this DOES abandon the current run's phase, but
+	# GameState (party, arsenal, stage/wave) persists so the player can
+	# start a new run from the menu. The current phase's _on_phase_exit
+	# is called via _instantiate_phase to preserve any carried weapon.
+	is_paused = false
+	get_tree().paused = false
+	if pause_overlay:
+		pause_overlay.queue_free()
+		pause_overlay = null
+	GameState.set_phase("menu")
 
 # V2: Screen fade transition between phases
 var fade_rect: ColorRect

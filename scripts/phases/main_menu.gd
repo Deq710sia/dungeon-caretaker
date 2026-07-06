@@ -1,15 +1,17 @@
 extends Node2D
-## Phase: main_menu V4 — pixel-art styled, 320x180.
+## Phase: main_menu V4 — pixel-art styled, 480x270.
+## Centered on the 480-wide viewport (was offset to the left from when
+## the internal resolution was 320x180).
 
 func _ready() -> void:
-	# Title
+	# Title — centered on 480 viewport
 	var title := Label.new()
 	title.text = "DUNGEON CARETAKER"
 	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", Palette.TEXT)
 	title.add_theme_color_override("font_outline_color", Palette.VOID)
 	title.add_theme_constant_override("outline_size", 2)
-	title.position = Vector2(10, 30)
+	title.position = Vector2(90, 50)
 	title.size = Vector2(300, 18)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(title)
@@ -18,7 +20,7 @@ func _ready() -> void:
 	sub.text = "A Ghost's Salvage"
 	sub.add_theme_font_size_override("font_size", 8)
 	sub.add_theme_color_override("font_color", Palette.GLOW_PURP)
-	sub.position = Vector2(10, 52)
+	sub.position = Vector2(90, 72)
 	sub.size = Vector2(300, 10)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(sub)
@@ -29,7 +31,7 @@ func _ready() -> void:
 	ghost.position = Vector2(240, 140)
 	ghost.modulate = Color(1, 1, 1, 0.6)
 	add_child(ghost)
-	# Buttons
+	# Buttons — centered on 480
 	var start_btn := Button.new()
 	start_btn.text = "Start New Run"
 	start_btn.add_theme_font_size_override("font_size", 8)
@@ -46,10 +48,10 @@ func _ready() -> void:
 	add_child(quit_btn)
 	# Hint
 	var hint := Label.new()
-	hint.text = "WASD: move | E: interact | ESC: menu"
+	hint.text = "WASD: move | E: interact | SPACE: phase | ESC: pause"
 	hint.add_theme_font_size_override("font_size", 8)
 	hint.add_theme_color_override("font_color", Palette.TEXT_DIM)
-	hint.position = Vector2(10, 168)
+	hint.position = Vector2(90, 255)
 	hint.size = Vector2(300, 7)
 	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(hint)

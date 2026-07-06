@@ -83,38 +83,44 @@ func _draw() -> void:
                         var sa := wheel_angle + i * (TAU / 5)
                         var sp := wheel_center + Vector2(cos(sa), sin(sa)) * wheel_r
                         draw_circle(sp, 2, Color(1.0, 0.85, 0.30, 0.8))
-        # Weapon (rotating on the wheel — the centerpiece!)
+        # Weapon (positioned against the wheel at a fixed angle — the wheel
+        # spins underneath, the weapon stays put like it's being ground.
+        # Was rotating with weapon_angle, which looked like the weapon was
+        # spinning on the wheel rather than being ground against it.)
         if gear != null:
                 var weapon_tex := Sprites.get_weapon_sprite_wear(gear.type, gear.wear_state, gear.is_haunted())
-                # Draw weapon rotated, positioned on top of the wheel
-                var wpos := wheel_center + Vector2(0, -wheel_r - 10)
+                # Position the weapon at the upper-left of the wheel, tilted
+                # ~25 degrees so it reads as "held against the grinding surface."
+                # The contact point is where the weapon meets the wheel rim.
+                var contact_angle := -PI * 0.75  # upper-left of wheel (10:30 position)
+                var contact_point := wheel_center + Vector2(cos(contact_angle), sin(contact_angle)) * wheel_r
+                var weapon_tilt := -0.4  # radians, slight counter-clockwise tilt
                 var tex_size := 64
-                var offset_pos := wpos - Vector2(tex_size / 2, tex_size / 2)
+                # Weapon center is offset from the contact point outward (away
+                # from wheel center) so the weapon's edge sits AT the contact.
+                var outward := Vector2(cos(contact_angle), sin(contact_angle)).normalized()
+                var weapon_center := contact_point + outward * (tex_size / 2.0 - 4)
+                var offset_pos := weapon_center - Vector2(tex_size / 2, tex_size / 2)
                 # Glow effect when oil is in the sweet spot (drawn first, behind weapon)
                 if oil_level >= SWEET_SPOT_MIN and oil_level <= SWEET_SPOT_MAX:
                         draw_rect(Rect2(offset_pos.x - 4, offset_pos.y - 4, tex_size + 8, tex_size + 8), Color(0.55, 0.95, 0.55, 0.3), true)
-                # Sparks fly off the wheel contact point when oil is flowing — visual
-                # feedback for "rust flakes falling off as quality increases" (DESIGN_PLAN 3A)
+                # Sparks fly off the CONTACT POINT (not the weapon) when oil flows —
+                # this is where grinding actually happens. Sparks scatter outward
+                # from the wheel rim at the contact angle.
                 if oil_level > 0.3:
-                        for i in 4:
-                                var spark_a := weapon_angle + i * (PI / 2.0) + Time.get_ticks_msec() * 0.01
-                                var spark_off := Vector2(cos(spark_a), sin(spark_a)) * (tex_size / 2.0 + 4)
-                                var sp := wpos + spark_off
-                                draw_circle(sp, 1, Color(1.0, 0.75, 0.25, 0.7))
-                # Apply weapon_angle as actual rotation via draw_set_transform.
-                # weapon_angle was updated in _process but never used before — the
-                # original code computed it and then drew the weapon with no rotation.
-                # The 16x16 source sprite is scaled 4x to tex_size (64) and rotated
-                # around its center (wpos). draw_texture offsets by (-8,-8) so the
-                # 16x16 quad centers on wpos after scaling.
-                draw_set_transform(wpos, weapon_angle, Vector2(4, 4))
+                        for i in 5:
+                                var spark_spread := randf_range(-0.6, 0.6)
+                                var spark_a := contact_angle + spark_spread
+                                var spark_dist := randf_range(4, 12)
+                                var sp := contact_point + Vector2(cos(spark_a), sin(spark_a)) * spark_dist
+                                draw_circle(sp, 1, Color(1.0, 0.75, 0.25, 0.8))
+                # Draw weapon with fixed tilt (no rotation over time). The tilt
+                # makes it look held against the wheel rather than floating.
+                draw_set_transform(weapon_center, weapon_tilt, Vector2(4, 4))
                 draw_texture(weapon_tex, Vector2(-8, -8))
                 draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-                # Weapon name — centered under the weapon. Was at x=160, a stale value
-                # from when the weapon was drawn at a different x. The weapon now sits
-                # at wheel_center.x = vp.x * 0.35 = 168, so centering on wheel_center.x
-                # keeps the label aligned with the sprite.
-                GameFont.draw_string_centered(self, Vector2(int(wheel_center.x), int(offset_pos.y + tex_size + 12)), gear.display_name, 8, gear.wear_color())
+                # Weapon name — centered under the weapon.
+                GameFont.draw_string_centered(self, Vector2(int(weapon_center.x), int(offset_pos.y + tex_size + 12)), gear.display_name, 8, gear.wear_color())
         # Oil meter (vertical bar on right)
         var meter_x: float = vp.x * 0.75
         var meter_y: float = vp.y * 0.20
