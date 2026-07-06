@@ -21,6 +21,7 @@ theme="res://assets/default_theme.tres"
 
 GameState="*res://scripts/autoload/game_state.gd"
 Juice="*res://scripts/juice.gd"
+SFX="*res://scripts/autoload/sfx.gd"
 
 [display]
 

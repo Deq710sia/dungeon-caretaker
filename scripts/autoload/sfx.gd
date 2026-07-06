@@ -1,0 +1,172 @@
+extends Node
+## SFX — procedural retro sound effects with ZERO audio files.
+## Pre-renders short PCM samples into AudioStreamWAV at startup,
+## then plays them through a round-robin voice pool with pitch jitter.
+## Based on research: AudioStreamWAV with raw PackedByteArray is the
+## correct approach for Godot 4 (AudioStreamGenerator has latency issues
+## in GDScript).
+
+const SR := 44100
+const VOICES := 8
+
+var _streams: Dictionary = {}
+var _players: Array[AudioStreamPlayer] = []
+var _cursor := 0
+
+func _ready() -> void:
+	_build_buses()
+	_prerender_all()
+	for i in VOICES:
+		var p := AudioStreamPlayer.new()
+		p.bus = "SFX"
+		add_child(p)
+		_players.append(p)
+
+func _build_buses() -> void:
+	if AudioServer.get_bus_count() == 1:
+		AudioServer.add_bus()
+		AudioServer.set_bus_name(1, "SFX")
+		AudioServer.set_bus_send(1, "Master")
+		AudioServer.add_bus()
+		AudioServer.set_bus_name(2, "Music")
+		AudioServer.set_bus_send(2, "Master")
+
+func play(name: String, pitch := 1.0, vol_db := 0.0, jitter := 0.06) -> void:
+	if not _streams.has(name):
+		return
+	var p := _players[_cursor]
+	_cursor = (_cursor + 1) % VOICES
+	p.stream = _streams[name]
+	p.pitch_scale = clampf(pitch + randf_range(-jitter, jitter), 0.2, 4.0)
+	p.volume_db = vol_db
+	p.play()
+
+func _render(gen: Callable) -> AudioStreamWAV:
+	var s: PackedFloat32Array = gen.call()
+	var bytes := PackedByteArray()
+	bytes.resize(s.size() * 2)
+	for i in s.size():
+		bytes.encode_s16(i * 2, int(clampf(s[i], -1.0, 1.0) * 32767))
+	var w := AudioStreamWAV.new()
+	w.format = AudioStreamWAV.FORMAT_16_BITS
+	w.mix_rate = SR
+	w.stereo = false
+	w.data = bytes
+	return w
+
+func _env(n: int, atk: float, dec: float) -> PackedFloat32Array:
+	var e := PackedFloat32Array()
+	e.resize(n)
+	var a := maxi(1, int(atk * SR))
+	var d := maxi(1, int(dec * SR))
+	for i in n:
+		e[i] = (float(i) / a) if i < a else exp(-(i - a) / float(d) * 6.0)
+	return e
+
+func _prerender_all() -> void:
+	_streams["blip"] = _render(_blip)
+	_streams["chime"] = _render(_chime)
+	_streams["thud"] = _render(_thud)
+	_streams["hit"] = _render(_hit)
+	_streams["shatter"] = _render(_shatter)
+	_streams["coin"] = _render(_coin)
+	_streams["select"] = _render(_select)
+	_streams["deny"] = _render(_deny)
+	_streams["bell"] = _render(_bell)
+	_streams["death"] = _render(_death)
+	_streams["repair"] = _render(_repair)
+	_streams["recruit"] = _render(_recruit)
+
+func _blip() -> PackedFloat32Array:
+	var n := int(0.12 * SR); var e := _env(n, 0.005, 0.06); var o := PackedFloat32Array(); o.resize(n)
+	var ph := 0.0
+	for i in n:
+		ph += (880.0 - 300.0 * float(i)/n) / SR
+		o[i] = (1.0 if fmod(ph,1.0) < 0.5 else -1.0) * e[i] * 0.3
+	return o
+
+func _chime() -> PackedFloat32Array:
+	var n := int(0.5 * SR); var e := _env(n, 0.01, 0.4); var o := PackedFloat32Array(); o.resize(n)
+	for i in n:
+		var t := float(i)/SR
+		var s := sin(TAU*880*t) + 0.6*sin(TAU*1318*t) + 0.4*sin(TAU*1760*t)
+		o[i] = s * e[i] * 0.2
+	return o
+
+func _thud() -> PackedFloat32Array:
+	var n := int(0.18 * SR); var e := _env(n, 0.002, 0.05); var o := PackedFloat32Array(); o.resize(n)
+	var ph := 0.0
+	for i in n:
+		ph += (120.0 - 60.0*float(i)/n) / SR
+		o[i] = (sin(ph)*0.7 + randf_range(-1,1)*0.4) * e[i] * 0.6
+	return o
+
+func _hit() -> PackedFloat32Array:
+	var n := int(0.14 * SR); var e := _env(n, 0.001, 0.03); var o := PackedFloat32Array(); o.resize(n)
+	var ph := 0.0
+	for i in n:
+		ph += (440.0 - 220.0*float(i)/n) / SR
+		o[i] = ((1.0 if fmod(ph,1.0)<0.5 else -1.0)*0.5 + randf_range(-1,1)*0.5) * e[i] * 0.5
+	return o
+
+func _shatter() -> PackedFloat32Array:
+	var n := int(0.45 * SR); var e := _env(n, 0.002, 0.25); var o := PackedFloat32Array(); o.resize(n)
+	var ph := 0.0
+	for i in n:
+		ph += (2000.0 - 1700.0*float(i)/n) / SR
+		o[i] = (sin(ph)*0.3 + randf_range(-1,1)*0.7) * e[i] * 0.5
+	return o
+
+func _coin() -> PackedFloat32Array:
+	var n := int(0.22 * SR); var e := _env(n, 0.003, 0.12); var o := PackedFloat32Array(); o.resize(n)
+	var split := n/2
+	for i in n:
+		var t := float(i)/SR
+		var f := 988.0 if i < split else 1319.0
+		o[i] = sin(TAU*f*t) * e[i] * 0.3
+	return o
+
+func _select() -> PackedFloat32Array:
+	var n := int(0.05 * SR); var e := _env(n, 0.002, 0.02); var o := PackedFloat32Array(); o.resize(n)
+	for i in n:
+		o[i] = sin(TAU*1200*float(i)/SR) * e[i] * 0.25
+	return o
+
+func _deny() -> PackedFloat32Array:
+	var n := int(0.2 * SR); var e := _env(n, 0.005, 0.1); var o := PackedFloat32Array(); o.resize(n)
+	var ph := 0.0
+	for i in n:
+		ph += 140.0 / SR
+		o[i] = (1.0 if fmod(ph,1.0) < 0.5 else -1.0) * e[i] * 0.3
+	return o
+
+func _bell() -> PackedFloat32Array:
+	var n := int(0.8 * SR); var e := _env(n, 0.01, 0.6); var o := PackedFloat32Array(); o.resize(n)
+	for i in n:
+		var t := float(i)/SR
+		var s := sin(TAU*523*t) + 0.5*sin(TAU*659*t) + 0.3*sin(TAU*784*t)
+		o[i] = s * e[i] * 0.25
+	return o
+
+func _death() -> PackedFloat32Array:
+	var n := int(0.6 * SR); var e := _env(n, 0.01, 0.4); var o := PackedFloat32Array(); o.resize(n)
+	var ph := 0.0
+	for i in n:
+		ph += (400.0 - 350.0*float(i)/n) / SR
+		o[i] = (sin(ph)*0.5 + randf_range(-1,1)*0.3) * e[i] * 0.4
+	return o
+
+func _repair() -> PackedFloat32Array:
+	var n := int(0.3 * SR); var e := _env(n, 0.01, 0.2); var o := PackedFloat32Array(); o.resize(n)
+	for i in n:
+		var t := float(i)/SR
+		o[i] = (sin(TAU*660*t) + 0.5*sin(TAU*990*t)) * e[i] * 0.2
+	return o
+
+func _recruit() -> PackedFloat32Array:
+	var n := int(0.4 * SR); var e := _env(n, 0.01, 0.3); var o := PackedFloat32Array(); o.resize(n)
+	for i in n:
+		var t := float(i)/SR
+		var f := 523.0 if i < n/2 else 784.0
+		o[i] = sin(TAU*f*t) * e[i] * 0.25
+	return o
