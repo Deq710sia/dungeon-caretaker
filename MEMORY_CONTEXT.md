@@ -46,7 +46,7 @@ Pick which old frictions to keep ON PURPOSE (weapon loss, checkpoint distance), 
 ## 3. CURRENT CODE STATE (as of latest commit)
 
 ### Architecture
-- `main.gd` — Phase manager. Swaps Node2D + set_script per phase. Has fade transitions (may be buggy — verify). ESC → menu. Calls `_on_phase_exit()` on old phase before freeing (prevents weapon loss).
+- `main.gd` — Phase manager. Swaps Node2D + set_script per phase. Has fade transitions (working — `_on_phase_changed` calls `_start_fade`, 0.15s fade-to-black, swap mid-fade, 0.15s fade back). ESC → menu. Calls `_on_phase_exit()` on old phase before freeing (prevents weapon loss).
 - `GameState` (autoload) — Single source of truth: stage/wave, soul_shards, arsenal[], party[], meta_upgrades{}, run_log[], last_battle_result{}. Saves only meta_upgrades to `user://save_v3.json`.
 - `Juice` (autoload) — Screen shake (trauma-based), hit-stop, particle system (pixel squares, directional, integer-snapped).
 - `SFX` (autoload) — 12 procedural SFX (blip, chime, thud, hit, shatter, coin, select, deny, bell, death, repair, recruit). Pre-rendered as AudioStreamWAV from raw PCM. 8-voice round-robin pool with pitch jitter. SFX + Music buses created at runtime.
@@ -67,13 +67,9 @@ Pick which old frictions to keep ON PURPOSE (weapon loss, checkpoint distance), 
 - **Ghost HP in salvage:** 5 HP (upgradeable via ghost_resilience). I-frames after damage. At 0 HP, forced exit to workshop.
 
 ### Known Bugs (as of latest commit)
-- `oil_grindstone.gd` weapon name drawn at x=160 (should be 240 for 480 viewport)
-- `oil_grindstone.gd` `weapon_angle` computed but never used (no rotation applied)
-- `qte_cooldown` variable tracked but never enforced in salvage
 - Solo survivor can never retreat (requires starting_party_count > 1)
 - Duplicate name risk for recruits (`_random_name` can collide)
 - `planning.gd` has dead code: map-view close via E (lines 139-141, unreachable)
-- Fade transition may not work — `fade_rect` is created in `_ready()` but the fade tween logic in `_on_phase_changed` may be dead code (verify)
 
 ### What's NOT Built Yet
 - Phase verb (ghost incorporeal ability)

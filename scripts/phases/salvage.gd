@@ -32,7 +32,6 @@ var collected_count: int = 0
 var near_interactive: Variant = null
 var interact_pressed: bool = false
 var active_qte: Dictionary = {}
-var qte_cooldown: float = 0.0
 
 # Decorative props (placed once, drawn every frame)
 var props: Array = []  # {pos, sprite}
@@ -248,7 +247,6 @@ func _physics_process(delta: float) -> void:
                 return
         ghost_bob += delta * 6.0
         ghost_squash = lerp(ghost_squash, 1.0, 1.0 - exp(-delta * 8.0))
-        qte_cooldown = max(0, qte_cooldown - delta)
         # Movement with acceleration + friction (momentum-based, not instant)
         var input_dir := Vector2.ZERO
         if active_qte.is_empty():

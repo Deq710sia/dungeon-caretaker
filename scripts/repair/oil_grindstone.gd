@@ -88,16 +88,33 @@ func _draw() -> void:
                 var weapon_tex := Sprites.get_weapon_sprite(gear.type, gear.state)
                 # Draw weapon rotated, positioned on top of the wheel
                 var wpos := wheel_center + Vector2(0, -wheel_r - 10)
-                # We can't easily rotate a texture rect in _draw, so we'll draw it at an offset and use Transform2D
                 var tex_size := 64
                 var offset_pos := wpos - Vector2(tex_size / 2, tex_size / 2)
-                # Draw weapon (just draw it scaled, with a glow when oil hits sweet spot)
+                # Glow effect when oil is in the sweet spot (drawn first, behind weapon)
                 if oil_level >= SWEET_SPOT_MIN and oil_level <= SWEET_SPOT_MAX:
-                        # Glow effect
                         draw_rect(Rect2(offset_pos.x - 4, offset_pos.y - 4, tex_size + 8, tex_size + 8), Color(0.55, 0.95, 0.55, 0.3), true)
-                draw_texture_rect(weapon_tex, Rect2(offset_pos.x, offset_pos.y, tex_size, tex_size), false)
-                # Weapon name — moved below weapon (was at y=-50, off-screen)
-                GameFont.draw_string_centered(self, Vector2(160, offset_pos.y + tex_size + 12), gear.display_name, 8, gear.wear_color())
+                # Sparks fly off the wheel contact point when oil is flowing — visual
+                # feedback for "rust flakes falling off as quality increases" (DESIGN_PLAN 3A)
+                if oil_level > 0.3:
+                        for i in 4:
+                                var spark_a := weapon_angle + i * (PI / 2.0) + Time.get_ticks_msec() * 0.01
+                                var spark_off := Vector2(cos(spark_a), sin(spark_a)) * (tex_size / 2.0 + 4)
+                                var sp := wpos + spark_off
+                                draw_circle(sp, 1, Color(1.0, 0.75, 0.25, 0.7))
+                # Apply weapon_angle as actual rotation via draw_set_transform.
+                # weapon_angle was updated in _process but never used before — the
+                # original code computed it and then drew the weapon with no rotation.
+                # The 16x16 source sprite is scaled 4x to tex_size (64) and rotated
+                # around its center (wpos). draw_texture offsets by (-8,-8) so the
+                # 16x16 quad centers on wpos after scaling.
+                draw_set_transform(wpos, weapon_angle, Vector2(4, 4))
+                draw_texture(weapon_tex, Vector2(-8, -8))
+                draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+                # Weapon name — centered under the weapon. Was at x=160, a stale value
+                # from when the weapon was drawn at a different x. The weapon now sits
+                # at wheel_center.x = vp.x * 0.35 = 168, so centering on wheel_center.x
+                # keeps the label aligned with the sprite.
+                GameFont.draw_string_centered(self, Vector2(int(wheel_center.x), int(offset_pos.y + tex_size + 12)), gear.display_name, 8, gear.wear_color())
         # Oil meter (vertical bar on right)
         var meter_x: float = vp.x * 0.75
         var meter_y: float = vp.y * 0.20
