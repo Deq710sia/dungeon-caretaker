@@ -16,6 +16,9 @@ var ghost_friction: float = 12.0
 var ghost_bob: float = 0.0
 var ghost_squash: float = 1.0
 var ghost_facing: Vector2 = Vector2.DOWN  # for look-ahead
+var ghost_hp: int = 5  # V6: ghost has health. 5 hits = dead = forced to exit
+var ghost_hp_max: int = 5
+var ghost_invuln: float = 0.0  # i-frames after taking damage
 var camera_y: float = 0.0
 var cam: Camera2D
 
@@ -35,6 +38,7 @@ var props: Array = []  # {pos, sprite}
 var hud_stage: Label
 var hud_collected: Label
 var hud_hint: Label
+var hud_hp: Label  # V6: ghost health display
 
 const CORPSE_NAMES := [
         "Bram the Bold", "Wren the Swift", "Cael the Steady", "Mira the Wise",
@@ -61,33 +65,39 @@ func _build_level() -> void:
         corpses.clear()
         hazards.clear()
         props.clear()
-        # Corpses
-        var corpse_count := 4 + GameState.stage
+        # Corpses — FEWER and with WORSE states. Was 4+stage (too many).
+        # Now 2+stage/2, so stage 1 = 2-3 corpses, stage 5 = 4-5.
+        # States are randomized from the WORST pool, not cycled predictably.
+        var corpse_count := 2 + int(GameState.stage / 2)
         var name_pool := CORPSE_NAMES.duplicate()
         name_pool.shuffle()
         var death_pool := CORPSE_DEATHS.duplicate()
         death_pool.shuffle()
+        var all_types := ["sword", "helm", "staff", "robe"]
+        all_types.shuffle()
+        var all_states := [Weapon.State.BLOODIED, Weapon.State.RUSTED, Weapon.State.HAUNTED, Weapon.State.CURSED]
         for i in corpse_count:
                 var x := (2 + (i * 5) % (CORRIDOR_W - 4)) * TILE + TILE / 2
                 var y := (10 + i * 10) * TILE + TILE / 2
-                var types := ["sword", "helm", "staff", "robe"]
-                var states := [Weapon.State.BLOODIED, Weapon.State.RUSTED, Weapon.State.HAUNTED, Weapon.State.CURSED]
+                var type: String = all_types[i % all_types.size()]
+                var state: int = all_states[randi() % all_states.size()]
                 var name: String = name_pool[i % name_pool.size()]
                 var death: String = death_pool[i % death_pool.size()]
                 corpses.append({
                         "pos": Vector2(x, y),
-                        "gear_type": types[i % types.size()],
-                        "gear_state": states[i % states.size()],
-                        "gear_name": _gen_weapon_name(types[i % types.size()]),
+                        "gear_type": type,
+                        "gear_state": state,
+                        "gear_name": _gen_weapon_name(type),
                         "corpse_name": name,
                         "death_cause": death,
                         "collected": false,
                 })
-        # Hazards
-        var hazard_count := 3 + GameState.stage
+        # Hazards — MORE and CLOSER together. Was 3+stage (too few, easy to avoid).
+        # Now 4+stage*2, placed at tighter intervals.
+        var hazard_count := 4 + GameState.stage * 2
         for i in hazard_count:
-                var x := (2 + (i * 7) % (CORRIDOR_W - 4)) * TILE + TILE / 2
-                var y := (6 + i * 12) * TILE + TILE / 2
+                var x := (2 + (i * 3) % (CORRIDOR_W - 4)) * TILE + TILE / 2
+                var y := (6 + i * 6) * TILE + TILE / 2  # was 12 spacing, now 6 — tighter
                 for c in corpses:
                         if c.pos.distance_to(Vector2(x, y)) < TILE * 2:
                                 y += TILE * 3
@@ -143,6 +153,14 @@ func _build_hud() -> void:
         hud_collected.size = Vector2(96, 10)
         hud_collected.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
         panel.add_child(hud_collected)
+        # Ghost HP display (hearts)
+        hud_hp = Label.new()
+        hud_hp.text = "HP: " + "♥".repeat(ghost_hp) + "·".repeat(ghost_hp_max - ghost_hp)
+        hud_hp.add_theme_font_size_override("font_size", 8)
+        hud_hp.add_theme_color_override("font_color", Palette.TEXT_RED)
+        hud_hp.position = Vector2(130, 2)
+        hud_hp.size = Vector2(80, 10)
+        panel.add_child(hud_hp)
         hud_hint = Label.new()
         hud_hint.text = "WASD: move | E: interact"
         hud_hint.add_theme_font_size_override("font_size", 8)
@@ -192,11 +210,12 @@ func _physics_process(delta: float) -> void:
                 _handle_interact()
         if not Input.is_action_pressed("interact"):
                 interact_pressed = false
-        # Hazard contact
+        # Hazard contact — collision radius 14 (was 10, too small for 16px ghost)
         for h in hazards:
-                if h.active and h.cooldown <= 0 and ghost_pos.distance_to(h.pos) < 10:
+                if h.active and h.cooldown <= 0 and ghost_pos.distance_to(h.pos) < 14 and ghost_invuln <= 0:
                         _take_hazard_damage(h)
                 h.cooldown = max(0, h.cooldown - delta)
+        ghost_invuln = max(0, ghost_invuln - delta)
         # Exit
         if ghost_pos.distance_to(exit_pos) < 12:
                 _finish()
@@ -257,6 +276,8 @@ func _collect_corpse(c: Dictionary) -> void:
 
 func _take_hazard_damage(h: Dictionary) -> void:
         h.cooldown = 1.5
+        ghost_invuln = 1.0  # 1 second of i-frames
+        ghost_hp -= 1  # V6: ghost has health now
         Juice.add_trauma(0.6)
         Juice.hit_stop(0.1)
         Juice.spawn_particles(ghost_pos, 10, Palette.TEXT_RED, 50.0, 0.4, Vector2(0, -1))
@@ -264,10 +285,18 @@ func _take_hazard_damage(h: Dictionary) -> void:
         if not GameState.arsenal.is_empty():
                 var w: Weapon = GameState.arsenal[-1]
                 w.take_durability_damage(15, "hit by %s" % h.type)
-                hud_hint.text = "Hit %s! %s took damage!" % [h.type, w.display_name]
+                hud_hint.text = "Hit! -1 HP | %s damaged!" % w.display_name
+        else:
+                hud_hint.text = "Hit! -1 HP | Ghost HP: %d/%d" % [ghost_hp, ghost_hp_max]
         var away: Vector2 = (ghost_pos - h.pos).normalized()
         ghost_pos += away * 16
         ghost_vel = away * 30  # knockback
+        # If ghost is out of HP, force exit to workshop
+        if ghost_hp <= 0:
+                hud_hint.text = "The ghost fades... forced to retreat!"
+                _finish()
+        else:
+                hud_hp.text = "HP: " + "♥".repeat(ghost_hp) + "·".repeat(ghost_hp_max - ghost_hp)
 
 func _start_qte(hazard: Dictionary) -> void:
         var verb := "TAP"

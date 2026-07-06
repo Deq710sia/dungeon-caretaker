@@ -40,6 +40,8 @@ var hud_shards: Label
 var hud_carrying: Label
 var prompt_label: Label
 var ring_bell_btn: Button
+var inspect_panel: Panel = null
+var inspect_visible: bool = false
 
 func _ready() -> void:
         if GameState.party.is_empty():
@@ -163,6 +165,11 @@ func _process(delta: float) -> void:
                 _handle_interact()
         if not Input.is_action_pressed("interact"):
                 interact_pressed = false
+        # V6: Press TAB to inspect carried weapon
+        if Input.is_key_pressed(KEY_TAB) and ghost.carrying != null and not inspect_visible:
+                _show_weapon_inspect(ghost.carrying)
+        if not Input.is_key_pressed(KEY_TAB) and inspect_visible:
+                _hide_weapon_inspect()
         Juice.update_particles(delta)
         _update_hud()
         queue_redraw()
@@ -362,7 +369,7 @@ func _draw() -> void:
         # Particles
         Juice.draw_particles(self)
         # Hint
-        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 2), "WASD: move | E: interact", 5, Palette.TEXT_DIM)
+        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 2), "WASD: move | E: interact | TAB: inspect weapon", 5, Palette.TEXT_DIM)
 
 func _draw_glow(pos: Vector2, radius: int, color: Color) -> void:
         var center := Vector2(int(pos.x), int(pos.y))
@@ -370,3 +377,68 @@ func _draw_glow(pos: Vector2, radius: int, color: Color) -> void:
                 var c := color
                 c.a = c.a * (1.0 - float(r) / float(radius)) * 0.8
                 draw_circle(center, r, c)
+
+func _show_weapon_inspect(w: Weapon) -> void:
+        if inspect_panel:
+                inspect_panel.queue_free()
+        inspect_visible = true
+        inspect_panel = Panel.new()
+        inspect_panel.position = Vector2(40, 30)
+        inspect_panel.size = Vector2(240, 120)
+        add_child(inspect_panel)
+        var title := Label.new()
+        title.text = w.display_name
+        title.add_theme_font_size_override("font_size", 8)
+        title.add_theme_color_override("font_color", w.wear_color())
+        title.position = Vector2(8, 4)
+        title.size = Vector2(224, 12)
+        inspect_panel.add_child(title)
+        var state_line := Label.new()
+        state_line.text = "State: %s | Wear: %s" % [w.state_name(), w.wear_name()]
+        state_line.add_theme_font_size_override("font_size", 7)
+        state_line.add_theme_color_override("font_color", Palette.TEXT)
+        state_line.position = Vector2(8, 18)
+        state_line.size = Vector2(224, 10)
+        inspect_panel.add_child(state_line)
+        var dur_line := Label.new()
+        dur_line.text = "Durability: %d/%d" % [w.durability, w.durability_max]
+        dur_line.add_theme_font_size_override("font_size", 7)
+        dur_line.add_theme_color_override("font_color", Palette.TEXT)
+        dur_line.position = Vector2(8, 30)
+        dur_line.size = Vector2(224, 10)
+        inspect_panel.add_child(dur_line)
+        var stats := Label.new()
+        stats.text = "SHP:%d%% BAL:%d%% PWR:%d%% MYS:%d%%" % [int(w.sharpness*100), int(w.balance*100), int(w.power*100), int(w.mystic*100)]
+        stats.add_theme_font_size_override("font_size", 7)
+        stats.add_theme_color_override("font_color", Palette.TEXT_BLUE)
+        stats.position = Vector2(8, 42)
+        stats.size = Vector2(224, 10)
+        inspect_panel.add_child(stats)
+        var blurb := Label.new()
+        blurb.text = w.authoring_blurb()
+        blurb.add_theme_font_size_override("font_size", 6)
+        blurb.add_theme_color_override("font_color", Palette.TEXT_DIM)
+        blurb.position = Vector2(8, 54)
+        blurb.size = Vector2(224, 20)
+        blurb.autowrap_mode = TextServer.AUTOWRAP_WORD
+        inspect_panel.add_child(blurb)
+        var wielder := Label.new()
+        wielder.text = "Wielder: %s | Kills: %d" % [w.wielder if w.wielder != "" else "unassigned", w.kill_log.size()]
+        wielder.add_theme_font_size_override("font_size", 6)
+        wielder.add_theme_color_override("font_color", Palette.TEXT_DIM)
+        wielder.position = Vector2(8, 76)
+        wielder.size = Vector2(224, 10)
+        inspect_panel.add_child(wielder)
+        var hint := Label.new()
+        hint.text = "[TAB] close"
+        hint.add_theme_font_size_override("font_size", 6)
+        hint.add_theme_color_override("font_color", Palette.TEXT_GOLD)
+        hint.position = Vector2(8, 104)
+        hint.size = Vector2(224, 10)
+        inspect_panel.add_child(hint)
+
+func _hide_weapon_inspect() -> void:
+        if inspect_panel:
+                inspect_panel.queue_free()
+                inspect_panel = null
+        inspect_visible = false

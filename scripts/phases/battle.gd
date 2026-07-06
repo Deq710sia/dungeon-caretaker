@@ -51,16 +51,23 @@ func _spawn_party_units() -> void:
                 if not adv.get("alive", true):
                         continue
                 var hp := int(adv.get("hp", 100))
-                var atk := int(adv.get("atk", 18))
-                var def_ := int(adv.get("def", 12))
+                # REBALANCED: base stats are near-zero. Weapons/armor are the PRIMARY
+                # source of damage and defense, not a small bonus. An unarmed adventurer
+                # does 3-5 damage and has 2 defense — they can't win fights alone.
+                var base_atk := 4  # was 18 — fists only
+                var base_def := 2  # was 12 — clothes only
+                var atk := base_atk
+                var def_ := base_def
                 if adv.get("equipped_weapon") != null:
                         var w: Weapon = adv.equipped_weapon
                         var mult: float = w.stat_multiplier()
-                        atk = int(atk * (0.7 + mult * 0.5))
+                        # Weapon adds 10-30 damage based on quality (was 0.7 + mult*0.5 on top of 18)
+                        atk = base_atk + int(25 * mult)
                 if adv.get("equipped_armor") != null:
                         var a: Weapon = adv.equipped_armor
                         var mult: float = a.stat_multiplier()
-                        def_ = int(def_ * (0.7 + mult * 0.5))
+                        # Armor adds 5-15 defense based on quality
+                        def_ = base_def + int(12 * mult)
                 var iq_mult: float = 1.0 + float(GameState.meta_upgrades["adventurer_training"]) * 0.05
                 atk = int(atk * iq_mult)
                 party_units.append({
