@@ -64,6 +64,7 @@ func start_new_run() -> void:
         party.clear()
         last_battle_result.clear()
         run_log.clear()
+        _recently_used_names.clear()  # reset name pool for the new run
         # Starter weapons — use the weighted roll_affliction system.
         # No more hardcoded states or guaranteed haunts. Each starter rolls
         # independently, so every run starts with a different mix of stations
@@ -206,8 +207,37 @@ func spawn_party() -> void:
         party_changed.emit()
 
 func _random_name(seed_i: int) -> String:
-        var names := ["Bram", "Wren", "Cael", "Mira", "Edric", "Solis", "Thora", "Quill"]
-        return names[(stage + wave + seed_i) % names.size()]
+        # Randomized names — was deterministic (always same names in same order
+        # based on stage+wave+seed_i). Now shuffles the pool per-call and
+        # avoids repeating the most recently used name. Each party member
+        # gets a distinct name from the shuffled pool.
+        var names := ["Bram", "Wren", "Cael", "Mira", "Edric", "Solis", "Thora", "Quill",
+                "Harlan", "Isolde", "Corwin", "Vashti", "Petra", "Ambrose", "Sasha", "Lyra",
+                "Gareth", "Eluned", "Roderick", "Fenella"]
+        # Use a global shuffle so the same name doesn't repeat across recruits
+        # in the same run. Track used names in a static-ish var on GameState.
+        if not has_meta("_used_names"):
+                var used := []
+                for n in names:
+                        if n in _recently_used_names:
+                                used.append(n)
+                set_meta("_used_names", used)
+        # Filter out recently-used names, shuffle the rest, pick the first.
+        var available := []
+        for n in names:
+                if n not in _recently_used_names:
+                        available.append(n)
+        if available.is_empty():
+                available = names.duplicate()
+        available.shuffle()
+        var picked: String = available[0]
+        _recently_used_names.append(picked)
+        # Keep only the last 6 names to avoid exhausting the pool.
+        if _recently_used_names.size() > 6:
+                _recently_used_names.pop_front()
+        return picked
+
+var _recently_used_names: Array = []
 
 # === RECRUITING ===
 ## Can recruit if: at least one living member (to vouch) AND party isn't full.

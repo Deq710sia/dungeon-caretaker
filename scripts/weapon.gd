@@ -93,6 +93,93 @@ const STATE_COLORS := {
 	State.SHATTERED: Palette.STATE_SHATTERED,
 }
 
+## Rolls a death-cause-influenced affliction for a weapon whose wielder
+## just died. This is LAYER 2 — applied ON TOP of the weapon's existing
+## state when the owner dies in combat. The enemy type that killed the
+## wielder influences which affliction the weapon picks up:
+##
+##   slime  — corrosive → skews DAMAGED (acid etches the metal)
+##   skeleton — blunt trauma → skews BROKEN (bone weapons shatter gear)
+##   bat    — swarm → skews BLOODIED (many small cuts, blood everywhere)
+##
+## The death also ALWAYS adds 1 unexorcised_death (the weapon was present
+## for a death — it carries dread regardless of enemy type). So a weapon
+## recovered from a slime kill is likely to need grind (corrosion) AND
+## the Altar (haunt). This gives salvage a tactical read: different
+## enemies leave different marks on the gear.
+##
+## Returns a dict with wear_state, unexorcised_deaths, durability_damage.
+static func roll_affliction_from_death(enemy_type: String, current_wear: int) -> Dictionary:
+	# Death always adds haunt — the weapon witnessed its wielder's end.
+	var deaths := 1
+	# Wear shift weights by enemy type. Death always pushes toward worse
+	# wear, but the DIRECTION depends on the enemy.
+	var wear_shift_weights: Dictionary = {
+		"slime":     {WearState.WORN: 20, WearState.DAMAGED: 50, WearState.BROKEN: 30},
+		"skeleton":  {WearState.WORN: 10, WearState.DAMAGED: 30, WearState.BROKEN: 60},
+		"bat":       {WearState.WORN: 40, WearState.DAMAGED: 40, WearState.BROKEN: 20},
+	}
+	var weights: Dictionary = wear_shift_weights.get(enemy_type, wear_shift_weights["slime"])
+	# Only roll shifts that are WORSE than current wear — a death can't
+	# improve a weapon. Filter the weights to only include >= current.
+	var filtered: Dictionary = {}
+	var total := 0
+	for ws in weights:
+		if ws >= current_wear:
+			filtered[ws] = weights[ws]
+			total += weights[ws]
+	if total == 0:
+		# Already at max wear — death just confirms BROKEN.
+		return {"wear_state": WearState.BROKEN, "unexorcised_deaths": deaths, "durability_damage_pct": 0.0}
+	var roll := randi() % total
+	var accumulated := 0
+	var new_wear: int = current_wear
+	for ws in filtered:
+		accumulated += filtered[ws]
+		if roll < accumulated:
+			new_wear = ws
+			break
+	# Durability damage scales with how many wear tiers the death pushed.
+	var tiers_dropped: int = new_wear - current_wear
+	var dur_dmg_pct: float = tiers_dropped * 0.20  # 20% of max per tier dropped
+	return {"wear_state": new_wear, "unexorcised_deaths": deaths, "durability_damage_pct": dur_dmg_pct}
+
+## Simulates the first party's deaths (mathematically, no rendering) for
+## the very first run. Returns an array of death records that the gate
+## phase uses to populate grave markers AND to seed the starter weapons'
+## afflictions. This replaces the hardcoded "Toren" and "Yselde" graves
+## with a simulated party whose deaths explain why the arsenal is full
+## of battered gear.
+##
+## The simulation:
+##   1. Generates 2-3 random party members (random names, random classes)
+##   2. For each, rolls a random enemy type they died to
+##   3. Returns death records with name, class, enemy, and the weapon
+##      affliction that death would produce (used to seed starter gear)
+static func simulate_first_party_deaths() -> Array:
+	var first_names := ["Bram", "Wren", "Cael", "Mira", "Edric", "Solis", "Thora", "Quill",
+		"Harlan", "Isolde", "Corwin", "Vashti", "Petra", "Ambrose", "Sasha", "Lyra",
+		"Gareth", "Eluned", "Roderick", "Fenella"]
+	first_names.shuffle()
+	var count := 2 + (randi() % 2)  # 2 or 3 predecessors
+	var enemies := ["slime", "skeleton", "bat"]
+	var deaths := []
+	for i in count:
+		var cls := "knight" if i % 2 == 0 else "mage"
+		var enemy := enemies[randi() % enemies.size()]
+		var gear_type := "sword" if cls == "knight" else "staff"
+		# The predecessor's gear is what the player will salvage — so its
+		# affliction is determined by what killed its wielder.
+		var affliction := roll_affliction_from_death(enemy, WearState.WORN)
+		deaths.append({
+			"name": first_names[i],
+			"class": cls,
+			"enemy": enemy,
+			"gear_type": gear_type,
+			"affliction": affliction,
+		})
+	return deaths
+
 func _init(p_type: String = "sword", p_name: String = "Weapon", p_history: String = "") -> void:
 	type = p_type
 	display_name = p_name
@@ -346,17 +433,34 @@ func deliver_to(adventurer: Dictionary, all_party: Array = []) -> void:
 	adventurer[slot_key] = self
 	wielder = adventurer.get("name", "")
 
-func apply_combat_damage(owner_died: bool) -> void:
+func apply_combat_damage(owner_died: bool, enemy_type: String = "") -> void:
 	if owner_died:
-		unexorcised_deaths += 1
-		match state:
-			State.PRISTINE: state = State.HAUNTED
-			State.BLOODIED: state = State.HAUNTED
-			State.RUSTED: state = State.SHATTERED
-			State.HAUNTED: state = State.CURSED
-			State.CURSED: state = State.SHATTERED
-			State.SHATTERED: pass
-		history.append("Worn during a death on Stage %d Wave %d. Now %s." % [GameState.stage, GameState.wave, state_name()])
+		# Layer 2: death-cause-influenced affliction. The enemy type that
+		# killed the wielder shifts the weapon's wear state in a direction
+		# that matches that enemy's damage style (slime=corrosive→DAMAGED,
+		# skeleton=blunt→BROKEN, bat=swarm→BLOODIED). Always adds 1
+		# unexorcised_death regardless of enemy — the weapon witnessed a
+		# death, so it carries dread.
+		var death_affliction := roll_affliction_from_death(enemy_type, wear_state)
+		unexorcised_deaths += death_affliction.unexorcised_deaths
+		wear_state = death_affliction.wear_state
+		if death_affliction.durability_damage_pct > 0.0:
+			var dmg := int(durability_max * death_affliction.durability_damage_pct)
+			durability = max(0, durability - dmg)
+		if wear_state == WearState.BROKEN and not is_broken:
+			break_weapon(enemy_type if enemy_type != "" else "slain in battle")
+		# Flavor state from the death
+		match wear_state:
+			WearState.BROKEN: state = State.SHATTERED
+			_:
+				if unexorcised_deaths > 0:
+					state = State.HAUNTED
+				elif type in ["sword", "staff"]:
+					state = State.BLOODIED
+				else:
+					state = State.RUSTED
+		var enemy_label := enemy_type if enemy_type != "" else "the enemy"
+		history.append("Worn during a death on Stage %d Wave %d — slain by %s. Now %s." % [GameState.stage, GameState.wave, enemy_label, state_name()])
 	else:
 		if state == State.PRISTINE:
 			state = State.BLOODIED

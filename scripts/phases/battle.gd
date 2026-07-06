@@ -360,6 +360,9 @@ func _attack_party(enemy: Dictionary, unit: Dictionary) -> void:
 		unit.alive = false
 		unit.hp = 0
 		unit.adv.alive = false
+		# Track which enemy type killed this unit — used by apply_combat_damage
+		# in _end_battle to apply the death-cause affliction layer 2.
+		unit.killed_by = enemy.sprite
 		Juice.add_trauma(0.4)
 		Juice.hit_stop(0.12)
 		Juice.spawn_particles(unit.pos, 10, Palette.BLOOD, 50.0, 0.7)
@@ -371,29 +374,38 @@ func _end_battle() -> void:
 	# Living members' weapons go back to arsenal. This is the core loop:
 	# death → weapons on ground → salvage picks them up → repair → reassign.
 	var fallen_gear: Array = []  # {weapon, armor, name, class, cause}
+	# Build a lookup from party name → killed_by enemy type (for layer-2
+	# death-cause affliction). party_units holds the combat-side dicts
+	# which have the killed_by field set when the unit died.
+	var killed_by_map: Dictionary = {}
+	for u in party_units:
+		if not u.alive and u.get("killed_by", "") != "":
+			killed_by_map[u.adv.get("name", "?")] = u.killed_by
 	for adv in GameState.party:
 		var equipped_w: Variant = adv.get("equipped_weapon")
 		var equipped_a: Variant = adv.get("equipped_armor")
 		var owner_died: bool = not adv.get("alive", true)
+		var adv_name: String = adv.get("name", "?")
+		var killer: String = killed_by_map.get(adv_name, "")
 		if owner_died:
 			# Dead adventurer: their gear stays on the ground
 			if equipped_w != null:
-				equipped_w.apply_combat_damage(true)
+				equipped_w.apply_combat_damage(true, killer)
 				fallen_gear.append({
 					"weapon": equipped_w,
-					"name": adv.get("name", "?"),
+					"name": adv_name,
 					"class": adv.get("class", "knight"),
 					"slot": "weapon",
-					"cause": "slain in battle",
+					"cause": "slain by %s" % (killer if killer != "" else "the enemy"),
 				})
 			if equipped_a != null:
-				equipped_a.apply_combat_damage(true)
+				equipped_a.apply_combat_damage(true, killer)
 				fallen_gear.append({
 					"weapon": equipped_a,
-					"name": adv.get("name", "?"),
+					"name": adv_name,
 					"class": adv.get("class", "knight"),
 					"slot": "armor",
-					"cause": "slain in battle",
+					"cause": "slain by %s" % (killer if killer != "" else "the enemy"),
 				})
 		else:
 			# Living adventurer: their gear returns to arsenal

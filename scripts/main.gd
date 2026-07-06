@@ -31,6 +31,10 @@ func _ready() -> void:
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(background)
 	background.set("layout_mode", 1)
+	# process_mode = ALWAYS so _input still fires when the tree is paused
+	# (needed for ESC to resume from pause). Without this, the pause
+	# overlay's buttons can't be clicked and ESC can't unpause.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	GameState.phase_changed.connect(_on_phase_changed)
 	_on_phase_changed("menu")
 	DisplayServer.window_set_title("Dungeon Caretaker: A Ghost's Salvage")
@@ -86,6 +90,10 @@ func _pause() -> void:
 	pause_overlay = CanvasLayer.new()
 	pause_overlay.name = "PauseOverlay"
 	pause_overlay.layer = 200
+	# process_mode = ALWAYS so the overlay's buttons still receive clicks
+	# while the tree is paused. Without this, the buttons are frozen and
+	# Resume is unreachable (the bug the user reported).
+	pause_overlay.process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child(pause_overlay)
 	# Dim background
 	var dim := ColorRect.new()
@@ -110,6 +118,7 @@ func _pause() -> void:
 	resume_btn.add_theme_font_size_override("font_size", 8)
 	resume_btn.position = Vector2(160, 130)
 	resume_btn.size = Vector2(160, 20)
+	resume_btn.process_mode = Node.PROCESS_MODE_ALWAYS
 	resume_btn.pressed.connect(_unpause)
 	pause_overlay.add_child(resume_btn)
 	# Quit to menu button
@@ -118,6 +127,7 @@ func _pause() -> void:
 	quit_btn.add_theme_font_size_override("font_size", 8)
 	quit_btn.position = Vector2(160, 155)
 	quit_btn.size = Vector2(160, 18)
+	quit_btn.process_mode = Node.PROCESS_MODE_ALWAYS
 	quit_btn.pressed.connect(_quit_to_menu)
 	pause_overlay.add_child(quit_btn)
 	# Hint

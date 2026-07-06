@@ -293,6 +293,15 @@ func _physics_process(delta: float) -> void:
         # Movement with acceleration + friction (matched rate, so the ghost
         # accelerates and stops at the same tempo — floaty but precise).
         # Phase verb doubles target speed while active.
+        #
+        # Direction-change polish: when the player reverses direction rapidly,
+        # we don't want the ghost to slow down much — it should feel responsive.
+        # So: if there's input, we accelerate toward the new target (which
+        # naturally handles direction changes via move_toward). Only when
+        # there's NO input do we decelerate to zero. The deceleration rate
+        # is lower than the acceleration rate so the ghost coasts a bit on
+        # release rather than stopping dead — but still stops fast enough
+        # to feel precise.
         var target_speed: float = ghost_speed * (2.0 if phase_active > 0 else 1.0)
         var input_dir := Vector2.ZERO
         if active_qte.is_empty():
@@ -303,9 +312,15 @@ func _physics_process(delta: float) -> void:
         if input_dir != Vector2.ZERO:
                 input_dir = input_dir.normalized()
                 ghost_facing = input_dir
+                # Acceleration is full when there's input — direction changes
+                # happen fast because move_toward moves toward the new target
+                # at the full accel rate.
                 ghost_vel = ghost_vel.move_toward(input_dir * target_speed, ghost_accel * delta)
         else:
-                ghost_vel = ghost_vel.move_toward(Vector2.ZERO, ghost_accel * delta)
+                # Deceleration when no input — lower rate (60% of accel) so the
+                # ghost coasts slightly on release rather than stopping dead.
+                # This feels floaty-but-precise (it's a ghost, not a tank).
+                ghost_vel = ghost_vel.move_toward(Vector2.ZERO, ghost_accel * 0.6 * delta)
         ghost_pos += ghost_vel * delta
         ghost_pos.x = clampf(ghost_pos.x, TILE, (CORRIDOR_W - 1) * TILE)
         ghost_pos.y = clampf(ghost_pos.y, 22, (CORRIDOR_H - 1) * TILE)

@@ -121,6 +121,8 @@ func _process(delta: float) -> void:
 	ghost.bob += delta * (3.0 + speed_pct * 6.0)
 	ghost.squash = lerp(ghost.squash, 1.0, 1.0 - exp(-delta * 8.0))
 	# Movement — phase verb doubles target speed while active.
+	# Direction-change polish: full accel when input present, 60% decel
+	# when no input (coasts slightly on release).
 	var target_speed: float = ghost.speed * (2.0 if phase_active > 0 else 1.0)
 	var input_dir := Vector2.ZERO
 	if not map_view_active:
@@ -133,7 +135,7 @@ func _process(delta: float) -> void:
 		_last_input_dir = input_dir
 		ghost.vel = ghost.vel.move_toward(input_dir * target_speed, ghost.accel * delta)
 	else:
-		ghost.vel = ghost.vel.move_toward(Vector2.ZERO, ghost.accel * delta)
+		ghost.vel = ghost.vel.move_toward(Vector2.ZERO, ghost.accel * 0.6 * delta)
 	ghost.pos += ghost.vel * delta
 	ghost.pos.x = clampf(ghost.pos.x, 12, ROOM_W - 12)
 	ghost.pos.y = clampf(ghost.pos.y, HUD_H + 30, ROOM_H - 20)

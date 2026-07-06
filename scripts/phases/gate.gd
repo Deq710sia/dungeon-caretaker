@@ -40,10 +40,17 @@ func _build_graves() -> void:
 	if not fallen.is_empty():
 		names = fallen
 	elif first_ever_run:
-		# Nobody's died yet in THIS run — these are the caretaker's
-		# predecessors, establishing why the dungeon entrance is already
-		# littered with weapons for the taking.
-		names = ["Toren", "Yselde"]
+		# First run: simulate how the predecessors died instead of using
+		# hardcoded "Toren" and "Yselde." The simulation generates 2-3
+		# random party members with random names and random death causes.
+		# The grave markers show the names; the death causes flavor the
+		# arsenal's battered state (handled via Weapon.simulate_first_party_deaths
+		# which is called separately to seed starter weapon afflictions).
+		if not GameState.has_meta("_first_party_sim"):
+			GameState.set_meta("_first_party_sim", Weapon.simulate_first_party_deaths())
+		var sim: Array = GameState.get_meta("_first_party_sim")
+		for death in sim:
+			names.append(death.name)
 	else:
 		names = []  # a clean wave — no fresh graves to add
 	var spacing: float = min(70.0, 280.0 / max(1, names.size()))
@@ -74,9 +81,11 @@ func _process(delta: float) -> void:
 	if Input.is_action_pressed("move_down"):  input_dir.y += 1
 	if input_dir != Vector2.ZERO:
 		input_dir = input_dir.normalized()
+		# Full accel when input present — direction changes feel responsive.
 		ghost_vel = ghost_vel.move_toward(input_dir * 55.0, 300.0 * delta)
 	else:
-		ghost_vel = ghost_vel.move_toward(Vector2.ZERO, 300.0 * delta)
+		# 60% decel when no input — coasts slightly rather than stopping dead.
+		ghost_vel = ghost_vel.move_toward(Vector2.ZERO, 300.0 * 0.6 * delta)
 	ghost_pos += ghost_vel * delta
 	ghost_pos.x = clampf(ghost_pos.x, 12, ROOM_W - 12)
 	ghost_pos.y = clampf(ghost_pos.y, 36, ROOM_H - 30)
@@ -112,7 +121,7 @@ func _draw() -> void:
 	# Gate arch — above the gate (which is now at the bottom)
 	for x in range(GATE_POS.x - 48, GATE_POS.x + 49, 16):
 		draw_texture(Sprites.get_sprite("wall"), Vector2(x, GATE_POS.y - 16))
-	draw_texture_rect(Sprites.get_sprite("door"), Rect2(GATE_POS.x - 24, GATE_POS.y - 24, 48, 48), false)
+	draw_texture_rect(Sprites.get_sprite("door_flipped"), Rect2(GATE_POS.x - 24, GATE_POS.y - 24, 48, 48), false)
 	if near_gate and not opening:
 		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
 		draw_rect(Rect2(GATE_POS.x - 20, GATE_POS.y - 20, 40, 40), Color(0.85, 0.75, 0.55, pulse), false, 1)

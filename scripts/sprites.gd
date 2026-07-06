@@ -45,6 +45,7 @@ static func _build(name: String) -> Image:
 		"corpse":      _draw_corpse(img)
 		"bones":       _draw_bones(img)
 		"door":        _draw_door(img)
+		"door_flipped": _draw_door_flipped(img)
 		"stairs":      _draw_stairs(img)
 		"bell":        _draw_bell(img)
 		"map_table":   _draw_map_table(img)
@@ -767,6 +768,34 @@ static func _draw_door(img: Image) -> void:
 	# Handle
 	_rect(img, 11, 7, 2, 2, gold)
 	_px(img, 11, 7, Palette.GOLD_LT)
+
+static func _draw_door_flipped(img: Image) -> void:
+	# Same as _draw_door but vertically flipped — the gate scene now has
+	# the gate at the BOTTOM of the screen (player walks down to it), so
+	# the door sprite needs to read as "entering from above." Flipping
+	# puts the handle at the top and the ironwork facing the player.
+	var wood := Palette.WOOD_DK
+	var wood_lt := Palette.WOOD
+	var shadow := Palette.VOID
+	var gold := Palette.GOLD
+	# Frame
+	_rect(img, 0, 0, 16, 16, shadow)
+	# Door
+	_rect(img, 2, 1, 12, 14, wood)
+	_rect(img, 2, 14, 12, 1, wood_lt)  # bottom highlight (was top)
+	_rect(img, 2, 1, 1, 14, wood_lt)  # left highlight
+	_rect(img, 13, 1, 1, 14, Palette.WOOD_DK)  # right shadow
+	# Planks
+	_rect(img, 5, 1, 1, 14, shadow)
+	_rect(img, 9, 1, 1, 14, shadow)
+	# Iron rivets
+	for i in 3:
+		_px(img, 3, 4 + i * 4, Palette.IRON)
+		_px(img, 7, 4 + i * 4, Palette.IRON)
+		_px(img, 11, 4 + i * 4, Palette.IRON)
+	# Handle — flipped to top (was at y=7, now at y=7 but reads upward)
+	_rect(img, 11, 5, 2, 2, gold)
+	_px(img, 11, 5, Palette.GOLD_LT)
 
 static func _draw_stairs(img: Image) -> void:
 	var stone := Palette.STONE
