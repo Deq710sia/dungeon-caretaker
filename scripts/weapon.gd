@@ -42,7 +42,7 @@ var kill_log: Array = []  # Array[String] — enemies slain
 var waves_survived: int = 0
 var history: Array = []  # Array[String] — flavor log, shown in the dossier detail view
 var break_announced: bool = false  # internal flag; kept OUT of history so the
-                                    # player-facing chronicle never leaks bookkeeping text
+				    # player-facing chronicle never leaks bookkeeping text
 var is_legendary: bool = false
 
 # --- Condition (degrades, repairable) ---
@@ -162,11 +162,11 @@ static func simulate_first_party_deaths() -> Array:
 		"Gareth", "Eluned", "Roderick", "Fenella"]
 	first_names.shuffle()
 	var count := 2 + (randi() % 2)  # 2 or 3 predecessors
-	var enemies := ["slime", "skeleton", "bat"]
-	var deaths := []
+	var enemies: Array[String] = ["slime", "skeleton", "bat"]
+	var deaths: Array = []
 	for i in count:
 		var cls := "knight" if i % 2 == 0 else "mage"
-		var enemy := enemies[randi() % enemies.size()]
+		var enemy: String = enemies[randi() % enemies.size()]
 		var gear_type := "sword" if cls == "knight" else "staff"
 		# The predecessor's gear is what the player will salvage — so its
 		# affliction is determined by what killed its wielder.
@@ -209,7 +209,7 @@ func _init(p_type: String = "sword", p_name: String = "Weapon", p_history: Strin
 ## Haunt is rolled ORTHOGONALLY — a weapon can be DAMAGED (needs grind)
 ## AND haunted (needs Altar). The blue wisps overlay on the sprite
 ## communicates this dual need.
-static func roll_affliction(type: String) -> Dictionary:
+static func roll_affliction(p_type: String) -> Dictionary:
 	# --- Wear state weights (determines primary station need) ---
 	# Baseline DAMAGED=30 for all types. Armor gets +5 BROKEN.
 	var wear_weights: Dictionary = {
@@ -218,7 +218,7 @@ static func roll_affliction(type: String) -> Dictionary:
 		"helm":  {WearState.PRISTINE: 5, WearState.WORN: 15, WearState.DAMAGED: 30, WearState.BROKEN: 15},
 		"robe":  {WearState.PRISTINE: 5, WearState.WORN: 15, WearState.DAMAGED: 30, WearState.BROKEN: 15},
 	}
-	var weights: Dictionary = wear_weights.get(type, wear_weights["sword"])
+	var weights: Dictionary = wear_weights.get(p_type, wear_weights["sword"])
 	var total := 0
 	for w in weights.values():
 		total += w
@@ -237,7 +237,7 @@ static func roll_affliction(type: String) -> Dictionary:
 		"helm":  0.15,
 		"robe":  0.35,
 	}
-	var haunted: bool = randf() < haunt_chance.get(type, 0.20)
+	var haunted: bool = randf() < haunt_chance.get(p_type, 0.20)
 	# --- Durability from wear state ---
 	var dur_pct: float
 	match wear:
@@ -247,9 +247,6 @@ static func roll_affliction(type: String) -> Dictionary:
 		WearState.BROKEN:   dur_pct = 0.0
 		_:                  dur_pct = 0.35
 	# --- Flavor state from wear + haunt ---
-	# BROKEN overrides everything (shattered is the most visible state).
-	# Haunted overrides non-broken wear (blue tint reads as "needs altar").
-	# Otherwise, weapons skew BLOODIED, armor skews RUSTED.
 	var flavor: int
 	if wear == WearState.BROKEN:
 		flavor = State.SHATTERED
@@ -257,7 +254,7 @@ static func roll_affliction(type: String) -> Dictionary:
 		flavor = State.HAUNTED
 	elif wear == WearState.PRISTINE:
 		flavor = State.PRISTINE
-	elif type in ["sword", "staff"]:
+	elif p_type in ["sword", "staff"]:
 		flavor = State.BLOODIED
 	else:
 		flavor = State.RUSTED

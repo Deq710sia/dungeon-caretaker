@@ -1,11 +1,15 @@
 extends Node2D
-## Phase: battle V4 — 320x180, spectator, weapons degrade visibly.
+## Phase: battle — spectator auto-battler. Uses the SAME dungeon generation
+## as salvage (same corridor length, same layout) so the player runs through
+## the same physical space. Party enters from the bottom (salvage exit) and
+## fights upward toward the enemies at the top.
 
 const TILE: int = 16
 const CORRIDOR_W: int = 18
-const CORRIDOR_H: int = 60
 const VIEW_W: int = 480
 const VIEW_H: int = 270
+# corridor_h is read from the dungeon generation in _ready() — matches salvage.
+var corridor_h: int = 60
 
 var party_units: Array = []
 var enemies: Array = []
@@ -40,6 +44,9 @@ const PHASE_BANK_MAX: float = 3.0
 var phase_bank: float = 0.0
 
 func _ready() -> void:
+	# Read corridor length from the dungeon generation — same layout as salvage.
+	var gen: Dictionary = GameState.get_dungeon_gen()
+	corridor_h = gen.get("corridor_h", 60)
 	cam = Camera2D.new()
 	cam.position = Vector2(CORRIDOR_W * TILE / 2, 0)
 	cam.enabled = true
@@ -84,7 +91,7 @@ func _spawn_party_units() -> void:
 		var iq_mult: float = 1.0 + float(GameState.meta_upgrades["adventurer_training"]) * 0.05
 		atk = int(atk * iq_mult)
 		party_units.append({
-			"pos": Vector2(CORRIDOR_W * TILE / 2 + (i - 1) * 24, (CORRIDOR_H - 3) * TILE),
+			"pos": Vector2(CORRIDOR_W * TILE / 2 + (i - 1) * 24, (corridor_h - 3) * TILE),
 			"hp": hp,
 			"hp_max": hp,
 			"atk": atk,
@@ -261,7 +268,7 @@ func _process(delta: float) -> void:
 				if e.atk_cd <= 0:
 					e.atk_cd = 2.5 + randf() * 0.6
 					_attack_party(e, nearest)
-	var front_y: float = CORRIDOR_H * TILE
+	var front_y: float = corridor_h * TILE
 	for u in party_units:
 		if u.alive and u.pos.y < front_y:
 			front_y = u.pos.y
@@ -461,7 +468,7 @@ func _draw() -> void:
 	var cam_top := int((camera_y - VIEW_H / 2) / TILE) - 3
 	var cam_bot := int((camera_y + VIEW_H / 2) / TILE) + 3
 	cam_top = max(-2, cam_top)
-	cam_bot = min(CORRIDOR_H + 1, cam_bot)
+	cam_bot = min(corridor_h + 1, cam_bot)
 	# Floor — extend beyond corridor walls so there's no hard edge
 	for y in range(cam_top, cam_bot + 1):
 		for x in range(-2, CORRIDOR_W + 2):
@@ -470,7 +477,7 @@ func _draw() -> void:
 			if x < 0 or x >= CORRIDOR_W:
 				# Beyond walls — dark void gradient (skybox) instead of
 				# flat gray wall.
-				var void_t := float(y) / float(CORRIDOR_H)
+				var void_t := float(y) / float(corridor_h)
 				draw_rect(Rect2(p, Vector2(TILE, TILE)), Color(0.03 + void_t * 0.02, 0.02 + void_t * 0.015, 0.06 + void_t * 0.03), true)
 			elif hash < 3 and y > 5:
 				draw_texture(Sprites.get_sprite("floor_crack"), p)
