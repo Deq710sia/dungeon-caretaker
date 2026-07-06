@@ -1,6 +1,7 @@
 extends Node2D
-## Phase: planning V4 — DIEGETIC. No menus. Walk to map table, weapon rack, adventurers.
+## Phase: planning — DIEGETIC. No menus. Walk to map table, weapon rack, adventurers.
 ## Everything is physical. Carry weapons to adventurers. Ring bell to begin.
+## Uses the shared GhostMovement script for normalized movement + phase verb.
 
 const ROOM_W: int = 480
 const ROOM_H: int = 270
@@ -16,29 +17,10 @@ const RECRUIT_POS := Vector2(360, 70)
 # Adventurers stand in a row at the bottom
 const ADVENTURER_Y: float = 200
 
-var ghost: Dictionary = {
-	"pos": Vector2(160, 90),
-	"vel": Vector2.ZERO,
-	"speed": 55.0,
-	"accel": 220.0,  # DESIGN_PLAN 1A: was 300 — lowered for tighter feel
-	"carrying": null,  # Weapon or null
-	"bob": 0.0,
-	"squash": 1.0,
-}
-# DESIGN_PLAN 1B: Phase verb. Planning QoL — 2x speed only, no hazards.
-# Same input/cost/cd/duration as salvage so the verb is unified.
-# Polish: banked time + momentum boost on manual cancel.
-const PHASE_DURATION: float = 1.5
-const PHASE_CD: float = 4.0
-const PHASE_COST: int = 1
-const PHASE_BANK_MAX: float = 3.0
-var phase_active: float = 0.0
-var phase_cd: float = 0.0
-var phase_bank: float = 0.0
-var _footstep_timer: float = 0.0
-var _last_input_dir: Vector2 = Vector2.ZERO
+var move: GhostMovement
+var carrying: Weapon = null  # replaced ghost.carrying
 var adventurers: Array = []
-var near_interactive: String = ""  # "map", "rack", "bell", "adv_<name>", ""
+var near_interactive: String = ""
 var interact_pressed: bool = false
 var map_view_active: bool = false
 var rack_page: int = 0
@@ -53,8 +35,9 @@ var prompt_label: Label
 
 func _ready() -> void:
 	if GameState.party.is_empty():
-		# Defensive fallback only — normal flow always starts a run with a party.
 		GameState.start_new_run()
+	move = GhostMovement.new()
+	move.reset(Vector2(160, 90))
 	_adventurers_arrive()
 	_build_hud()
 
@@ -109,54 +92,26 @@ func _build_hud() -> void:
 func _process(delta: float) -> void:
 	if Juice.is_hit_stopped():
 		return
-	# DESIGN_PLAN 1B: Phase verb timers.
-	phase_cd = max(0, phase_cd - delta)
-	if phase_active > 0:
-		phase_active = max(0, phase_active - delta)
-		if phase_active == 0:
-			Juice.trail_phasing = false
-			SFX.play("phase_out", 1.0, -3.0)
-	# DESIGN_PLAN 1A: velocity-driven camera bob.
-	var speed_pct: float = ghost.vel.length() / ghost.speed
-	ghost.bob += delta * (3.0 + speed_pct * 6.0)
-	ghost.squash = lerp(ghost.squash, 1.0, 1.0 - exp(-delta * 8.0))
-	# Movement — phase verb doubles target speed while active.
-	# Direction-change polish: full accel when input present, 60% decel
-	# when no input (coasts slightly on release).
-	var target_speed: float = ghost.speed * (2.0 if phase_active > 0 else 1.0)
+	# Input + movement via shared GhostMovement
 	var input_dir := Vector2.ZERO
 	if not map_view_active:
 		if Input.is_action_pressed("move_left"):  input_dir.x -= 1
 		if Input.is_action_pressed("move_right"): input_dir.x += 1
 		if Input.is_action_pressed("move_up"):    input_dir.y -= 1
 		if Input.is_action_pressed("move_down"):  input_dir.y += 1
-	if input_dir != Vector2.ZERO:
-		input_dir = input_dir.normalized()
-		_last_input_dir = input_dir
-		ghost.vel = ghost.vel.move_toward(input_dir * target_speed, ghost.accel * delta)
-	else:
-		ghost.vel = ghost.vel.move_toward(Vector2.ZERO, ghost.accel * 0.6 * delta)
-	ghost.pos += ghost.vel * delta
-	ghost.pos.x = clampf(ghost.pos.x, 12, ROOM_W - 12)
-	ghost.pos.y = clampf(ghost.pos.y, HUD_H + 30, ROOM_H - 20)
-	# DESIGN_PLAN 1A: footstep whoosh tied to velocity.
-	_footstep_timer += delta
-	if speed_pct > 0.25 and _footstep_timer > 0.30 / maxf(0.4, speed_pct):
-		_footstep_timer = 0.0
-		SFX.play("footstep", 0.85 + randf() * 0.25, -8.0, 0.04)
-	# DESIGN_PLAN 1A: ghost trail.
-	if not map_view_active:
-		Juice.trail_sample(ghost.pos)
+	move.update(input_dir, delta)
+	move.pos.x = clampf(move.pos.x, 12, ROOM_W - 12)
+	move.pos.y = clampf(move.pos.y, HUD_H + 30, ROOM_H - 20)
 	_find_nearest_interactive()
 	if Input.is_action_just_pressed("interact") and not interact_pressed:
 		interact_pressed = true
 		_handle_interact()
 	if not Input.is_action_pressed("interact"):
 		interact_pressed = false
-	# DESIGN_PLAN 1B: Phase verb activation (not while map view is open).
+	# Phase verb (not while map view is open)
 	if not map_view_active and Input.is_action_just_pressed("phase"):
-		_try_activate_phase()
-	# V2: Rack paging — Q/E or bracket keys to cycle through arsenal pages
+		move.try_activate_phase()
+	# Rack paging
 	if Input.is_key_pressed(KEY_BRACKETLEFT) and not _bracket_left_pressed:
 		_bracket_left_pressed = true
 		var max_pages := maxi(1, (GameState.arsenal.size() + 2) / 3)
@@ -175,37 +130,8 @@ func _process(delta: float) -> void:
 	if map_view_active:
 		if Input.is_action_just_pressed("interact") and not interact_pressed:
 			map_view_active = false
-	# Update particles
 	Juice.update_particles(delta)
 	queue_redraw()
-
-func _try_activate_phase() -> void:
-	# DESIGN_PLAN 1B: Phase verb — planning QoL version. 2x movement only.
-	# Polish: banked time + momentum boost on manual cancel.
-	if phase_active > 0:
-		var remaining := phase_active
-		phase_bank = minf(PHASE_BANK_MAX, phase_bank + remaining)
-		phase_active = 0.0
-		Juice.trail_phasing = false
-		SFX.play("phase_out", 1.0, -3.0)
-		if _last_input_dir != Vector2.ZERO:
-			ghost.vel = _last_input_dir * ghost.speed * 1.8
-			Juice.spawn_particles(ghost.pos, 6, Palette.GLOW_BLUE, 30.0, 0.4)
-		return
-	if phase_cd > 0:
-		return
-	if GameState.soul_shards < PHASE_COST:
-		SFX.play("deny")
-		return
-	GameState.soul_shards -= PHASE_COST
-	GameState.shards_changed.emit(GameState.soul_shards)
-	phase_active = PHASE_DURATION + phase_bank
-	phase_bank = 0.0
-	phase_cd = PHASE_CD
-	Juice.trail_phasing = true
-	Juice.add_trauma(0.15)
-	Juice.spawn_particles(ghost.pos, 8, Palette.GLOW_BLUE, 35.0, 0.5)
-	SFX.play("phase_in", 1.0, -2.0)
 
 func _find_nearest_interactive() -> void:
 	near_interactive = ""
@@ -213,24 +139,24 @@ func _find_nearest_interactive() -> void:
 		return
 	var best_dist: float = STATION_RADIUS
 	# Map table
-	if ghost.pos.distance_to(MAP_TABLE_POS) < best_dist:
-		best_dist = ghost.pos.distance_to(MAP_TABLE_POS)
+	if move.pos.distance_to(MAP_TABLE_POS) < best_dist:
+		best_dist = move.pos.distance_to(MAP_TABLE_POS)
 		near_interactive = "map"
 	# Weapon rack
-	if ghost.pos.distance_to(WEAPON_RACK_POS) < best_dist:
-		best_dist = ghost.pos.distance_to(WEAPON_RACK_POS)
+	if move.pos.distance_to(WEAPON_RACK_POS) < best_dist:
+		best_dist = move.pos.distance_to(WEAPON_RACK_POS)
 		near_interactive = "rack"
 	# Bell
-	if ghost.pos.distance_to(BELL_POS) < best_dist:
-		best_dist = ghost.pos.distance_to(BELL_POS)
+	if move.pos.distance_to(BELL_POS) < best_dist:
+		best_dist = move.pos.distance_to(BELL_POS)
 		near_interactive = "bell"
 	# Recruiting shrine
-	if ghost.pos.distance_to(RECRUIT_POS) < best_dist:
-		best_dist = ghost.pos.distance_to(RECRUIT_POS)
+	if move.pos.distance_to(RECRUIT_POS) < best_dist:
+		best_dist = move.pos.distance_to(RECRUIT_POS)
 		near_interactive = "recruit"
 	# Adventurers
 	for a in adventurers:
-		if ghost.pos.distance_to(a.pos) < ADVENTURER_RADIUS:
+		if move.pos.distance_to(a.pos) < ADVENTURER_RADIUS:
 			near_interactive = "adv_" + str(a.adv.name)
 			break
 	# Build prompt
@@ -239,7 +165,7 @@ func _find_nearest_interactive() -> void:
 		"map":
 			prompt_label.text = "[E] View wave map & intel"
 		"rack":
-			if ghost.carrying == null:
+			if carrying == null:
 				prompt_label.text = "[E] Pick up weapon (page %d)" % rack_page
 			else:
 				prompt_label.text = "[E] Put weapon back"
@@ -255,16 +181,16 @@ func _find_nearest_interactive() -> void:
 			else:
 				prompt_label.text = "[E] Recruit a soul (%d shards) — %d fallen so far" % [GameState.recruit_cost(), fallen]
 		"":
-			if ghost.carrying != null:
-				var w: Weapon = ghost.carrying
+			if carrying != null:
+				var w: Weapon = carrying
 				prompt_label.text = "Carrying: %s [%s] — take to an adventurer" % [w.display_name, w.wear_name()]
 			else:
 				prompt_label.text = "Walk to rack (left), map (center), or bell (right)"
 		_:
 			if near_interactive.begins_with("adv_"):
 				var adv_name := near_interactive.substr(4)
-				if ghost.carrying != null:
-					var w: Weapon = ghost.carrying
+				if carrying != null:
+					var w: Weapon = carrying
 					var expected := "sword" if _get_adv(adv_name).class == "knight" else "staff"
 					if w.type == expected or w.type in ["helm", "robe"]:
 						prompt_label.text = "[E] Give %s to %s" % [w.display_name, adv_name]
@@ -273,7 +199,7 @@ func _find_nearest_interactive() -> void:
 				else:
 					prompt_label.text = "%s (%s) — HP %d/%d" % [adv_name, _get_adv(adv_name).class, _get_adv(adv_name).hp, _get_adv(adv_name).hp_max]
 	if prompt_label.text != "":
-		prompt_label.position = Vector2(0, ghost.pos.y - 24)
+		prompt_label.position = Vector2(0, move.pos.y - 24)
 
 func _get_adv(name: String) -> Dictionary:
 	for a in adventurers:
@@ -289,11 +215,11 @@ func _handle_interact() -> void:
 		"map":
 			map_view_active = true
 		"rack":
-			if ghost.carrying == null:
+			if carrying == null:
 				_pick_up_from_rack()
 			else:
-				GameState.add_weapon(ghost.carrying)
-				ghost.carrying = null
+				GameState.add_weapon(carrying)
+				carrying = null
 		"bell":
 			_ring_bell()
 		"recruit":
@@ -311,33 +237,33 @@ func _pick_up_from_rack() -> void:
 		rack_page = 0
 		page_start = 0
 	var w: Weapon = GameState.arsenal[page_start]
-	ghost.carrying = w
+	carrying = w
 	GameState.arsenal.erase(w)
 	GameState.arsenal_changed.emit()
 	Juice.spawn_particles(WEAPON_RACK_POS, 6, Palette.TEXT_GOLD, 25.0, 0.3)
 
 func _assign_weapon(adv_name: String) -> void:
-	if ghost.carrying == null:
+	if carrying == null:
 		return
 	var adv := _get_adv(adv_name)
-	var w: Weapon = ghost.carrying
+	var w: Weapon = carrying
 	var slot: String = "armor" if w.type in ["helm", "robe"] else "weapon"
 	# Check type compatibility
 	var expected_weapon := "sword" if adv.class == "knight" else "staff"
 	var expected_armor := "helm" if adv.class == "knight" else "robe"
 	if slot == "weapon" and w.type != expected_weapon:
-		Juice.spawn_particles(ghost.pos, 4, Palette.TEXT_RED, 20.0, 0.3)
+		Juice.spawn_particles(move.pos, 4, Palette.TEXT_RED, 20.0, 0.3)
 		return
 	if slot == "armor" and w.type != expected_armor:
-		Juice.spawn_particles(ghost.pos, 4, Palette.TEXT_RED, 20.0, 0.3)
+		Juice.spawn_particles(move.pos, 4, Palette.TEXT_RED, 20.0, 0.3)
 		return
 	w.deliver_to(adv, GameState.party)
-	ghost.carrying = null
+	carrying = null
 	# JUICE
 	Juice.add_trauma(0.2)
 	Juice.hit_stop(0.05)
-	Juice.spawn_particles(ghost.pos, 8, Palette.TEXT_GREEN, 30.0, 0.4)
-	ghost.squash = 1.2
+	Juice.spawn_particles(move.pos, 8, Palette.TEXT_GREEN, 30.0, 0.4)
+	move.squash = 1.2
 
 func _try_recruit() -> void:
 	if not GameState.can_recruit():
@@ -425,27 +351,27 @@ func _draw() -> void:
 			var ar: Weapon = adv.equipped_armor
 			draw_texture(Sprites.get_weapon_sprite_wear(ar.type, ar.wear_state, ar.is_haunted()), a.pos + Vector2(-12, -4))
 	# Ghost (with squash/stretch)
-	var bob := sin(ghost.bob) * 1.5
-	var gp: Vector2 = ghost.pos + Vector2(0, bob)
-	draw_rect(Rect2(int(gp.x) - 5, int(ghost.pos.y) + 6, 10, 2), Color(0, 0, 0, 0.3), true)
+	var bob := sin(move.bob) * 1.5
+	var gp: Vector2 = move.pos + Vector2(0, bob)
+	draw_rect(Rect2(int(gp.x) - 5, int(move.pos.y) + 6, 10, 2), Color(0, 0, 0, 0.3), true)
 	var ghost_tex := Sprites.get_sprite("ghost")
-	var sw := int(16.0 / maxf(0.1, ghost.squash))
-	var sh := int(16 * ghost.squash)
+	var sw := int(16.0 / maxf(0.1, move.squash))
+	var sh := int(16 * move.squash)
 	# DESIGN_PLAN 1A: ghost trail, drawn before the main sprite.
 	Juice.trail_draw(self, ghost_tex, 16)
 	# DESIGN_PLAN 1B: semi-transparent ghost while phasing.
 	var ghost_mod := Color(1, 1, 1, 1)
-	if phase_active > 0:
-		var phase_pct := phase_active / PHASE_DURATION
+	if move.is_phasing():
+		var phase_pct := move.phase_active / GhostMovement.PHASE_DURATION
 		ghost_mod = Color(0.55, 0.75, 0.95, 0.5 + 0.15 * phase_pct)
 	draw_texture_rect(ghost_tex, Rect2(int(gp.x) - sw / 2, int(gp.y) - sh / 2, sw, sh), false, ghost_mod)
 	# DESIGN_PLAN 1B: cooldown ring.
-	if phase_cd > 0 and phase_active == 0:
-		var cd_pct: float = 1.0 - (phase_cd / PHASE_CD)
+	if move.phase_cd > 0 and not move.is_phasing():
+		var cd_pct: float = 1.0 - (move.phase_cd / GhostMovement.PHASE_CD)
 		draw_arc(Vector2(int(gp.x), int(gp.y)), 12.0, -PI / 2, -PI / 2 + TAU * cd_pct, 16, Palette.TEXT_DIM, 1.5)
 	# Carried weapon
-	if ghost.carrying != null:
-		var item_tex := Sprites.get_weapon_sprite_wear(ghost.carrying.type, ghost.carrying.wear_state, ghost.carrying.is_haunted())
+	if carrying != null:
+		var item_tex := Sprites.get_weapon_sprite_wear(carrying.type, carrying.wear_state, carrying.is_haunted())
 		draw_texture(item_tex, gp + Vector2(-8, -18))
 	# Particles
 	Juice.draw_particles(self)
@@ -497,6 +423,6 @@ func _draw_map_view() -> void:
 	GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 14), "[E] Close map", 8, Palette.TEXT_GOLD)
 
 func _on_phase_exit() -> void:
-	if ghost.carrying != null:
-		GameState.add_weapon(ghost.carrying)
-		ghost.carrying = null
+	if carrying != null:
+		GameState.add_weapon(carrying)
+		carrying = null

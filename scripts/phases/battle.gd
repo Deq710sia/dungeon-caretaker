@@ -186,16 +186,9 @@ func _process(delta: float) -> void:
 		phase_active = max(0, phase_active - delta)
 		if phase_active == 0:
 			SFX.play("phase_out", 1.0, -3.0)
-	# DESIGN_PLAN 1B: Phase verb activation. Checked in _process (not _input)
-	# using Input.is_action_just_pressed so it works with ANY input source
-	# that maps to the "phase" action — physical keyboard, gamepad, remapped
-	# keys, or the PlaytestDriver's Input.action_press. The old _input(event)
-	# approach only fired on physical InputEventKey presses, silently
-	# breaking gamepad support and playtest automation.
-	#
-	# Toggle: press SPACE again while phasing to snap back early. The
-	# remaining duration is BANKED — next activation gets it added on top.
-	# No momentum boost in battle (ghost doesn't move here).
+	# Phase verb activation. Toggle: press SPACE while phasing to cancel
+	# early (banks remaining time → reduces next cooldown). No momentum
+	# boost in battle (ghost doesn't move here).
 	if Input.is_action_just_pressed("phase"):
 		if phase_active > 0:
 			var remaining := phase_active
@@ -210,8 +203,9 @@ func _process(delta: float) -> void:
 			else:
 				GameState.soul_shards -= PHASE_COST
 				GameState.shards_changed.emit(GameState.soul_shards)
-				phase_cd = PHASE_CD
-				phase_active = PHASE_DURATION + phase_bank
+				# Banked time reduces cooldown (not adds to duration)
+				phase_cd = max(0.0, PHASE_CD - phase_bank)
+				phase_active = PHASE_DURATION
 				phase_bank = 0.0
 				Juice.add_trauma(0.2)
 				Juice.spawn_particles(Vector2(VIEW_W / 2, VIEW_H / 2), 12, Palette.GLOW_BLUE, 40.0, 0.5)

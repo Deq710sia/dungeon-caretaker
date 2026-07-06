@@ -1,56 +1,35 @@
 extends Node2D
-## Phase: workshop V4 — 320x180, palette-disciplined, juice.
-## Walk between stations. Repair minigames show weapon large. Ring bell to
-## move on to the upgrade shop, then planning to assign the gear you just fixed.
+## Phase: workshop — walk between stations, repair weapons, ring bell.
+## Uses the shared GhostMovement script for normalized movement + phase verb.
+## Adventurers centered across room width. Station positions use ROOM_W fractions.
 
 const ROOM_W: int = 480
 const ROOM_H: int = 270
 const HUD_H: int = 20
 const STATION_RADIUS: float = 16.0
 
-# Gating is no longer data here — see Weapon.can_repair_at(). Each station
-# checks the carried weapon directly against its OWN wear tier (or, for the
-# Altar, against unexorcised_deaths), so there's exactly one place
-# (weapon.gd) that decides what a weapon needs.
+# Stations positioned as fractions of ROOM_W so they scale to any resolution.
+# Was hardcoded x values (50, 140, 230, 320, 410) that only worked at 480.
 const STATIONS := [
-        {"key": "arsenal",   "name": "ARSENAL", "sprite": "chest",      "pos": Vector2(50, 70)},
-        {"key": "polish",    "name": "POLISH",  "sprite": "bench",      "pos": Vector2(140, 70)},
-        {"key": "oil_grind", "name": "GRIND",   "sprite": "grindstone", "pos": Vector2(230, 70)},
-        {"key": "exorcise",  "name": "ALTAR",   "sprite": "altar",      "pos": Vector2(320, 70)},
-        {"key": "reforge",   "name": "FORGE",   "sprite": "furnace",    "pos": Vector2(410, 70)},
+	{"key": "arsenal",   "name": "ARSENAL", "sprite": "chest",      "x_frac": 0.10},
+	{"key": "polish",    "name": "POLISH",  "sprite": "bench",      "x_frac": 0.29},
+	{"key": "oil_grind", "name": "GRIND",   "sprite": "grindstone", "x_frac": 0.48},
+	{"key": "exorcise",  "name": "ALTAR",   "sprite": "altar",      "x_frac": 0.67},
+	{"key": "reforge",   "name": "FORGE",   "sprite": "furnace",    "x_frac": 0.86},
 ]
+const STATION_Y: float = 70.0
 
-var ghost: Dictionary = {
-        "pos": Vector2(240, 160),
-        "vel": Vector2.ZERO,
-        "speed": 55.0,
-        "accel": 220.0,  # DESIGN_PLAN 1A: was 300 — lowered for tighter feel
-        "carrying": null,
-        "bob": 0.0,
-        "squash": 1.0,
-}
-# DESIGN_PLAN 1B: Phase verb. In workshop, phasing only grants 2x speed
-# (no hazards to bypass here). Same input, cost, cooldown, duration as
-# salvage so the verb feels unified across every walkable phase.
-# Polish: banked time + momentum boost on manual cancel (see _try_activate_phase).
-const PHASE_DURATION: float = 1.5
-const PHASE_CD: float = 4.0
-const PHASE_COST: int = 1
-const PHASE_BANK_MAX: float = 3.0
-var phase_active: float = 0.0
-var phase_cd: float = 0.0
-var phase_bank: float = 0.0
-var _footstep_timer: float = 0.0
-var _last_input_dir: Vector2 = Vector2.ZERO  # for momentum boost on cancel
-var bell_timer: float = 90.0  # placeholder only — _ready() sets the real value
+var move: GhostMovement
+var bell_timer: float = 90.0
 var bell_rang: bool = false
 var minigame_active: bool = false
 var active_minigame: Node2D = null
 var current_weapon: Weapon = null
-var current_station_key: String = ""  # which station started the active minigame
+var current_station_key: String = ""
 var near_station_key: String = ""
 var interact_pressed: bool = false
 var adventurers: Array = []
+var carrying: Weapon = null  # replaced carrying
 
 var hud_stage: Label
 var hud_bell: Label
@@ -62,508 +41,460 @@ var inspect_panel: Panel = null
 var inspect_visible: bool = false
 
 func _ready() -> void:
-        if GameState.party.is_empty():
-                # Defensive fallback only — normal flow always starts a run with a party.
-                GameState.start_new_run()
-        _adventurers_arrive()
-        _build_hud()
-        bell_timer = max(50.0, 90.0 - GameState.stage * 5)
+	if GameState.party.is_empty():
+		GameState.start_new_run()
+	move = GhostMovement.new()
+	move.reset(Vector2(ROOM_W / 2.0, ROOM_H * 0.6))
+	_adventurers_arrive()
+	_build_hud()
+	bell_timer = max(50.0, 90.0 - GameState.stage * 5)
+
+func _get_station_pos(key: String) -> Vector2:
+	for st in STATIONS:
+		if st.key == key:
+			return Vector2(st.x_frac * ROOM_W, STATION_Y)
+	return Vector2(ROOM_W / 2, STATION_Y)
 
 func _adventurers_arrive() -> void:
-        adventurers.clear()
-        var living := GameState.party.filter(func(a): return a.get("alive", true))
-        var n := living.size()
-        var spacing: float = 200.0 / float(max(1, n))
-        var start_x: float = 60.0 + spacing / 2.0
-        for i in n:
-                var adv: Dictionary = living[i]
-                adventurers.append({
-                        "pos": Vector2(start_x + i * spacing, 200),
-                        "sprite": "knight" if adv["class"] == "knight" else "mage",
-                        "adv": adv,
-                })
+	adventurers.clear()
+	var living := GameState.party.filter(func(a): return a.get("alive", true))
+	var n := living.size()
+	# Center adventurers across the room width (was offset to the left).
+	# Spread them across 80% of the room width, centered.
+	var spread := ROOM_W * 0.80
+	var start_x := (ROOM_W - spread) / 2.0 + spread / float(max(1, n)) / 2.0
+	var spacing := spread / float(max(1, n))
+	for i in n:
+		var adv: Dictionary = living[i]
+		adventurers.append({
+			"pos": Vector2(start_x + i * spacing, ROOM_H - 60),
+			"sprite": "knight" if adv["class"] == "knight" else "mage",
+			"adv": adv,
+		})
 
 func _build_hud() -> void:
-        var panel := Panel.new()
-        panel.position = Vector2(0, 0)
-        panel.size = Vector2(ROOM_W, 20)
-        add_child(panel)
-        hud_stage = Label.new()
-        hud_stage.text = "S%d W%d WORKSHOP" % [GameState.stage, GameState.wave]
-        hud_stage.add_theme_font_size_override("font_size", 8)
-        hud_stage.add_theme_color_override("font_color", Palette.TEXT_GOLD)
-        hud_stage.position = Vector2(2, 3)
-        hud_stage.size = Vector2(130, 14)
-        panel.add_child(hud_stage)
-        hud_bell = Label.new()
-        hud_bell.text = "Bell: 75s"
-        hud_bell.add_theme_font_size_override("font_size", 8)
-        hud_bell.add_theme_color_override("font_color", Palette.TEXT_RED)
-        hud_bell.position = Vector2(135, 3)
-        hud_bell.size = Vector2(90, 14)
-        panel.add_child(hud_bell)
-        hud_shards = Label.new()
-        hud_shards.text = "Shards: 0"
-        hud_shards.add_theme_font_size_override("font_size", 8)
-        hud_shards.add_theme_color_override("font_color", Palette.TEXT_BLUE)
-        hud_shards.position = Vector2(228, 3)
-        hud_shards.size = Vector2(90, 14)
-        panel.add_child(hud_shards)
-        hud_carrying = Label.new()
-        hud_carrying.text = "Carry: -"
-        hud_carrying.add_theme_font_size_override("font_size", 8)
-        hud_carrying.add_theme_color_override("font_color", Palette.TEXT_DIM)
-        hud_carrying.position = Vector2(322, 3)
-        hud_carrying.size = Vector2(150, 14)
-        panel.add_child(hud_carrying)
-        prompt_label = Label.new()
-        prompt_label.text = ""
-        prompt_label.add_theme_font_size_override("font_size", 8)
-        prompt_label.add_theme_color_override("font_color", Palette.TEXT_GOLD)
-        prompt_label.add_theme_color_override("font_outline_color", Palette.VOID)
-        prompt_label.add_theme_constant_override("outline_size", 1)
-        prompt_label.position = Vector2(0, 0)
-        prompt_label.size = Vector2(ROOM_W, 10)
-        prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-        add_child(prompt_label)
-        ring_bell_btn = Button.new()
-        ring_bell_btn.text = "Ring Bell"
-        ring_bell_btn.add_theme_font_size_override("font_size", 8)
-        ring_bell_btn.position = Vector2(380, 240)
-        ring_bell_btn.size = Vector2(80, 18)
-        ring_bell_btn.pressed.connect(_on_ring_bell)
-        add_child(ring_bell_btn)
-        GameState.shards_changed.connect(_on_shards_changed)
-        _update_hud()
+	var panel := Panel.new()
+	panel.position = Vector2(0, 0)
+	panel.size = Vector2(ROOM_W, 20)
+	add_child(panel)
+	hud_stage = Label.new()
+	hud_stage.text = "S%d W%d WORKSHOP" % [GameState.stage, GameState.wave]
+	hud_stage.add_theme_font_size_override("font_size", 8)
+	hud_stage.add_theme_color_override("font_color", Palette.TEXT_GOLD)
+	hud_stage.position = Vector2(2, 3)
+	hud_stage.size = Vector2(130, 14)
+	panel.add_child(hud_stage)
+	hud_bell = Label.new()
+	hud_bell.text = "Bell: 75s"
+	hud_bell.add_theme_font_size_override("font_size", 8)
+	hud_bell.add_theme_color_override("font_color", Palette.TEXT_RED)
+	hud_bell.position = Vector2(135, 3)
+	hud_bell.size = Vector2(90, 14)
+	panel.add_child(hud_bell)
+	hud_shards = Label.new()
+	hud_shards.text = "Shards: 0"
+	hud_shards.add_theme_font_size_override("font_size", 8)
+	hud_shards.add_theme_color_override("font_color", Palette.TEXT_BLUE)
+	hud_shards.position = Vector2(228, 3)
+	hud_shards.size = Vector2(90, 14)
+	panel.add_child(hud_shards)
+	hud_carrying = Label.new()
+	hud_carrying.text = "Carry: -"
+	hud_carrying.add_theme_font_size_override("font_size", 8)
+	hud_carrying.add_theme_color_override("font_color", Palette.TEXT_DIM)
+	hud_carrying.position = Vector2(322, 3)
+	hud_carrying.size = Vector2(150, 14)
+	panel.add_child(hud_carrying)
+	prompt_label = Label.new()
+	prompt_label.text = ""
+	prompt_label.add_theme_font_size_override("font_size", 8)
+	prompt_label.add_theme_color_override("font_color", Palette.TEXT_GOLD)
+	prompt_label.add_theme_color_override("font_outline_color", Palette.VOID)
+	prompt_label.add_theme_constant_override("outline_size", 1)
+	prompt_label.position = Vector2(0, 0)
+	prompt_label.size = Vector2(ROOM_W, 10)
+	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	add_child(prompt_label)
+	ring_bell_btn = Button.new()
+	ring_bell_btn.text = "Ring Bell"
+	ring_bell_btn.add_theme_font_size_override("font_size", 8)
+	ring_bell_btn.position = Vector2(380, 240)
+	ring_bell_btn.size = Vector2(80, 18)
+	ring_bell_btn.pressed.connect(_on_ring_bell)
+	add_child(ring_bell_btn)
+	GameState.shards_changed.connect(_on_shards_changed)
+	_update_hud()
 
 func _update_hud() -> void:
-        hud_bell.text = "%.0fs" % bell_timer
-        hud_shards.text = "Shards: %d" % GameState.soul_shards
-        if ghost.carrying != null:
-                var w: Weapon = ghost.carrying
-                hud_carrying.text = "Carry: " + w.display_name.substr(0, 12)
-                hud_carrying.add_theme_color_override("font_color", w.wear_color())
-        else:
-                hud_carrying.text = "Carry: -"
-                hud_carrying.add_theme_color_override("font_color", Palette.TEXT_DIM)
+	hud_bell.text = "%.0fs" % bell_timer
+	hud_shards.text = "Shards: %d" % GameState.soul_shards
+	if carrying != null:
+		var w: Weapon = carrying
+		hud_carrying.text = "Carry: " + w.display_name.substr(0, 12)
+		hud_carrying.add_theme_color_override("font_color", w.wear_color())
+	else:
+		hud_carrying.text = "Carry: -"
+		hud_carrying.add_theme_color_override("font_color", Palette.TEXT_DIM)
 
 func _on_shards_changed(new_count: int) -> void:
-        hud_shards.text = "Shards: %d" % new_count
+	hud_shards.text = "Shards: %d" % new_count
 
 func _process(delta: float) -> void:
-        if minigame_active:
-                ghost.bob += delta * 6
-                return
-        if Juice.is_hit_stopped():
-                return
-        bell_timer -= delta
-        if bell_timer <= 0:
-                bell_timer = 0
-                _bell_tolls()
-                return
-        # DESIGN_PLAN 1B: Phase verb timers.
-        phase_cd = max(0, phase_cd - delta)
-        if phase_active > 0:
-                phase_active = max(0, phase_active - delta)
-                if phase_active == 0:
-                        Juice.trail_phasing = false
-                        SFX.play("phase_out", 1.0, -3.0)
-        # DESIGN_PLAN 1A: velocity-driven camera bob. Idle 3Hz, top speed ~9Hz.
-        var speed_pct: float = ghost.vel.length() / ghost.speed
-        ghost.bob += delta * (3.0 + speed_pct * 6.0)
-        ghost.squash = lerp(ghost.squash, 1.0, 1.0 - exp(-delta * 8.0))
-        # Movement — phase verb doubles target speed while active.
-        # Direction-change polish: full accel when input present (fast
-        # direction changes), 60% decel when no input (coasts slightly).
-        var target_speed: float = ghost.speed * (2.0 if phase_active > 0 else 1.0)
-        var input_dir := Vector2.ZERO
-        if Input.is_action_pressed("move_left"):  input_dir.x -= 1
-        if Input.is_action_pressed("move_right"): input_dir.x += 1
-        if Input.is_action_pressed("move_up"):    input_dir.y -= 1
-        if Input.is_action_pressed("move_down"):  input_dir.y += 1
-        if input_dir != Vector2.ZERO:
-                input_dir = input_dir.normalized()
-                _last_input_dir = input_dir  # remember for momentum boost on cancel
-                ghost.vel = ghost.vel.move_toward(input_dir * target_speed, ghost.accel * delta)
-        else:
-                ghost.vel = ghost.vel.move_toward(Vector2.ZERO, ghost.accel * 0.6 * delta)
-        ghost.pos += ghost.vel * delta
-        ghost.pos.x = clampf(ghost.pos.x, 12, ROOM_W - 12)
-        ghost.pos.y = clampf(ghost.pos.y, HUD_H + 30, ROOM_H - 40)
-        # DESIGN_PLAN 1A: footstep whoosh tied to velocity.
-        _footstep_timer += delta
-        if speed_pct > 0.25 and _footstep_timer > 0.30 / maxf(0.4, speed_pct):
-                _footstep_timer = 0.0
-                SFX.play("footstep", 0.85 + randf() * 0.25, -8.0, 0.04)
-        # DESIGN_PLAN 1A: ghost trail.
-        Juice.trail_sample(ghost.pos)
-        _find_nearest_interactive()
-        if Input.is_action_just_pressed("interact") and not interact_pressed:
-                interact_pressed = true
-                _handle_interact()
-        if not Input.is_action_pressed("interact"):
-                interact_pressed = false
-        # DESIGN_PLAN 1B: Phase verb activation.
-        if Input.is_action_just_pressed("phase"):
-                _try_activate_phase()
-        # V6: Press TAB to inspect carried weapon
-        if Input.is_key_pressed(KEY_TAB) and ghost.carrying != null and not inspect_visible:
-                _show_weapon_inspect(ghost.carrying)
-        if not Input.is_key_pressed(KEY_TAB) and inspect_visible:
-                _hide_weapon_inspect()
-        Juice.update_particles(delta)
-        _update_hud()
-        queue_redraw()
-
-func _try_activate_phase() -> void:
-        # DESIGN_PLAN 1B: Phase verb — workshop QoL version. 2x movement only,
-        # no hazard bypass (workshop has no hazards). Same cost/cd/duration
-        # as salvage so the verb is unified.
-        # Polish: banked time + momentum boost on manual cancel.
-        if phase_active > 0:
-                var remaining := phase_active
-                phase_bank = minf(PHASE_BANK_MAX, phase_bank + remaining)
-                phase_active = 0.0
-                Juice.trail_phasing = false
-                SFX.play("phase_out", 1.0, -3.0)
-                # Momentum boost in last input direction.
-                if _last_input_dir != Vector2.ZERO:
-                        ghost.vel = _last_input_dir * ghost.speed * 1.8
-                        Juice.spawn_particles(ghost.pos, 6, Palette.GLOW_BLUE, 30.0, 0.4)
-                return
-        if phase_cd > 0:
-                return
-        if GameState.soul_shards < PHASE_COST:
-                SFX.play("deny")
-                return
-        GameState.soul_shards -= PHASE_COST
-        GameState.shards_changed.emit(GameState.soul_shards)
-        phase_active = PHASE_DURATION + phase_bank
-        phase_bank = 0.0
-        phase_cd = PHASE_CD
-        Juice.trail_phasing = true
-        Juice.add_trauma(0.15)
-        Juice.spawn_particles(ghost.pos, 8, Palette.GLOW_BLUE, 35.0, 0.5)
-        SFX.play("phase_in", 1.0, -2.0)
+	if minigame_active:
+		move.bob += delta * 6
+		return
+	if Juice.is_hit_stopped():
+		return
+	bell_timer -= delta
+	if bell_timer <= 0:
+		bell_timer = 0
+		_bell_tolls()
+		return
+	# Input + movement via shared GhostMovement
+	var input_dir := Vector2.ZERO
+	if Input.is_action_pressed("move_left"):  input_dir.x -= 1
+	if Input.is_action_pressed("move_right"): input_dir.x += 1
+	if Input.is_action_pressed("move_up"):    input_dir.y -= 1
+	if Input.is_action_pressed("move_down"):  input_dir.y += 1
+	move.update(input_dir, delta)
+	move.pos.x = clampf(move.pos.x, 12, ROOM_W - 12)
+	move.pos.y = clampf(move.pos.y, HUD_H + 30, ROOM_H - 40)
+	_find_nearest_interactive()
+	if Input.is_action_just_pressed("interact") and not interact_pressed:
+		interact_pressed = true
+		_handle_interact()
+	if not Input.is_action_pressed("interact"):
+		interact_pressed = false
+	# Phase verb
+	if Input.is_action_just_pressed("phase"):
+		move.try_activate_phase()
+	# TAB to inspect carried weapon
+	if Input.is_key_pressed(KEY_TAB) and carrying != null and not inspect_visible:
+		_show_weapon_inspect(carrying)
+	if not Input.is_key_pressed(KEY_TAB) and inspect_visible:
+		_hide_weapon_inspect()
+	Juice.update_particles(delta)
+	_update_hud()
+	queue_redraw()
 
 func _find_nearest_interactive() -> void:
-        near_station_key = ""
-        var best_dist: float = STATION_RADIUS
-        for st in STATIONS:
-                var d: float = ghost.pos.distance_to(st.pos)
-                if d < best_dist:
-                        best_dist = d
-                        near_station_key = st.key
-        prompt_label.text = ""
-        prompt_label.position = Vector2(0, 0)
-        if near_station_key == "arsenal":
-                if ghost.carrying == null:
-                        if GameState.arsenal.size() > 0:
-                                prompt_label.text = "[E] Pick up (%d in arsenal)" % GameState.arsenal.size()
-                        else:
-                                prompt_label.text = "Arsenal empty"
-                else:
-                        prompt_label.text = "[E] Drop weapon back"
-        elif near_station_key != "":
-                var st_def: Dictionary = _get_station_def(near_station_key)
-                if ghost.carrying != null:
-                        if ghost.carrying.can_repair_at(near_station_key):
-                                prompt_label.text = "[E] Repair at %s" % st_def.name
-                        else:
-                                prompt_label.text = "%s — doesn't need this" % st_def.name
-                else:
-                        prompt_label.text = st_def.name
-        if prompt_label.text != "":
-                prompt_label.position = Vector2(0, ghost.pos.y - 24)
+	near_station_key = ""
+	var best_dist: float = STATION_RADIUS
+	for st in STATIONS:
+		var d: float = move.pos.distance_to(_get_station_pos(st.key))
+		if d < best_dist:
+			best_dist = d
+			near_station_key = st.key
+	prompt_label.text = ""
+	prompt_label.position = Vector2(0, 0)
+	if near_station_key == "arsenal":
+		if carrying == null:
+			if GameState.arsenal.size() > 0:
+				prompt_label.text = "[E] Pick up (%d in arsenal)" % GameState.arsenal.size()
+			else:
+				prompt_label.text = "Arsenal empty"
+		else:
+			prompt_label.text = "[E] Drop weapon back"
+	elif near_station_key != "":
+		var st_def: Dictionary = _get_station_def(near_station_key)
+		if carrying != null:
+			if carrying.can_repair_at(near_station_key):
+				prompt_label.text = "[E] Repair at %s" % st_def.name
+			else:
+				prompt_label.text = "%s — doesn't need this" % st_def.name
+		else:
+			prompt_label.text = st_def.name
+	if prompt_label.text != "":
+		prompt_label.position = Vector2(0, move.pos.y - 24)
 
 func _get_station_def(key: String) -> Dictionary:
-        for st in STATIONS:
-                if st.key == key:
-                        return st
-        return {}
+	for st in STATIONS:
+		if st.key == key:
+			return st
+	return {}
 
 func _handle_interact() -> void:
-        if near_station_key == "":
-                return
-        if near_station_key == "arsenal":
-                if ghost.carrying == null:
-                        _pick_up_from_arsenal()
-                else:
-                        GameState.add_weapon(ghost.carrying)
-                        ghost.carrying = null
-                return
-        if ghost.carrying != null:
-                if ghost.carrying.can_repair_at(near_station_key):
-                        _start_repair(near_station_key)
+	if near_station_key == "":
+		return
+	if near_station_key == "arsenal":
+		if carrying == null:
+			_pick_up_from_arsenal()
+		else:
+			GameState.add_weapon(carrying)
+			carrying = null
+		return
+	if carrying != null:
+		if carrying.can_repair_at(near_station_key):
+			_start_repair(near_station_key)
 
 func _pick_up_from_arsenal() -> void:
-        if GameState.arsenal.is_empty():
-                return
-        var picked: Weapon = null
-        # Prefer whatever actually needs a station right now — checked against
-        # wear_state/is_haunted(), not the old flavor-only state field, so gear
-        # that's taken real durability damage is never invisible to the ghost.
-        for w in GameState.arsenal:
-                if w.wear_state != Weapon.WearState.PRISTINE or w.is_haunted():
-                        picked = w
-                        break
-        if picked == null:
-                picked = GameState.arsenal[0]
-        ghost.carrying = picked
-        GameState.arsenal.erase(picked)
-        GameState.arsenal_changed.emit()
-        Juice.spawn_particles(ghost.pos, 4, Palette.TEXT_GOLD, 20.0, 0.3)
+	if GameState.arsenal.is_empty():
+		return
+	var picked: Weapon = null
+	# Prefer whatever actually needs a station right now — checked against
+	# wear_state/is_haunted(), not the old flavor-only state field, so gear
+	# that's taken real durability damage is never invisible to the ghost.
+	for w in GameState.arsenal:
+		if w.wear_state != Weapon.WearState.PRISTINE or w.is_haunted():
+			picked = w
+			break
+	if picked == null:
+		picked = GameState.arsenal[0]
+	carrying = picked
+	GameState.arsenal.erase(picked)
+	GameState.arsenal_changed.emit()
+	Juice.spawn_particles(move.pos, 4, Palette.TEXT_GOLD, 20.0, 0.3)
 
 func _start_repair(station_key: String) -> void:
-        if minigame_active:
-                return
-        current_weapon = ghost.carrying
-        current_station_key = station_key
-        minigame_active = true
-        var script: GDScript = null
-        match station_key:
-                "polish":    script = preload("res://scripts/repair/polish_bench.gd")
-                "oil_grind": script = preload("res://scripts/repair/oil_grindstone.gd")
-                "exorcise":  script = preload("res://scripts/repair/exorcise_altar.gd")
-                "reforge":   script = preload("res://scripts/repair/reforge_furnace.gd")
-                _:
-                        minigame_active = false
-                        return
-        active_minigame = Node2D.new()
-        active_minigame.set_script(script)
-        active_minigame.name = "Minigame_" + station_key
-        add_child(active_minigame)
-        active_minigame.completed.connect(_on_minigame_completed)
+	if minigame_active:
+		return
+	current_weapon = carrying
+	current_station_key = station_key
+	minigame_active = true
+	var script: GDScript = null
+	match station_key:
+		"polish":    script = preload("res://scripts/repair/polish_bench.gd")
+		"oil_grind": script = preload("res://scripts/repair/oil_grindstone.gd")
+		"exorcise":  script = preload("res://scripts/repair/exorcise_altar.gd")
+		"reforge":   script = preload("res://scripts/repair/reforge_furnace.gd")
+		_:
+			minigame_active = false
+			return
+	active_minigame = Node2D.new()
+	active_minigame.set_script(script)
+	active_minigame.name = "Minigame_" + station_key
+	add_child(active_minigame)
+	active_minigame.completed.connect(_on_minigame_completed)
 
 func _on_minigame_completed(quality: float) -> void:
-        if active_minigame:
-                active_minigame.queue_free()
-                active_minigame = null
-        minigame_active = false
-        if current_weapon == null:
-                current_station_key = ""
-                return
-        var bonus: float = float(GameState.meta_upgrades["master_forge"]) * 0.10
-        quality = clampf(quality + bonus, 0.0, 1.0)
-        var stat_key := current_weapon.fingerprint_stat_for_station(current_station_key)
-        if stat_key != "":
-                current_weapon.set(stat_key, quality)
-        if current_station_key == "exorcise":
-                # The Altar's real job: clear unexorcised dread. It doesn't touch
-                # durability/wear at all — a weapon can be fully cleansed and still
-                # need the Forge, or fully repaired and still need the Altar.
-                current_weapon.exorcise()
-                Juice.add_trauma(0.25)
-                Juice.hit_stop(0.06)
-                Juice.spawn_particles(ghost.pos, 10, Palette.GLOW_BLUE, 40.0, 0.5)
-                SFX.play("repair")
-                ghost.squash = 1.2
-        else:
-                # Graduated restore — never a full reset. A single great pass on a
-                # badly damaged weapon still leaves real, visible cost behind.
-                var restored: int = current_weapon.apply_repair(quality)
-                current_weapon.history.append(
-                        "Repaired at %s (q=%.0f%%, +%d durability, now %d/%d)." % [
-                                current_station_key, quality * 100, restored,
-                                current_weapon.durability, current_weapon.durability_max])
-                if restored > 0:
-                        var trauma: float = 0.15 + 0.15 * quality
-                        Juice.add_trauma(trauma)
-                        Juice.hit_stop(0.06)
-                        Juice.spawn_particles(ghost.pos, int(6 + quality * 8), Palette.TEXT_GOLD, 40.0, 0.5)
-                        SFX.play("repair")
-                        ghost.squash = 1.1 + quality * 0.2
-        GameState.arsenal_changed.emit()
-        # Keep the weapon in the ghost's hands after repair. The player can
-        # see the repaired weapon, take it to another station (e.g. grind then
-        # altar), or drop it at the arsenal (press E at arsenal while carrying).
-        #
-        # The previous code auto-returned the weapon to arsenal, which caused
-        # the "item disappears" bug: the weapon went back to the arsenal pile
-        # but the player couldn't tell which weapon it was or easily pick it
-        # up again (the arsenal picker prefers weapons that still need work,
-        # so a freshly-repaired PRISTINE weapon would never be re-selected).
-        # Keeping it visible in the ghost's hands is clearer and gives the
-        # player agency over where the weapon goes next.
-        current_weapon = null
-        current_station_key = ""
+	if active_minigame:
+		active_minigame.queue_free()
+		active_minigame = null
+	minigame_active = false
+	if current_weapon == null:
+		current_station_key = ""
+		return
+	var bonus: float = float(GameState.meta_upgrades["master_forge"]) * 0.10
+	quality = clampf(quality + bonus, 0.0, 1.0)
+	var stat_key := current_weapon.fingerprint_stat_for_station(current_station_key)
+	if stat_key != "":
+		current_weapon.set(stat_key, quality)
+	if current_station_key == "exorcise":
+		# The Altar's real job: clear unexorcised dread. It doesn't touch
+		# durability/wear at all — a weapon can be fully cleansed and still
+		# need the Forge, or fully repaired and still need the Altar.
+		current_weapon.exorcise()
+		Juice.add_trauma(0.25)
+		Juice.hit_stop(0.06)
+		Juice.spawn_particles(move.pos, 10, Palette.GLOW_BLUE, 40.0, 0.5)
+		SFX.play("repair")
+		move.squash = 1.2
+	else:
+		# Graduated restore — never a full reset. A single great pass on a
+		# badly damaged weapon still leaves real, visible cost behind.
+		var restored: int = current_weapon.apply_repair(quality)
+		current_weapon.history.append(
+			"Repaired at %s (q=%.0f%%, +%d durability, now %d/%d)." % [
+				current_station_key, quality * 100, restored,
+				current_weapon.durability, current_weapon.durability_max])
+		if restored > 0:
+			var trauma: float = 0.15 + 0.15 * quality
+			Juice.add_trauma(trauma)
+			Juice.hit_stop(0.06)
+			Juice.spawn_particles(move.pos, int(6 + quality * 8), Palette.TEXT_GOLD, 40.0, 0.5)
+			SFX.play("repair")
+			move.squash = 1.1 + quality * 0.2
+	GameState.arsenal_changed.emit()
+	# Keep the weapon in the ghost's hands after repair. The player can
+	# see the repaired weapon, take it to another station (e.g. grind then
+	# altar), or drop it at the arsenal (press E at arsenal while carrying).
+	#
+	# The previous code auto-returned the weapon to arsenal, which caused
+	# the "item disappears" bug: the weapon went back to the arsenal pile
+	# but the player couldn't tell which weapon it was or easily pick it
+	# up again (the arsenal picker prefers weapons that still need work,
+	# so a freshly-repaired PRISTINE weapon would never be re-selected).
+	# Keeping it visible in the ghost's hands is clearer and gives the
+	# player agency over where the weapon goes next.
+	current_weapon = null
+	current_station_key = ""
 
 func _on_ring_bell() -> void:
-        bell_timer = 0
-        _bell_tolls()
+	bell_timer = 0
+	_bell_tolls()
 
 func _bell_tolls() -> void:
-        if bell_rang:
-                return
-        bell_rang = true
-        Juice.add_trauma(0.5)
-        SFX.play("bell")
-        Juice.hit_stop(0.1)
-        if ghost.carrying != null:
-                GameState.add_weapon(ghost.carrying)
-                ghost.carrying = null
-        await get_tree().create_timer(0.3).timeout
-        GameState.set_phase("upgrade")
+	if bell_rang:
+		return
+	bell_rang = true
+	Juice.add_trauma(0.5)
+	SFX.play("bell")
+	Juice.hit_stop(0.1)
+	if carrying != null:
+		GameState.add_weapon(carrying)
+		carrying = null
+	await get_tree().create_timer(0.3).timeout
+	GameState.set_phase("upgrade")
 
 func _draw() -> void:
-        # Floor with subtle variation
-        for y in range(HUD_H + 8, ROOM_H - 8, 16):
-                for x in range(0, ROOM_W, 16):
-                        var hash := (x / 16 * 7 + y / 16 * 13) % 31
-                        if hash < 3:
-                                draw_texture(Sprites.get_sprite("floor_crack"), Vector2(x, y))
-                        elif hash < 5:
-                                draw_texture(Sprites.get_sprite("floor_moss"), Vector2(x, y))
-                        else:
-                                draw_texture(Sprites.get_sprite("floor"), Vector2(x, y))
-        # Walls
-        for x in range(0, ROOM_W, 16):
-                draw_texture(Sprites.get_sprite("wall"), Vector2(x, HUD_H))
-                draw_texture(Sprites.get_sprite("wall"), Vector2(x, ROOM_H - 8))
-        # Wall torches for ambient light
-        for x in [32, 160, 288]:
-                draw_texture(Sprites.get_sprite("torch"), Vector2(x, HUD_H))
-                _draw_glow(Vector2(x + 8, HUD_H + 8), 20, Palette.LIGHT_TORCH)
-        # Stations
-        for st in STATIONS:
-                var tex := Sprites.get_sprite(st.sprite)
-                # Shadow
-                draw_rect(Rect2(int(st.pos.x) - 9, int(st.pos.y) - 6, 18, 4), Color(0, 0, 0, 0.3), true)
-                draw_texture(tex, st.pos - Vector2(8, 8))
-                # Ambient glow for specific stations
-                match st.key:
-                        "furnace": _draw_glow(st.pos, 24, Palette.LIGHT_FURNACE)
-                        "exorcise": _draw_glow(st.pos, 20, Palette.LIGHT_ALTAR)
-                if near_station_key == st.key:
-                        var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
-                        draw_rect(Rect2(st.pos.x - 12, st.pos.y - 12, 24, 24), Color(0.95, 0.85, 0.40, pulse), false, 1)
-                GameFont.draw_string_centered(self, st.pos + Vector2(0, 18), st.name, 8, Palette.TEXT)
-                # Arsenal weapon pile
-                if st.key == "arsenal" and GameState.arsenal.size() > 0:
-                        var pile_count: int = min(GameState.arsenal.size(), 3)
-                        for i in pile_count:
-                                var w: Weapon = GameState.arsenal[i]
-                                var gear_tex := Sprites.get_weapon_sprite_wear(w.type, w.wear_state, w.is_haunted())
-                                draw_texture(gear_tex, st.pos + Vector2(-12 + i * 8, -18))
-        # Adventurers
-        for a in adventurers:
-                var tex := Sprites.get_sprite(a.sprite)
-                draw_rect(Rect2(int(a.pos.x) - 5, int(a.pos.y) + 6, 10, 2), Color(0, 0, 0, 0.3), true)
-                draw_texture(tex, a.pos - Vector2(8, 8))
-                GameFont.draw_string_centered(self, a.pos + Vector2(0, -12), a.adv.name, 8, Palette.TEXT)
-                # Equipped weapon
-                if a.adv.get("equipped_weapon") != null:
-                        var w: Weapon = a.adv.equipped_weapon
-                        draw_texture(Sprites.get_weapon_sprite_wear(w.type, w.wear_state, w.is_haunted()), a.pos + Vector2(8, -4))
-        # Ghost
-        var bob := sin(ghost.bob) * 1.5
-        var gp: Vector2 = ghost.pos + Vector2(0, bob)
-        draw_rect(Rect2(int(gp.x) - 5, int(ghost.pos.y) + 6, 10, 2), Color(0, 0, 0, 0.3), true)
-        var ghost_tex := Sprites.get_sprite("ghost")
-        var sw := int(16.0 / maxf(0.1, ghost.squash))
-        var sh := int(16 * ghost.squash)
-        # DESIGN_PLAN 1A: ghost trail, drawn before the main sprite.
-        Juice.trail_draw(self, ghost_tex, 16)
-        # DESIGN_PLAN 1B: semi-transparent ghost while phasing.
-        var ghost_mod := Color(1, 1, 1, 1)
-        if phase_active > 0:
-                var phase_pct := phase_active / PHASE_DURATION
-                ghost_mod = Color(0.55, 0.75, 0.95, 0.5 + 0.15 * phase_pct)
-        draw_texture_rect(ghost_tex, Rect2(int(gp.x) - sw / 2, int(gp.y) - sh / 2, sw, sh), false, ghost_mod)
-        # DESIGN_PLAN 1B: cooldown ring (only when on cd, not while active).
-        if phase_cd > 0 and phase_active == 0:
-                var cd_pct: float = 1.0 - (phase_cd / PHASE_CD)
-                draw_arc(Vector2(int(gp.x), int(gp.y)), 12.0, -PI / 2, -PI / 2 + TAU * cd_pct, 16, Palette.TEXT_DIM, 1.5)
-        # Carried weapon
-        if ghost.carrying != null:
-                var item_tex := Sprites.get_weapon_sprite_wear(ghost.carrying.type, ghost.carrying.wear_state, ghost.carrying.is_haunted())
-                draw_texture(item_tex, gp + Vector2(-8, -16))
-        # Particles
-        Juice.draw_particles(self)
-        # Hint
-        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 6), "WASD:move E:interact SPACE:phase TAB:inspect", 8, Palette.TEXT_DIM)
+	# Floor with subtle variation
+	for y in range(HUD_H + 8, ROOM_H - 8, 16):
+		for x in range(0, ROOM_W, 16):
+			var hash := (x / 16 * 7 + y / 16 * 13) % 31
+			if hash < 3:
+				draw_texture(Sprites.get_sprite("floor_crack"), Vector2(x, y))
+			elif hash < 5:
+				draw_texture(Sprites.get_sprite("floor_moss"), Vector2(x, y))
+			else:
+				draw_texture(Sprites.get_sprite("floor"), Vector2(x, y))
+	# Walls
+	for x in range(0, ROOM_W, 16):
+		draw_texture(Sprites.get_sprite("wall"), Vector2(x, HUD_H))
+		draw_texture(Sprites.get_sprite("wall"), Vector2(x, ROOM_H - 8))
+	# Wall torches for ambient light
+	for x in [32, 160, 288]:
+		draw_texture(Sprites.get_sprite("torch"), Vector2(x, HUD_H))
+		_draw_glow(Vector2(x + 8, HUD_H + 8), 20, Palette.LIGHT_TORCH)
+	# Stations
+	for st in STATIONS:
+		var tex := Sprites.get_sprite(st.sprite)
+		# Shadow
+		draw_rect(Rect2(int(_get_station_pos(st.key).x) - 9, int(_get_station_pos(st.key).y) - 6, 18, 4), Color(0, 0, 0, 0.3), true)
+		draw_texture(tex, _get_station_pos(st.key) - Vector2(8, 8))
+		# Ambient glow for specific stations
+		match st.key:
+			"furnace": _draw_glow(_get_station_pos(st.key), 24, Palette.LIGHT_FURNACE)
+			"exorcise": _draw_glow(_get_station_pos(st.key), 20, Palette.LIGHT_ALTAR)
+		if near_station_key == st.key:
+			var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
+			draw_rect(Rect2(_get_station_pos(st.key).x - 12, _get_station_pos(st.key).y - 12, 24, 24), Color(0.95, 0.85, 0.40, pulse), false, 1)
+		GameFont.draw_string_centered(self, _get_station_pos(st.key) + Vector2(0, 18), st.name, 8, Palette.TEXT)
+		# Arsenal weapon pile
+		if st.key == "arsenal" and GameState.arsenal.size() > 0:
+			var pile_count: int = min(GameState.arsenal.size(), 3)
+			for i in pile_count:
+				var w: Weapon = GameState.arsenal[i]
+				var gear_tex := Sprites.get_weapon_sprite_wear(w.type, w.wear_state, w.is_haunted())
+				draw_texture(gear_tex, _get_station_pos(st.key) + Vector2(-12 + i * 8, -18))
+	# Adventurers
+	for a in adventurers:
+		var tex := Sprites.get_sprite(a.sprite)
+		draw_rect(Rect2(int(a.pos.x) - 5, int(a.pos.y) + 6, 10, 2), Color(0, 0, 0, 0.3), true)
+		draw_texture(tex, a.pos - Vector2(8, 8))
+		GameFont.draw_string_centered(self, a.pos + Vector2(0, -12), a.adv.name, 8, Palette.TEXT)
+		# Equipped weapon
+		if a.adv.get("equipped_weapon") != null:
+			var w: Weapon = a.adv.equipped_weapon
+			draw_texture(Sprites.get_weapon_sprite_wear(w.type, w.wear_state, w.is_haunted()), a.pos + Vector2(8, -4))
+	# Ghost
+	var bob := sin(move.bob) * 1.5
+	var gp: Vector2 = move.pos + Vector2(0, bob)
+	draw_rect(Rect2(int(gp.x) - 5, int(move.pos.y) + 6, 10, 2), Color(0, 0, 0, 0.3), true)
+	var ghost_tex := Sprites.get_sprite("ghost")
+	var sw := int(16.0 / maxf(0.1, move.squash))
+	var sh := int(16 * move.squash)
+	# DESIGN_PLAN 1A: ghost trail, drawn before the main sprite.
+	Juice.trail_draw(self, ghost_tex, 16)
+	# DESIGN_PLAN 1B: semi-transparent ghost while phasing.
+	var ghost_mod := Color(1, 1, 1, 1)
+	if move.is_phasing():
+		var phase_pct := move.phase_active / GhostMovement.PHASE_DURATION
+		ghost_mod = Color(0.55, 0.75, 0.95, 0.5 + 0.15 * phase_pct)
+	draw_texture_rect(ghost_tex, Rect2(int(gp.x) - sw / 2, int(gp.y) - sh / 2, sw, sh), false, ghost_mod)
+	# DESIGN_PLAN 1B: cooldown ring (only when on cd, not while active).
+	if move.phase_cd > 0 and not move.is_phasing():
+		var cd_pct: float = 1.0 - (move.phase_cd / GhostMovement.PHASE_CD)
+		draw_arc(Vector2(int(gp.x), int(gp.y)), 12.0, -PI / 2, -PI / 2 + TAU * cd_pct, 16, Palette.TEXT_DIM, 1.5)
+	# Carried weapon
+	if carrying != null:
+		var item_tex := Sprites.get_weapon_sprite_wear(carrying.type, carrying.wear_state, carrying.is_haunted())
+		draw_texture(item_tex, gp + Vector2(-8, -16))
+	# Particles
+	Juice.draw_particles(self)
+	# Hint
+	GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 6), "WASD:move E:interact SPACE:phase TAB:inspect", 8, Palette.TEXT_DIM)
 
 func _draw_glow(pos: Vector2, radius: int, color: Color) -> void:
-        var center := Vector2(int(pos.x), int(pos.y))
-        for r in [radius, int(radius * 0.6), int(radius * 0.3)]:
-                var c := color
-                c.a = c.a * (1.0 - float(r) / float(radius)) * 0.8
-                draw_circle(center, r, c)
+	var center := Vector2(int(pos.x), int(pos.y))
+	for r in [radius, int(radius * 0.6), int(radius * 0.3)]:
+		var c := color
+		c.a = c.a * (1.0 - float(r) / float(radius)) * 0.8
+		draw_circle(center, r, c)
 
 func _show_weapon_inspect(w: Weapon) -> void:
-        if inspect_panel:
-                inspect_panel.queue_free()
-        inspect_visible = true
-        inspect_panel = Panel.new()
-        inspect_panel.position = Vector2(40, 30)
-        inspect_panel.size = Vector2(240, 120)
-        add_child(inspect_panel)
-        var title := Label.new()
-        title.text = w.display_name
-        title.add_theme_font_size_override("font_size", 8)
-        title.add_theme_color_override("font_color", w.wear_color())
-        title.position = Vector2(8, 4)
-        title.size = Vector2(224, 12)
-        inspect_panel.add_child(title)
-        var state_line := Label.new()
-        state_line.text = "State: %s | Wear: %s" % [w.state_name(), w.wear_name()]
-        state_line.add_theme_font_size_override("font_size", 8)
-        state_line.add_theme_color_override("font_color", Palette.TEXT)
-        state_line.position = Vector2(8, 18)
-        state_line.size = Vector2(224, 10)
-        inspect_panel.add_child(state_line)
-        var dur_line := Label.new()
-        dur_line.text = "Durability: %d/%d" % [w.durability, w.durability_max]
-        dur_line.add_theme_font_size_override("font_size", 8)
-        dur_line.add_theme_color_override("font_color", Palette.TEXT)
-        dur_line.position = Vector2(8, 30)
-        dur_line.size = Vector2(224, 10)
-        inspect_panel.add_child(dur_line)
-        var stats := Label.new()
-        stats.text = "SHP:%d%% BAL:%d%% PWR:%d%% MYS:%d%%" % [int(w.sharpness*100), int(w.balance*100), int(w.power*100), int(w.mystic*100)]
-        stats.add_theme_font_size_override("font_size", 8)
-        stats.add_theme_color_override("font_color", Palette.TEXT_BLUE)
-        stats.position = Vector2(8, 42)
-        stats.size = Vector2(224, 10)
-        inspect_panel.add_child(stats)
-        var blurb := Label.new()
-        blurb.text = w.authoring_blurb()
-        blurb.add_theme_font_size_override("font_size", 8)
-        blurb.add_theme_color_override("font_color", Palette.TEXT_DIM)
-        blurb.position = Vector2(8, 54)
-        blurb.size = Vector2(224, 20)
-        blurb.autowrap_mode = TextServer.AUTOWRAP_WORD
-        inspect_panel.add_child(blurb)
-        var wielder := Label.new()
-        wielder.text = "Wielder: %s | Kills: %d" % [w.wielder if w.wielder != "" else "unassigned", w.kill_log.size()]
-        wielder.add_theme_font_size_override("font_size", 8)
-        wielder.add_theme_color_override("font_color", Palette.TEXT_DIM)
-        wielder.position = Vector2(8, 76)
-        wielder.size = Vector2(224, 10)
-        inspect_panel.add_child(wielder)
-        if w.is_haunted():
-                var haunt := Label.new()
-                haunt.text = "Haunted: %d unexorcised death(s) — Altar" % w.unexorcised_deaths
-                haunt.add_theme_font_size_override("font_size", 8)
-                haunt.add_theme_color_override("font_color", Palette.STATE_HAUNTED)
-                haunt.position = Vector2(8, 88)
-                haunt.size = Vector2(224, 10)
-                inspect_panel.add_child(haunt)
-        var hint := Label.new()
-        hint.text = "[TAB] close"
-        hint.add_theme_font_size_override("font_size", 8)
-        hint.add_theme_color_override("font_color", Palette.TEXT_GOLD)
-        hint.position = Vector2(8, 104)
-        hint.size = Vector2(224, 10)
-        inspect_panel.add_child(hint)
+	if inspect_panel:
+		inspect_panel.queue_free()
+	inspect_visible = true
+	inspect_panel = Panel.new()
+	inspect_panel.position = Vector2(40, 30)
+	inspect_panel.size = Vector2(240, 120)
+	add_child(inspect_panel)
+	var title := Label.new()
+	title.text = w.display_name
+	title.add_theme_font_size_override("font_size", 8)
+	title.add_theme_color_override("font_color", w.wear_color())
+	title.position = Vector2(8, 4)
+	title.size = Vector2(224, 12)
+	inspect_panel.add_child(title)
+	var state_line := Label.new()
+	state_line.text = "State: %s | Wear: %s" % [w.state_name(), w.wear_name()]
+	state_line.add_theme_font_size_override("font_size", 8)
+	state_line.add_theme_color_override("font_color", Palette.TEXT)
+	state_line.position = Vector2(8, 18)
+	state_line.size = Vector2(224, 10)
+	inspect_panel.add_child(state_line)
+	var dur_line := Label.new()
+	dur_line.text = "Durability: %d/%d" % [w.durability, w.durability_max]
+	dur_line.add_theme_font_size_override("font_size", 8)
+	dur_line.add_theme_color_override("font_color", Palette.TEXT)
+	dur_line.position = Vector2(8, 30)
+	dur_line.size = Vector2(224, 10)
+	inspect_panel.add_child(dur_line)
+	var stats := Label.new()
+	stats.text = "SHP:%d%% BAL:%d%% PWR:%d%% MYS:%d%%" % [int(w.sharpness*100), int(w.balance*100), int(w.power*100), int(w.mystic*100)]
+	stats.add_theme_font_size_override("font_size", 8)
+	stats.add_theme_color_override("font_color", Palette.TEXT_BLUE)
+	stats.position = Vector2(8, 42)
+	stats.size = Vector2(224, 10)
+	inspect_panel.add_child(stats)
+	var blurb := Label.new()
+	blurb.text = w.authoring_blurb()
+	blurb.add_theme_font_size_override("font_size", 8)
+	blurb.add_theme_color_override("font_color", Palette.TEXT_DIM)
+	blurb.position = Vector2(8, 54)
+	blurb.size = Vector2(224, 20)
+	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD
+	inspect_panel.add_child(blurb)
+	var wielder := Label.new()
+	wielder.text = "Wielder: %s | Kills: %d" % [w.wielder if w.wielder != "" else "unassigned", w.kill_log.size()]
+	wielder.add_theme_font_size_override("font_size", 8)
+	wielder.add_theme_color_override("font_color", Palette.TEXT_DIM)
+	wielder.position = Vector2(8, 76)
+	wielder.size = Vector2(224, 10)
+	inspect_panel.add_child(wielder)
+	if w.is_haunted():
+		var haunt := Label.new()
+		haunt.text = "Haunted: %d unexorcised death(s) — Altar" % w.unexorcised_deaths
+		haunt.add_theme_font_size_override("font_size", 8)
+		haunt.add_theme_color_override("font_color", Palette.STATE_HAUNTED)
+		haunt.position = Vector2(8, 88)
+		haunt.size = Vector2(224, 10)
+		inspect_panel.add_child(haunt)
+	var hint := Label.new()
+	hint.text = "[TAB] close"
+	hint.add_theme_font_size_override("font_size", 8)
+	hint.add_theme_color_override("font_color", Palette.TEXT_GOLD)
+	hint.position = Vector2(8, 104)
+	hint.size = Vector2(224, 10)
+	inspect_panel.add_child(hint)
 
 func _hide_weapon_inspect() -> void:
-        if inspect_panel:
-                inspect_panel.queue_free()
-                inspect_panel = null
-        inspect_visible = false
+	if inspect_panel:
+		inspect_panel.queue_free()
+		inspect_panel = null
+	inspect_visible = false
 
 func _on_phase_exit() -> void:
-        if ghost.carrying != null:
-                GameState.add_weapon(ghost.carrying)
-                ghost.carrying = null
+	if carrying != null:
+		GameState.add_weapon(carrying)
+		carrying = null
