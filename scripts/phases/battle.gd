@@ -51,13 +51,10 @@ func _ready() -> void:
 	# Read the FULL dungeon generation — same layout as salvage (corridor
 	# length, narrow zones, noise seed for floor detail). This ensures the
 	# battle takes place in the same physical space the player will salvage.
-	var gen: Dictionary = GameState.get_dungeon_gen()
-	corridor_h = gen.get("corridor_h", 60)
-	narrow_zones = gen.get("narrow_zones", [])
-	_noise = FastNoiseLite.new()
-	_noise.seed = gen.get("seed", randi())
-	_noise.frequency = 0.3
-	_noise.noise_type = FastNoiseLite.TYPE_CELLULAR
+	var gen: DungeonGen = GameState.get_dungeon_gen()
+	corridor_h = gen.corridor_h
+	narrow_zones = gen.narrow_zones
+	_noise = gen.get_noise()
 	cam = Camera2D.new()
 	cam.position = Vector2(CORRIDOR_W * TILE / 2, 0)
 	cam.enabled = true

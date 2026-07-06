@@ -71,7 +71,7 @@ func trail_draw(canvas: CanvasItem, ghost_tex: Texture2D, base_size: int = 16) -
 		var tint: Color = trail_tint if trail_phasing else s.modulate
 		var c := Color(tint.r, tint.g, tint.b, alpha)
 		var sz := int(base_size * (0.8 + life_pct * 0.2))
-		canvas.draw_texture_rect(ghost_tex, Rect2(s.pos.x - sz / 2, s.pos.y - sz / 2, sz, sz), false, c)
+		canvas.draw_texture_rect(ghost_tex, Rect2(s.pos.x - sz / 2.0, s.pos.y - sz / 2.0, sz, sz), false, c)
 
 func get_shake_offset() -> Vector2:
 	if shake_amount <= 0:

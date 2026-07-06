@@ -31,12 +31,12 @@ func _build_buses() -> void:
 		AudioServer.set_bus_name(2, "Music")
 		AudioServer.set_bus_send(2, "Master")
 
-func play(name: String, pitch := 1.0, vol_db := 0.0, jitter := 0.06) -> void:
-	if not _streams.has(name):
+func play(p_name: String, pitch := 1.0, vol_db := 0.0, jitter := 0.06) -> void:
+	if not _streams.has(p_name):
 		return
 	var p := _players[_cursor]
 	_cursor = (_cursor + 1) % VOICES
-	p.stream = _streams[name]
+	p.stream = _streams[p_name]
 	p.pitch_scale = clampf(pitch + randf_range(-jitter, jitter), 0.2, 4.0)
 	p.volume_db = vol_db
 	p.play()
@@ -126,7 +126,7 @@ func _shatter() -> PackedFloat32Array:
 
 func _coin() -> PackedFloat32Array:
 	var n := int(0.22 * SR); var e := _env(n, 0.003, 0.12); var o := PackedFloat32Array(); o.resize(n)
-	var split := n/2
+	var split := n / 2
 	for i in n:
 		var t := float(i)/SR
 		var f := 988.0 if i < split else 1319.0
@@ -174,7 +174,7 @@ func _recruit() -> PackedFloat32Array:
 	var n := int(0.4 * SR); var e := _env(n, 0.01, 0.3); var o := PackedFloat32Array(); o.resize(n)
 	for i in n:
 		var t := float(i)/SR
-		var f := 523.0 if i < n/2 else 784.0
+		var f := 523.0 if i < n / 2 else 784.0
 		o[i] = sin(TAU*f*t) * e[i] * 0.25
 	return o
 
@@ -195,7 +195,6 @@ func _phase_in() -> PackedFloat32Array:
 	var n := int(0.25 * SR); var e := _env(n, 0.005, 0.18); var o := PackedFloat32Array(); o.resize(n)
 	var ph := 0.0
 	for i in n:
-		var t := float(i) / SR
 		var f := 880.0 - 660.0 * (float(i) / n)
 		ph += f / SR
 		o[i] = (sin(ph) * 0.4 + randf_range(-1, 1) * 0.25 * (1.0 - float(i) / n)) * e[i] * 0.32

@@ -34,11 +34,11 @@ var last_battle_result: Dictionary = {}
 var run_log: Array = []
 
 # --- Dungeon generation (persists per stage — same layout for battle + salvage) ---
-# The generation includes: corridor length, width segments (wide/narrow zones),
-# hazard positions, corpse positions, and floor detail noise seed.
-# It's regenerated when the stage changes, so the player runs through the SAME
-# dungeon for battle and salvage within a stage.
-var dungeon_gen: Dictionary = {}
+# The DungeonGen instance handles ALL randomness for the dungeon: corridor
+# length, width segments (wide/narrow zones), hazard placement, and noise
+# seeds for floor detail. It's regenerated when the stage changes, so the
+# player runs through the SAME dungeon for battle and salvage within a stage.
+var dungeon_gen: DungeonGen = null
 var dungeon_gen_stage: int = -1  # which stage the current gen was built for
 
 # --- Meta state (persists) ---
@@ -156,8 +156,7 @@ func next_wave() -> void:
                 run_log.append("Stage %d cleared! Descending..." % (stage - 1))
                 # New stage → new dungeon generation. The old gen is cleared so
                 # get_dungeon_gen() will regenerate on next access.
-                dungeon_gen.clear()
-                dungeon_gen_stage = -1
+                clear_dungeon_gen()
         else:
                 run_log.append("Wave %d begins." % wave)
         # NOTE: party is NOT cleared — it persists across waves. Dead members stay
@@ -168,85 +167,22 @@ func next_wave() -> void:
         arsenal_changed.emit()
 
 # === DUNGEON GENERATION ===
-## Returns the dungeon generation for the current stage, generating it if
+## Returns the DungeonGen instance for the current stage, generating it if
 ## needed. The generation persists for the entire stage — battle and salvage
-## both use the same layout. It includes:
-##   seed: int — noise seed for floor details
-##   corridor_h: int — corridor length in tiles (clamped to weapon count + variance)
-##   width_segments: Array — [{start_y, end_y, width_left, width_right}] zones
-##   hazards: Array — [{pos, type, active, cooldown}] (positions in tile coords)
-##   corpses: Array — [{pos, ...}] (positions in tile coords, populated by salvage)
-## The width segments create a varied corridor: wide → diagonal transition →
-## narrow → wide, at different y levels each generation. Hazards are placed
-## in the narrower sections (harder to avoid). The first run uses a sim of
-## the predecessor party's deaths to seed corpse positions.
-func get_dungeon_gen() -> Dictionary:
-        if dungeon_gen_stage == stage and not dungeon_gen.is_empty():
+## both read from the same DungeonGen so the player runs through the SAME
+## physical space. Regenerated when the stage changes.
+func get_dungeon_gen() -> DungeonGen:
+        if dungeon_gen_stage == stage and dungeon_gen != null:
                 return dungeon_gen
-        _generate_dungeon()
+        # Generate a new dungeon for this stage.
+        var fallen_count: int = last_battle_result.get("fallen_gear", []).size() if not last_battle_result.is_empty() else 0
+        dungeon_gen = DungeonGen.new(stage, fallen_count, int(meta_upgrades["salvage_expert"]))
+        dungeon_gen_stage = stage
         return dungeon_gen
 
-func _generate_dungeon() -> void:
-        # Corridor length: clamped to weapon count (fallen gear + bonus) with
-        # random variance. More weapons = longer corridor. Min 20, max 80.
-        var fallen_count: int = last_battle_result.get("fallen_gear", []).size() if not last_battle_result.is_empty() else 0
-        var bonus_count: int = 1 + int(stage / 3) + int(meta_upgrades["salvage_expert"])
-        var weapon_count: int = fallen_count + bonus_count
-        if weapon_count < 2:
-                weapon_count = 2 + int(stage / 2)  # first-run fallback
-        var corridor_h: int = clampi(20 + weapon_count * 6 + randi() % 8, 20, 80)
-        # Width segments: the corridor has wide zones (full 18-tile width) and
-        # narrow zones (8-12 tiles wide), connected by diagonal transitions.
-        # Each generation picks 2-3 narrow zones at random y levels.
-        var narrow_zones: Array = []
-        var zone_count: int = 2 + randi() % 2  # 2-3 narrow zones
-        var zone_spacing: int = corridor_h / (zone_count + 1)
-        for i in zone_count:
-                var y_center: int = zone_spacing * (i + 1) + randi() % (zone_spacing / 2)
-                var narrow_w: int = 8 + randi() % 5  # 8-12 tiles wide
-                var narrow_left: int = (18 - narrow_w) / 2 + randi() % 4 - 2
-                narrow_zones.append({
-                        "y_center": y_center,
-                        "y_half": 3 + randi() % 2,  # zone height (6-10 tiles)
-                        "width_left": narrow_left,
-                        "width_right": narrow_left + narrow_w,
-                })
-        # Hazards — placed in/near narrow zones (harder to avoid). Count scales
-        # with stage. Hazard types: pit, fire, spikes.
-        var hazard_count: int = 4 + stage * 2
-        var hazards: Array = []
-        var htypes := ["pit", "fire", "spikes"]
-        for i in hazard_count:
-                var narrow_idx: int = i % narrow_zones.size() if not narrow_zones.is_empty() else -1
-                var y: int
-                var x: int
-                if narrow_idx >= 0:
-                        var nz: Dictionary = narrow_zones[narrow_idx]
-                        y = nz.y_center + randi() % (nz.y_half * 2) - nz.y_half
-                        x = nz.width_left + randi() % max(1, nz.width_right - nz.width_left)
-                else:
-                        y = 6 + i * 4
-                        x = 2 + randi() % 14
-                hazards.append({
-                        "pos": Vector2(x, y),  # tile coords
-                        "type": htypes[i % htypes.size()],
-                        "active": true,
-                        "cooldown": 0.0,
-                })
-        # Floor detail noise seed — used by salvage _draw for per-tile variation.
-        var noise_seed: int = randi()
-        dungeon_gen = {
-                "seed": noise_seed,
-                "corridor_h": corridor_h,
-                "narrow_zones": narrow_zones,
-                "hazards": hazards,
-                "corridor_w": 18,  # full width (narrow zones are sub-regions)
-        }
-        dungeon_gen_stage = stage
-
 func clear_dungeon_gen() -> void:
-        # Called when starting a new run — forces regeneration.
-        dungeon_gen.clear()
+        # Called when starting a new run or changing stage — forces regeneration.
+        dungeon_gen = null
         dungeon_gen_stage = -1
 
 # === CURRENCY ===
@@ -283,7 +219,7 @@ func spawn_party() -> void:
         # Clear out any dead entries so we start fresh
         party.clear()
         var classes := ["knight", "mage"]
-        var count := 2 + int(stage / 2)
+        var count := 2 + int(stage / 2.0)
         count = min(count, MAX_PARTY_SIZE)
         for i in count:
                 var cls: String = classes[i % classes.size()]
@@ -301,7 +237,7 @@ func spawn_party() -> void:
                 })
         party_changed.emit()
 
-func _random_name(seed_i: int) -> String:
+func _random_name(_seed_i: int) -> String:
         # Randomized names — was deterministic (always same names in same order
         # based on stage+wave+seed_i). Now shuffles the pool per-call and
         # avoids repeating the most recently used name. Each party member
@@ -438,4 +374,4 @@ func get_enemy_atk() -> int:
         return 20 + stage * 5 + wave * 3
 
 func get_enemy_count() -> int:
-        return 5 + stage + int(wave / 2)
+        return 5 + stage + int(wave / 2.0)

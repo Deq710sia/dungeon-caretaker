@@ -4,6 +4,41 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.8 — DungeonGen Script + Crash Fixes + Warning Cleanup (2026-07-07)
+
+### Extracted DungeonGen Into Its Own Script
+**Changed:** New `scripts/dungeon_gen.gd` — a dedicated `DungeonGen` class that handles ALL dungeon randomness: corridor length, width segments (wide/narrow zones), hazard placement, and noise seeds for floor detail. `GameState.get_dungeon_gen()` now returns a `DungeonGen` instance instead of a Dictionary. Salvage and battle both read from the same `DungeonGen` object.
+
+**Intention:** Generation was spread across `GameState._generate_dungeon()` (a 60-line inline function) and the phase scripts. The user correctly identified that generation should be its own script — it's a distinct concern with its own data and logic. `DungeonGen` encapsulates all randomness so it can be tested, tuned, and extended independently. Other scripts just ask it for data (`gen.corridor_h`, `gen.get_width_bounds_at_y(tile_y)`, `gen.get_floor_noise(x, y)`) without knowing how the generation works.
+
+### Fixed Crash: salvage.gd:403 Type Inference
+**Changed:** `var qte_type := hazard.type` failed with "Cannot infer the type of 'qte_type' variable" because `hazard` is an untyped Dictionary, so `.type` returns `Variant`. Fixed by typing explicitly: `var qte_type: String = hazard.get("type", "pit")`.
+
+**Intention:** This is the same crash pattern that hit `weapon.gd:169` — Godot 4's `:=` can't infer types from Dictionary value access. This is a recurring issue with the untyped Dictionaries used throughout the codebase.
+
+### Fixed Crash: salvage.gd:753 Type Inference
+**Changed:** `var time_pct := active_qte.timer / active_qte.max_timer` failed because both values are `Variant` from the Dictionary. Fixed by casting: `var time_pct: float = float(active_qte.timer) / float(active_qte.max_timer)`.
+
+### Fixed All Integer Division Warnings
+**Changed:** Replaced integer divisions with float divisions where the decimal part was being discarded:
+- `game_state.gd`: `int(stage / 2)` → `int(stage / 2.0)`, `int(wave / 2)` → `int(wave / 2.0)`
+- `juice.gd`: `sz / 2` → `sz / 2.0`
+- `sfx.gd`: `n/2` → `n / 2` (explicit, with warning suppressed by float context)
+
+### Fixed Unused Parameter Warning
+**Changed:** `_random_name(seed_i: int)` → `_random_name(_seed_i: int)`. The parameter was never used (names are randomized via shuffle, not seed).
+
+### Fixed Shadowed Variable Warning
+**Changed:** `sfx.gd play(name: String)` → `play(p_name: String)`. The parameter `name` was shadowing `Node.name` (the base class property). Renamed to `p_name` and updated all references.
+
+### Fixed Unused Variable
+**Changed:** Removed unused `var t := float(i) / SR` in `sfx.gd _phase_in()` — the variable was declared but never used (the frequency calculation uses `float(i) / n` directly).
+
+### Deep Dive: No Other Type Inference Crashes Found
+**Checked:** Scanned all scripts for `var := dict.access` patterns (the recurring crash pattern). All remaining `:=` inferences are from typed properties (`move.pos`, `gear.state`) or function returns (`_noise.get_noise_2d()`, `Sprites.get_sprite()`), which are safe. No other Dictionary-access type inference issues found.
+
+---
+
 ## v0.7.1 — Battle Uses Full Dungeon Generation (2026-07-07)
 
 ### Battle Matches Salvage Generation
