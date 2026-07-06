@@ -31,7 +31,7 @@ func _ready() -> void:
 	if p and p.get("ghost") != null and p.ghost.carrying != null:
 		gear = p.ghost.carrying
 	# Setup area
-	var vp := Vector2(320, 180)
+	var vp := Vector2(480, 270)
 	area_origin = Vector2(vp.x * 0.20, vp.y * 0.30)
 	area_size = Vector2(vp.x * 0.60, vp.y * 0.45)
 	total_cells = cells_wide * cells_high
@@ -61,7 +61,7 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 func _draw() -> void:
-	var vp := Vector2(320, 180)
+	var vp := Vector2(480, 270)
 	# Dim background
 	draw_rect(Rect2(Vector2.ZERO, vp), Color(0.05, 0.03, 0.08, 1.0), true)
 	# Draw the weapon LARGE in the center (the centerpiece!)
@@ -125,7 +125,7 @@ func _input(event: InputEvent) -> void:
 func _paint_at(pos: Vector2) -> void:
 	if gear == null:
 		return
-	var vp := Vector2(320, 180)
+	var vp := Vector2(480, 270)
 	var wsize := 96
 	var wpos := Vector2(vp.x / 2 - wsize / 2, vp.y / 2 - wsize / 2)
 	var cell_w: float = float(wsize) / float(cells_wide)

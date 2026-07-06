@@ -5,10 +5,10 @@ extends Node2D
 const TILE: int = 16
 const CORRIDOR_W: int = 18
 const CORRIDOR_H: int = 60
-const VIEW_W: int = 320
-const VIEW_H: int = 180
+const VIEW_W: int = 480
+const VIEW_H: int = 270
 
-var ghost_pos: Vector2 = Vector2(CORRIDOR_W * TILE / 2, 32)
+var ghost_pos: Vector2 = Vector2(CORRIDOR_W * TILE / 2, 48)
 var ghost_vel: Vector2 = Vector2.ZERO
 var ghost_speed: float = 55.0
 var ghost_accel: float = 300.0
@@ -136,21 +136,21 @@ func _build_hud() -> void:
         add_child(hud_layer)
         var panel := Panel.new()
         panel.position = Vector2(0, 0)
-        panel.size = Vector2(VIEW_W, 14)
+        panel.size = Vector2(VIEW_W, 20)
         hud_layer.add_child(panel)
         hud_stage = Label.new()
         hud_stage.text = "S%d W%d SALVAGE" % [GameState.stage, GameState.wave]
         hud_stage.add_theme_font_size_override("font_size", 8)
         hud_stage.add_theme_color_override("font_color", Palette.TEXT_GOLD)
         hud_stage.position = Vector2(2, 2)
-        hud_stage.size = Vector2(120, 10)
+        hud_stage.size = Vector2(160, 12)
         panel.add_child(hud_stage)
         hud_collected = Label.new()
         hud_collected.text = "Salvaged: 0"
         hud_collected.add_theme_font_size_override("font_size", 8)
         hud_collected.add_theme_color_override("font_color", Palette.TEXT_BLUE)
-        hud_collected.position = Vector2(220, 2)
-        hud_collected.size = Vector2(96, 10)
+        hud_collected.position = Vector2(340, 2)
+        hud_collected.size = Vector2(130, 12)
         hud_collected.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
         panel.add_child(hud_collected)
         # Ghost HP display (hearts)
@@ -158,15 +158,15 @@ func _build_hud() -> void:
         hud_hp.text = "HP: " + "♥".repeat(ghost_hp) + "·".repeat(ghost_hp_max - ghost_hp)
         hud_hp.add_theme_font_size_override("font_size", 8)
         hud_hp.add_theme_color_override("font_color", Palette.TEXT_RED)
-        hud_hp.position = Vector2(130, 2)
-        hud_hp.size = Vector2(80, 10)
+        hud_hp.position = Vector2(190, 2)
+        hud_hp.size = Vector2(120, 12)
         panel.add_child(hud_hp)
         hud_hint = Label.new()
         hud_hint.text = "WASD: move | E: interact"
         hud_hint.add_theme_font_size_override("font_size", 8)
         hud_hint.add_theme_color_override("font_color", Palette.TEXT_DIM)
-        hud_hint.position = Vector2(0, VIEW_H - 8)
-        hud_hint.size = Vector2(VIEW_W, 7)
+        hud_hint.position = Vector2(0, VIEW_H - 12)
+        hud_hint.size = Vector2(VIEW_W, 10)
         hud_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
         hud_layer.add_child(hud_hint)
 
@@ -193,7 +193,7 @@ func _physics_process(delta: float) -> void:
                 ghost_vel = ghost_vel.move_toward(Vector2.ZERO, ghost_friction * delta * ghost_speed / 10.0)
         ghost_pos += ghost_vel * delta
         ghost_pos.x = clampf(ghost_pos.x, TILE, (CORRIDOR_W - 1) * TILE)
-        ghost_pos.y = clampf(ghost_pos.y, 14, (CORRIDOR_H - 1) * TILE)
+        ghost_pos.y = clampf(ghost_pos.y, 22, (CORRIDOR_H - 1) * TILE)
         # Camera: smooth follow with look-ahead in movement direction
         # Look-ahead offset based on velocity (not just fixed +40)
         var look_ahead := ghost_facing * 24.0
@@ -461,8 +461,8 @@ func _draw() -> void:
         Juice.draw_particles(self)
         # Progress bar (fixed at right edge of screen)
         var progress := clampf(ghost_pos.y / (CORRIDOR_H * TILE), 0, 1)
-        draw_rect(Rect2(VIEW_W - 4, 16, 2, VIEW_H - 30), Palette.DARK, true)
-        draw_rect(Rect2(VIEW_W - 4, 16 + int((VIEW_H - 30) * (1 - progress)), 2, int((VIEW_H - 30) * progress)), Palette.SLIME, true)
+        draw_rect(Rect2(VIEW_W - 6, 24, 2, VIEW_H - 30), Palette.DARK, true)
+        draw_rect(Rect2(VIEW_W - 6, 24 + int((VIEW_H - 30) * (1 - progress)), 2, int((VIEW_H - 30) * progress)), Palette.SLIME, true)
 
 func _draw_torch_glow(pos: Vector2) -> void:
         # Radial gradient glow (pixel-art friendly: drawn as concentric circles)

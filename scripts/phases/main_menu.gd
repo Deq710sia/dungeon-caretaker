@@ -25,23 +25,23 @@ func _ready() -> void:
 	# Decorative ghost
 	var ghost := Sprite2D.new()
 	ghost.texture = Sprites.get_sprite("ghost")
-	ghost.scale = Vector2(3, 3)
-	ghost.position = Vector2(160, 95)
+	ghost.scale = Vector2(4, 4)
+	ghost.position = Vector2(240, 140)
 	ghost.modulate = Color(1, 1, 1, 0.6)
 	add_child(ghost)
 	# Buttons
 	var start_btn := Button.new()
 	start_btn.text = "Start New Run"
 	start_btn.add_theme_font_size_override("font_size", 8)
-	start_btn.position = Vector2(90, 130)
-	start_btn.size = Vector2(140, 16)
+	start_btn.position = Vector2(140, 195)
+	start_btn.size = Vector2(200, 20)
 	start_btn.pressed.connect(_on_start)
 	add_child(start_btn)
 	var quit_btn := Button.new()
 	quit_btn.text = "Quit"
 	quit_btn.add_theme_font_size_override("font_size", 8)
-	quit_btn.position = Vector2(90, 150)
-	quit_btn.size = Vector2(140, 14)
+	quit_btn.position = Vector2(140, 225)
+	quit_btn.size = Vector2(200, 18)
 	quit_btn.pressed.connect(_on_quit)
 	add_child(quit_btn)
 	# Hint

@@ -7,8 +7,8 @@ extends Node2D
 ## follows (salvage -> workshop -> planning) feel earned rather than
 ## automatic — you see WHY there's gear to collect and armor to repair.
 
-const ROOM_W: int = 320
-const ROOM_H: int = 180
+const ROOM_W: int = 480
+const ROOM_H: int = 270
 
 var fallen_names: Array = []
 var continue_btn: Button
@@ -26,7 +26,7 @@ func _build_hud() -> void:
 	continue_btn.text = "Continue >"
 	continue_btn.add_theme_font_size_override("font_size", 8)
 	continue_btn.position = Vector2(ROOM_W / 2 - 60, ROOM_H - 22)
-	continue_btn.size = Vector2(120, 16)
+	continue_btn.size = Vector2(180, 20)
 	continue_btn.pressed.connect(_on_continue)
 	hud_layer.add_child(continue_btn)
 
@@ -47,7 +47,7 @@ func _draw() -> void:
 		GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H / 2 + 10), "Their gear still needs tending before the next wave.", 8, Palette.TEXT_DIM)
 	else:
 		GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, 30), "S%d W%d — THE FALLEN" % [GameState.last_battle_result.get("stage", GameState.stage), GameState.last_battle_result.get("wave", GameState.wave)], 8, Palette.TEXT_RED)
-		var start_y: float = 55.0
+		var start_y: float = 82.0
 		var spacing: float = min(90.0, 280.0 / max(1, fallen_names.size()))
 		var start_x: float = ROOM_W / 2.0 - (fallen_names.size() - 1) * spacing / 2.0
 		for i in fallen_names.size():

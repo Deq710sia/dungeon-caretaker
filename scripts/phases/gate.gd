@@ -10,12 +10,12 @@ extends Node2D
 ## stats screen that has nothing real to show yet. On every later cycle, the
 ## grave markers reflect whoever actually fell in the wave you just fought.
 
-const ROOM_W: int = 320
-const ROOM_H: int = 180
-const GATE_POS := Vector2(160, 34)
+const ROOM_W: int = 480
+const ROOM_H: int = 270
+const GATE_POS := Vector2(240, 50)
 const GATE_RADIUS: float = 20.0
 
-var ghost_pos: Vector2 = Vector2(160, 150)
+var ghost_pos: Vector2 = Vector2(240, 220)
 var ghost_vel: Vector2 = Vector2.ZERO
 var graves: Array = []
 var near_gate: bool = false
@@ -43,15 +43,15 @@ func _build_graves() -> void:
 	var spacing: float = min(70.0, 280.0 / max(1, names.size()))
 	var start_x: float = ROOM_W / 2.0 - (names.size() - 1) * spacing / 2.0
 	for i in names.size():
-		graves.append({"pos": Vector2(start_x + i * spacing, 100), "name": names[i]})
+		graves.append({"pos": Vector2(start_x + i * spacing, 150), "name": names[i]})
 
 func _build_hud() -> void:
 	hint_label = Label.new()
 	hint_label.text = "WASD:move E:open gate"
 	hint_label.add_theme_font_size_override("font_size", 8)
 	hint_label.add_theme_color_override("font_color", Palette.TEXT_DIM)
-	hint_label.position = Vector2(0, ROOM_H - 12)
-	hint_label.size = Vector2(ROOM_W, 10)
+	hint_label.position = Vector2(0, ROOM_H - 18)
+	hint_label.size = Vector2(ROOM_W, 14)
 	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(hint_label)
 
@@ -71,7 +71,7 @@ func _process(delta: float) -> void:
 		ghost_vel = ghost_vel.move_toward(Vector2.ZERO, 300.0 * delta)
 	ghost_pos += ghost_vel * delta
 	ghost_pos.x = clampf(ghost_pos.x, 12, ROOM_W - 12)
-	ghost_pos.y = clampf(ghost_pos.y, 24, ROOM_H - 20)
+	ghost_pos.y = clampf(ghost_pos.y, 36, ROOM_H - 30)
 	near_gate = ghost_pos.distance_to(GATE_POS) < GATE_RADIUS
 	if near_gate and Input.is_action_just_pressed("interact"):
 		_open_gate()
@@ -87,17 +87,17 @@ func _open_gate() -> void:
 
 func _draw() -> void:
 	# Floor
-	for y in range(20, ROOM_H - 8, 16):
+	for y in range(30, ROOM_H - 12, 16):
 		for x in range(0, ROOM_W, 16):
 			draw_texture(Sprites.get_sprite("floor"), Vector2(x, y))
 	# Side walls of the approach
-	for y in range(20, ROOM_H, 16):
+	for y in range(30, ROOM_H, 16):
 		draw_texture(Sprites.get_sprite("wall"), Vector2(0, y))
 		draw_texture(Sprites.get_sprite("wall_mossy"), Vector2(ROOM_W - 16, y))
 	# Gate arch
-	for x in range(GATE_POS.x - 40, GATE_POS.x + 41, 16):
+	for x in range(GATE_POS.x - 48, GATE_POS.x + 49, 16):
 		draw_texture(Sprites.get_sprite("wall"), Vector2(x, GATE_POS.y - 16))
-	draw_texture_rect(Sprites.get_sprite("door"), Rect2(GATE_POS.x - 16, GATE_POS.y - 16, 32, 32), false)
+	draw_texture_rect(Sprites.get_sprite("door"), Rect2(GATE_POS.x - 24, GATE_POS.y - 24, 48, 48), false)
 	if near_gate and not opening:
 		var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
 		draw_rect(Rect2(GATE_POS.x - 20, GATE_POS.y - 20, 40, 40), Color(0.85, 0.75, 0.55, pulse), false, 1)

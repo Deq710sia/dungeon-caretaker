@@ -56,7 +56,7 @@ func _process(delta: float) -> void:
         queue_redraw()
 
 func _draw() -> void:
-        var vp := Vector2(320, 180)
+        var vp := Vector2(480, 270)
         draw_rect(Rect2(Vector2.ZERO, vp), Color(0.05, 0.03, 0.08, 1.0), true)
         # Grindstone (large, center-left)
         var wheel_center := Vector2(vp.x * 0.35, vp.y * 0.55)

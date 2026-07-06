@@ -4,8 +4,8 @@ extends Node2D
 const TILE: int = 16
 const CORRIDOR_W: int = 18
 const CORRIDOR_H: int = 60
-const VIEW_W: int = 320
-const VIEW_H: int = 180
+const VIEW_W: int = 480
+const VIEW_H: int = 270
 
 var party_units: Array = []
 var enemies: Array = []
@@ -71,7 +71,7 @@ func _spawn_party_units() -> void:
                 var iq_mult: float = 1.0 + float(GameState.meta_upgrades["adventurer_training"]) * 0.05
                 atk = int(atk * iq_mult)
                 party_units.append({
-                        "pos": Vector2(CORRIDOR_W * TILE / 2 + (i - 1) * 18, (CORRIDOR_H - 3) * TILE),
+                        "pos": Vector2(CORRIDOR_W * TILE / 2 + (i - 1) * 24, (CORRIDOR_H - 3) * TILE),
                         "hp": hp,
                         "hp_max": hp,
                         "atk": atk,
@@ -129,20 +129,20 @@ func _build_hud() -> void:
         add_child(hud_layer)
         var panel := Panel.new()
         panel.position = Vector2(0, 0)
-        panel.size = Vector2(VIEW_W, 14)
+        panel.size = Vector2(VIEW_W, 20)
         hud_layer.add_child(panel)
         var lbl := Label.new()
         lbl.text = "S%d W%d BATTLE" % [GameState.stage, GameState.wave]
         lbl.add_theme_font_size_override("font_size", 8)
         lbl.add_theme_color_override("font_color", Palette.TEXT_GOLD)
         lbl.position = Vector2(2, 2)
-        lbl.size = Vector2(VIEW_W, 10)
+        lbl.size = Vector2(VIEW_W, 14)
         panel.add_child(lbl)
         continue_btn = Button.new()
         continue_btn.text = "Continue >"
         continue_btn.add_theme_font_size_override("font_size", 8)
-        continue_btn.position = Vector2(VIEW_W / 2 - 40, VIEW_H / 2 + 20)
-        continue_btn.size = Vector2(80, 16)
+        continue_btn.position = Vector2(VIEW_W / 2 - 60, VIEW_H / 2 + 30)
+        continue_btn.size = Vector2(120, 20)
         continue_btn.visible = false
         continue_btn.pressed.connect(_on_continue)
         hud_layer.add_child(continue_btn)
@@ -150,8 +150,8 @@ func _build_hud() -> void:
         log_label.text = "The party descends..."
         log_label.add_theme_font_size_override("font_size", 8)
         log_label.add_theme_color_override("font_color", Palette.TEXT)
-        log_label.position = Vector2(2, VIEW_H - 10)
-        log_label.size = Vector2(VIEW_W, 8)
+        log_label.position = Vector2(2, VIEW_H - 14)
+        log_label.size = Vector2(VIEW_W, 12)
         hud_layer.add_child(log_label)
 
 func _process(delta: float) -> void:

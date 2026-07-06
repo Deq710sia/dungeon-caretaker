@@ -3,21 +3,21 @@ extends Node2D
 ## Walk between stations. Repair minigames show weapon large. Ring bell to
 ## move on to the upgrade shop, then planning to assign the gear you just fixed.
 
-const ROOM_W: int = 320
-const ROOM_H: int = 180
-const HUD_H: int = 14
+const ROOM_W: int = 480
+const ROOM_H: int = 270
+const HUD_H: int = 20
 const STATION_RADIUS: float = 16.0
 
 const STATIONS := [
-        {"key": "arsenal",   "name": "ARSENAL",   "sprite": "chest",      "pos": Vector2(30, 50)},
-        {"key": "polish",    "name": "POLISH",    "sprite": "bench",      "pos": Vector2(90, 50),  "states": [Weapon.State.BLOODIED]},
-        {"key": "oil_grind", "name": "GRIND",     "sprite": "grindstone", "pos": Vector2(150, 50), "states": [Weapon.State.RUSTED]},
-        {"key": "exorcise",  "name": "ALTAR",  "sprite": "altar",      "pos": Vector2(210, 50), "states": [Weapon.State.HAUNTED, Weapon.State.CURSED]},
-        {"key": "reforge",   "name": "FORGE",   "sprite": "furnace",    "pos": Vector2(270, 50), "states": [Weapon.State.SHATTERED]},
+        {"key": "arsenal",   "name": "ARSENAL",   "sprite": "chest",      "pos": Vector2(50, 70)},
+        {"key": "polish",    "name": "POLISH",    "sprite": "bench",      "pos": Vector2(140, 70),  "states": [Weapon.State.BLOODIED]},
+        {"key": "oil_grind", "name": "GRIND",     "sprite": "grindstone", "pos": Vector2(230, 70), "states": [Weapon.State.RUSTED]},
+        {"key": "exorcise",  "name": "ALTAR",  "sprite": "altar",      "pos": Vector2(320, 70), "states": [Weapon.State.HAUNTED, Weapon.State.CURSED]},
+        {"key": "reforge",   "name": "FORGE",   "sprite": "furnace",    "pos": Vector2(410, 70), "states": [Weapon.State.SHATTERED]},
 ]
 
 var ghost: Dictionary = {
-        "pos": Vector2(160, 110),
+        "pos": Vector2(240, 160),
         "vel": Vector2.ZERO,
         "speed": 55.0,
         "accel": 300.0,
@@ -60,7 +60,7 @@ func _adventurers_arrive() -> void:
         for i in n:
                 var adv: Dictionary = living[i]
                 adventurers.append({
-                        "pos": Vector2(start_x + i * spacing, 130),
+                        "pos": Vector2(start_x + i * spacing, 200),
                         "sprite": "knight" if adv["class"] == "knight" else "mage",
                         "adv": adv,
                 })
@@ -68,35 +68,35 @@ func _adventurers_arrive() -> void:
 func _build_hud() -> void:
         var panel := Panel.new()
         panel.position = Vector2(0, 0)
-        panel.size = Vector2(ROOM_W, HUD_H)
+        panel.size = Vector2(ROOM_W, 20)
         add_child(panel)
         hud_stage = Label.new()
         hud_stage.text = "S%d W%d WORKSHOP" % [GameState.stage, GameState.wave]
         hud_stage.add_theme_font_size_override("font_size", 8)
         hud_stage.add_theme_color_override("font_color", Palette.TEXT_GOLD)
-        hud_stage.position = Vector2(2, 2)
-        hud_stage.size = Vector2(88, 10)
+        hud_stage.position = Vector2(2, 3)
+        hud_stage.size = Vector2(130, 14)
         panel.add_child(hud_stage)
         hud_bell = Label.new()
         hud_bell.text = "Bell: 75s"
         hud_bell.add_theme_font_size_override("font_size", 8)
         hud_bell.add_theme_color_override("font_color", Palette.TEXT_RED)
-        hud_bell.position = Vector2(92, 2)
-        hud_bell.size = Vector2(60, 10)
+        hud_bell.position = Vector2(135, 3)
+        hud_bell.size = Vector2(90, 14)
         panel.add_child(hud_bell)
         hud_shards = Label.new()
         hud_shards.text = "Shards: 0"
         hud_shards.add_theme_font_size_override("font_size", 8)
         hud_shards.add_theme_color_override("font_color", Palette.TEXT_BLUE)
-        hud_shards.position = Vector2(154, 2)
-        hud_shards.size = Vector2(60, 10)
+        hud_shards.position = Vector2(228, 3)
+        hud_shards.size = Vector2(90, 14)
         panel.add_child(hud_shards)
         hud_carrying = Label.new()
         hud_carrying.text = "Carry: -"
         hud_carrying.add_theme_font_size_override("font_size", 8)
         hud_carrying.add_theme_color_override("font_color", Palette.TEXT_DIM)
-        hud_carrying.position = Vector2(216, 2)
-        hud_carrying.size = Vector2(100, 10)
+        hud_carrying.position = Vector2(322, 3)
+        hud_carrying.size = Vector2(150, 14)
         panel.add_child(hud_carrying)
         prompt_label = Label.new()
         prompt_label.text = ""
@@ -111,8 +111,8 @@ func _build_hud() -> void:
         ring_bell_btn = Button.new()
         ring_bell_btn.text = "Ring Bell"
         ring_bell_btn.add_theme_font_size_override("font_size", 8)
-        ring_bell_btn.position = Vector2(250, 160)
-        ring_bell_btn.size = Vector2(60, 14)
+        ring_bell_btn.position = Vector2(380, 240)
+        ring_bell_btn.size = Vector2(80, 18)
         ring_bell_btn.pressed.connect(_on_ring_bell)
         add_child(ring_bell_btn)
         GameState.shards_changed.connect(_on_shards_changed)
@@ -158,7 +158,7 @@ func _process(delta: float) -> void:
                 ghost.vel = ghost.vel.move_toward(Vector2.ZERO, ghost.accel * delta)
         ghost.pos += ghost.vel * delta
         ghost.pos.x = clampf(ghost.pos.x, 12, ROOM_W - 12)
-        ghost.pos.y = clampf(ghost.pos.y, HUD_H + 30, ROOM_H - 30)
+        ghost.pos.y = clampf(ghost.pos.y, HUD_H + 30, ROOM_H - 40)
         _find_nearest_interactive()
         if Input.is_action_just_pressed("interact") and not interact_pressed:
                 interact_pressed = true

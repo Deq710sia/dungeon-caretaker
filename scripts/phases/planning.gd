@@ -2,19 +2,19 @@ extends Node2D
 ## Phase: planning V4 — DIEGETIC. No menus. Walk to map table, weapon rack, adventurers.
 ## Everything is physical. Carry weapons to adventurers. Ring bell to begin.
 
-const ROOM_W: int = 320
-const ROOM_H: int = 180
-const HUD_H: int = 14
+const ROOM_W: int = 480
+const ROOM_H: int = 270
+const HUD_H: int = 20
 const STATION_RADIUS: float = 16.0
 const ADVENTURER_RADIUS: float = 14.0
 
 # Station positions (all physical objects in the room)
-const MAP_TABLE_POS := Vector2(160, 50)
-const WEAPON_RACK_POS := Vector2(40, 50)
-const BELL_POS := Vector2(280, 50)
-const RECRUIT_POS := Vector2(280, 50)
+const MAP_TABLE_POS := Vector2(240, 70)
+const WEAPON_RACK_POS := Vector2(60, 70)
+const BELL_POS := Vector2(420, 70)
+const RECRUIT_POS := Vector2(360, 70)
 # Adventurers stand in a row at the bottom
-const ADVENTURER_Y: float = 130
+const ADVENTURER_Y: float = 200
 
 var ghost: Dictionary = {
         "pos": Vector2(160, 90),
@@ -69,15 +69,15 @@ func _build_hud() -> void:
         hud_stage.add_theme_font_size_override("font_size", 8)
         hud_stage.add_theme_color_override("font_color", Palette.TEXT_GOLD)
         hud_stage.position = Vector2(2, 2)
-        hud_stage.size = Vector2(140, 10)
+        hud_stage.size = Vector2(200, 14)
         panel.add_child(hud_stage)
 
         hud_shards = Label.new()
         hud_shards.text = "Shards: %d" % GameState.soul_shards
         hud_shards.add_theme_font_size_override("font_size", 8)
         hud_shards.add_theme_color_override("font_color", Palette.TEXT_BLUE)
-        hud_shards.position = Vector2(200, 2)
-        hud_shards.size = Vector2(116, 10)
+        hud_shards.position = Vector2(300, 3)
+        hud_shards.size = Vector2(170, 14)
         hud_shards.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
         panel.add_child(hud_shards)
 
@@ -111,7 +111,7 @@ func _process(delta: float) -> void:
                 ghost.vel = ghost.vel.move_toward(Vector2.ZERO, ghost.accel * delta)
         ghost.pos += ghost.vel * delta
         ghost.pos.x = clampf(ghost.pos.x, 12, ROOM_W - 12)
-        ghost.pos.y = clampf(ghost.pos.y, HUD_H + 30, ROOM_H - 12)
+        ghost.pos.y = clampf(ghost.pos.y, HUD_H + 30, ROOM_H - 20)
         _find_nearest_interactive()
         if Input.is_action_just_pressed("interact") and not interact_pressed:
                 interact_pressed = true

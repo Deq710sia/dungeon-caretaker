@@ -36,7 +36,7 @@ func _ready() -> void:
 	add_child(lbl)
 
 func _build_sigil() -> void:
-	var vp := Vector2(320, 180)
+	var vp := Vector2(480, 270)
 	var center := Vector2(vp.x / 2, vp.y / 2 + 5)
 	var r: float = 55.0
 	# 7-pointed star pattern
@@ -63,7 +63,7 @@ func _process(delta: float) -> void:
 	queue_redraw()
 
 func _draw() -> void:
-	var vp := Vector2(320, 180)
+	var vp := Vector2(480, 270)
 	draw_rect(Rect2(Vector2.ZERO, vp), Color(0.05, 0.03, 0.08, 1.0), true)
 	# Draw the WEAPON in the center (the centerpiece!)
 	if gear != null:

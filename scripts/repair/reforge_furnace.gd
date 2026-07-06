@@ -98,7 +98,7 @@ func _process_hammer(_delta: float) -> void:
         pass
 
 func _draw() -> void:
-        var vp := Vector2(320, 180)
+        var vp := Vector2(480, 270)
         draw_rect(Rect2(Vector2.ZERO, vp), Color(0.05, 0.03, 0.08, 1.0), true)
         var stage_names := ["MELT", "POUR", "HAMMER"]
         if stage < 3:
@@ -130,7 +130,7 @@ func _draw() -> void:
         GameFont.draw_string(self, Vector2(vp.x - 10, 12), "%.1fs" % time_left, 8, Palette.TEXT_GOLD, HORIZONTAL_ALIGNMENT_RIGHT)
 
 func _draw_melt() -> void:
-        var vp := Vector2(320, 180)
+        var vp := Vector2(480, 270)
         # Crucible — moved UP so lock button + text fit on screen
         var cruc_x: float = vp.x * 0.25
         var cruc_y: float = 100.0  # was 0.65*180=117 — too low
@@ -161,7 +161,7 @@ func _draw_melt() -> void:
                 GameFont.draw_string_centered(self, Vector2(vp.x / 2, lock_rect.position.y + 26), "Hold mouse. Lock in green.", 8, Color(0.85, 0.85, 0.85))
 
 func _draw_pour() -> void:
-        var vp := Vector2(320, 180)
+        var vp := Vector2(480, 270)
         var bar_y: float = 110.0  # was 0.70*180=126
         var bar_h: float = 16.0
         var bar_x: float = vp.x * 0.15
@@ -182,7 +182,7 @@ func _draw_pour() -> void:
                 GameFont.draw_string_centered(self, Vector2(vp.x / 2, bar_y + bar_h + 14), "Score: %.0f%%" % (pour_score * 100), 8, Color(0.55, 0.95, 0.75))
 
 func _draw_hammer() -> void:
-        var vp := Vector2(320, 180)
+        var vp := Vector2(480, 270)
         var cols: int = 8
         var rows: int = 4  # was 5 — too tall, went off-screen
         var cell_w: float = 32.0  # was 36 — too wide
@@ -215,7 +215,7 @@ func _handle_click(pos: Vector2) -> void:
                 2: _click_hammer(pos)
 
 func _click_melt(pos: Vector2) -> void:
-        var vp := Vector2(320, 180)
+        var vp := Vector2(480, 270)
         # Match the lock_rect from _draw_melt: (130, 142, 60, 16)
         var lock_rect := Rect2(int(vp.x / 2 - 30), int(100 + 36 + 6), 60, 16)
         if lock_rect.has_point(pos):
@@ -252,7 +252,7 @@ func _click_hammer(pos: Vector2) -> void:
                 stage = 3
                 _finish()
                 return
-        var vp := Vector2(320, 180)
+        var vp := Vector2(480, 270)
         var cols: int = 8
         var rows: int = 4
         var cell_w: float = 32.0

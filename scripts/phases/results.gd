@@ -17,7 +17,7 @@ func _ready() -> void:
         header.add_theme_color_override("font_color", Palette.TEXT_GREEN if won else Palette.TEXT_RED)
         header.add_theme_color_override("font_outline_color", Palette.VOID)
         header.add_theme_constant_override("outline_size", 2)
-        header.position = Vector2(0, 14)
+        header.position = Vector2(0, 20)
         header.size = Vector2(320, 14)
         header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
         add_child(header)
@@ -25,7 +25,7 @@ func _ready() -> void:
         stats.text = "Survivors %d/%d  +%d shards" % [survivors, party_size, shards]
         stats.add_theme_font_size_override("font_size", 8)
         stats.add_theme_color_override("font_color", Palette.TEXT)
-        stats.position = Vector2(0, 30)
+        stats.position = Vector2(0, 44)
         stats.size = Vector2(320, 10)
         stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
         add_child(stats)
@@ -35,7 +35,7 @@ func _ready() -> void:
         chronicle.text = _latest_log_line()
         chronicle.add_theme_font_size_override("font_size", 8)
         chronicle.add_theme_color_override("font_color", Palette.TEXT_DIM)
-        chronicle.position = Vector2(10, 42)
+        chronicle.position = Vector2(15, 62)
         chronicle.size = Vector2(300, 9)
         chronicle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
         chronicle.clip_text = true
@@ -45,13 +45,13 @@ func _ready() -> void:
         dossier_title.text = "WEAPON DOSSIERS — click for full history"
         dossier_title.add_theme_font_size_override("font_size", 8)
         dossier_title.add_theme_color_override("font_color", Palette.TEXT_GOLD)
-        dossier_title.position = Vector2(0, 54)
+        dossier_title.position = Vector2(0, 80)
         dossier_title.size = Vector2(320, 9)
         dossier_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
         add_child(dossier_title)
         var scroll := ScrollContainer.new()
-        scroll.position = Vector2(10, 64)
-        scroll.size = Vector2(300, 86)
+        scroll.position = Vector2(15, 94)
+        scroll.size = Vector2(450, 130)
         add_child(scroll)
         var vbox := VBoxContainer.new()
         vbox.add_theme_constant_override("separation", 1)
@@ -66,7 +66,7 @@ func _ready() -> void:
         continue_btn.text = "End Run >" if is_wipe else "Continue >"
         continue_btn.add_theme_font_size_override("font_size", 8)
         continue_btn.position = Vector2(100, 158)
-        continue_btn.size = Vector2(120, 16)
+        continue_btn.size = Vector2(180, 20)
         continue_btn.pressed.connect(_on_continue)
         add_child(continue_btn)
 
@@ -85,7 +85,7 @@ func _make_dossier(w: Weapon) -> Button:
         var col := w.wear_color() if not w.is_broken else Palette.TEXT_RED
         btn.add_theme_color_override("font_color", col)
         btn.add_theme_color_override("font_color_hover", Palette.TEXT_GOLD)
-        btn.custom_minimum_size = Vector2(290, 12)
+        btn.custom_minimum_size = Vector2(440, 16)
         btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
         btn.flat = true
         btn.pressed.connect(_show_detail.bind(w))
@@ -95,8 +95,8 @@ func _show_detail(w: Weapon) -> void:
         if detail_overlay:
                 detail_overlay.queue_free()
         detail_overlay = Panel.new()
-        detail_overlay.position = Vector2(20, 20)
-        detail_overlay.size = Vector2(280, 140)
+        detail_overlay.position = Vector2(30, 30)
+        detail_overlay.size = Vector2(420, 200)
         add_child(detail_overlay)
         var text := Label.new()
         text.text = w.get_full_history()
