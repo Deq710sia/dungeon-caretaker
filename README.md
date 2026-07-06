@@ -27,21 +27,20 @@ Also delete the `.godot/` folder in the project directory if experiencing stale 
 | Action | Keys |
 |---|---|
 | Move ghost | WASD or Arrow keys |
-| Interact | E or Space |
-| Phase (ghost incorporeal) | Space (planned V2) |
+| Interact | E |
+| Phase (ghost incorporeal) | SPACE |
 | Rack paging | [ and ] |
 | Inspect carried weapon | TAB (in workshop) |
-| Ghost ability (battle) | 1 (being replaced by Phase verb in V2) |
 | Back to menu | ESC |
 
 ## Game Loop (Per Wave)
 
 1. **Gate** — Walk past grave markers of the fallen. New run shows predecessors; later cycles show actual casualties.
-2. **Salvage** — Top-down corridor. Collect gear from named corpses (your dead party's ACTUAL weapons). Hazards trigger QTE minigames. Ghost has 5 HP. Reach exit → workshop.
-3. **Workshop** — Walk between 5 repair stations (Arsenal, Polish, Grind, Altar, Forge). Each minigame shows the weapon large. Graduated repair (no full-reset). TAB inspects weapon stats. Ring bell → upgrade shop.
+2. **Salvage** — Top-down corridor. Collect gear from named corpses (your dead party's ACTUAL weapons). Hazards trigger QTE minigames. Ghost has 5 HP. Phase through fire/spikes to grab corpses faster. Reach exit → workshop.
+3. **Workshop** — Walk between 5 repair stations (Arsenal, Polish, Grind, Altar, Forge). Each minigame shows the weapon large. Graduated repair (no full-reset). TAB inspects weapon stats. Phase for 2x movement between stations. Ring bell → upgrade shop.
 4. **Upgrade** — Buy meta-upgrades and system-changing repair upgrades (planned V2: diegetic wall).
-5. **Planning** — Walk to weapon rack, pick up gear, carry to adventurers to assign. Recruit at shrine. View map for wave intel. Ring bell → battle.
-6. **Battle** — Spectator auto-battler. Party auto-fights. Weapons visibly degrade. Ghost can phase to slow enemies.
+5. **Planning** — Walk to weapon rack, pick up gear, carry to adventurers to assign. Recruit at shrine. View map for wave intel. Phase for faster movement. Ring bell → battle.
+6. **Battle** — Spectator auto-battler. Party auto-fights. Weapons visibly degrade. Phase to slow all enemies.
 7. **Results** — Weapon dossiers (click for full history). Efficiency score (planned V2). Continue → aftermath.
 8. **Aftermath** — Memorial beat showing the fallen. Continue → gate (next cycle).
 
@@ -71,5 +70,5 @@ Stage 1 is genuinely hard. Starter weapons begin at 30% durability in bad states
 - **Resolution:** 480×270 internal, scales to 4K+
 - **Art:** All sprites procedurally generated at 16×16 via `scripts/sprites.gd`
 - **Font:** Press Start 2P (bundled), rendered at 8px or 16px only
-- **Audio:** 12 procedural SFX via `scripts/autoload/sfx.gd` (zero audio files)
+- **Audio:** 15 procedural SFX via `scripts/autoload/sfx.gd` (zero audio files)
 - **Palette:** 48 curated colors via `scripts/palette.gd`

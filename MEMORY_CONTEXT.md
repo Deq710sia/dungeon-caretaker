@@ -48,8 +48,8 @@ Pick which old frictions to keep ON PURPOSE (weapon loss, checkpoint distance), 
 ### Architecture
 - `main.gd` — Phase manager. Swaps Node2D + set_script per phase. Has fade transitions (working — `_on_phase_changed` calls `_start_fade`, 0.15s fade-to-black, swap mid-fade, 0.15s fade back). ESC → menu. Calls `_on_phase_exit()` on old phase before freeing (prevents weapon loss).
 - `GameState` (autoload) — Single source of truth: stage/wave, soul_shards, arsenal[], party[], meta_upgrades{}, run_log[], last_battle_result{}. Saves only meta_upgrades to `user://save_v3.json`.
-- `Juice` (autoload) — Screen shake (trauma-based), hit-stop, particle system (pixel squares, directional, integer-snapped).
-- `SFX` (autoload) — 12 procedural SFX (blip, chime, thud, hit, shatter, coin, select, deny, bell, death, repair, recruit). Pre-rendered as AudioStreamWAV from raw PCM. 8-voice round-robin pool with pitch jitter. SFX + Music buses created at runtime.
+- `Juice` (autoload) — Screen shake (trauma-based), hit-stop, particle system (pixel squares, directional, integer-snapped), ghost trail (4 fading afterimages at 0.07s intervals, denser + bluer when phasing).
+- `SFX` (autoload) — 15 procedural SFX (blip, chime, thud, hit, shatter, coin, select, deny, bell, death, repair, recruit, footstep, phase_in, phase_out). Pre-rendered as AudioStreamWAV from raw PCM. 8-voice round-robin pool with pitch jitter. SFX + Music buses created at runtime.
 - `Palette` — 48 curated colors. ALL colors in the game come from here.
 - `Sprites` — All sprites procedurally generated at 16×16 via Image API. 30+ sprite types. `get_weapon_sprite(type, state)` returns state-tinted weapon art.
 - `GameFont` — Press Start 2P helper. NEVER use default Godot font. Only crisp at 8px or 16px.
@@ -59,6 +59,8 @@ Pick which old frictions to keep ON PURPOSE (weapon loss, checkpoint distance), 
 `menu → gate → salvage → workshop → upgrade → planning → battle → results → aftermath → gate → ...`
 
 ### Key Systems (working)
+- **Phase verb (V2):** SPACE in any walkable phase = go incorporeal for 1.5s, 4s cooldown, costs 1 soul shard. In salvage: 2x speed + bypass fire/spikes (NOT pits). In workshop/planning: 2x movement only (QoL). In battle: 2x slowdown of all enemies (replaces old '1'-key Haunt, was 20s cd / 4s dur). Ghost drawn semi-transparent while phasing, trail tints bluer and samples denser.
+- **Movement feel (V2):** Tighter accel (220, was 300) and matched friction so the ghost stops on key release. Velocity-driven camera bob (3Hz idle -> 9Hz top speed). Ghost trail (4 fading afterimages). Footstep whoosh tied to velocity.
 - **Salvage loop:** Dead party members' weapons go to `last_battle_result.fallen_gear`. Salvage reads this and spawns corpses carrying the ACTUAL weapons (preserving name, history, kill log, fingerprints). Bonus random corpses also spawn. Hazards trigger QTE on E press — touching hazards does NOT damage (fixed). Only QTE failure damages.
 - **Graduated repair:** `repair_curve(quality)` is a logistic function. Single pass never fully restores. `apply_repair()` adds partial durability. `recalculate_wear()` syncs wear_state to durability_pct.
 - **Weapon state model (v8):** `wear_state` is the single mechanical truth (gates repair stations). `State` enum (Bloodied/Rusted/Haunted/Cursed) is flavor-only. `unexorcised_deaths` is an orthogonal penalty (-6% per death, capped -30%, cleared at Altar). `can_repair_at(station_key)` is the single source of truth for what each station accepts: Polish=WORN, Grind=DAMAGED, Forge=BROKEN, Altar=any haunted weapon.
@@ -72,9 +74,8 @@ Pick which old frictions to keep ON PURPOSE (weapon loss, checkpoint distance), 
 - `planning.gd` has dead code: map-view close via E (lines 139-141, unreachable)
 
 ### What's NOT Built Yet
-- Phase verb (ghost incorporeal ability)
 - QTE variety in salvage (all same timing bar)
-- Visible weapon transformation in polish/oil_grind/exorcise minigames
+- Visible weapon transformation in polish/oil_grind/exorcise minigames (oil_grind now rotates + sparks, but no rust-flake fade or blood-wipe reveal)
 - Live authoring feedback during minigames
 - Quick-repair / triage system
 - System-changing repair upgrades (Cannibalize, Cold Oil, etc.)

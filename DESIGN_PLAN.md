@@ -7,11 +7,21 @@ A ghost bound to a dungeon guides disposable adventurers through it. They die. Y
 
 The roguelike layer (combat variance, hazard RNG, salvage rolls) stays genuinely unpredictable. The management layer (repair quality, shard economy, weapon investment) is legible and optimizable. An incremental-style reward curve bridges them: push harder for more reward, but the marginal cost rises faster than the reward.
 
+## BUILD STATUS
+
+- [x] **Priority 1 — Movement feel + Phase verb** — DONE (commit e986b47). Ghost now has tighter accel/friction, velocity-driven camera bob, ghost trail, footstep SFX, and the unified Phase verb (SPACE) working across salvage/workshop/planning/battle.
+- [ ] Priority 2 — Salvage overhaul (density, QTE variety, push-your-luck)
+- [ ] Priority 3 — Repair minigame overhaul (visible transform, live stats, triage, system-changing upgrades)
+- [ ] Priority 4 — Battle drama (speed, sparks, boss waves)
+- [ ] Priority 5 — Ghost personality + tone
+- [ ] Priority 6 — Diegetic upgrade shop + incremental reward curve
+- [ ] Priority 7 — Polish pass
+
 ## THE 7 PRIORITIES (IN BUILD ORDER)
 
 ---
 
-### 1. MOVEMENT FEEL + GHOST PHASE VERB
+### 1. MOVEMENT FEEL + GHOST PHASE VERB  ✅ DONE
 
 **Why first:** Everything sits on top of the base verb. If movement doesn't feel good, nothing else matters. This is the UFO 50 / Mina lesson — obsessively tune the action/feedback loop before touching systems.
 
