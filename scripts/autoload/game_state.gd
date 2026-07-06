@@ -97,7 +97,8 @@ func start_new_run() -> void:
         # Apply upgrades
         for w in arsenal:
                 w.durability_max = Weapon.BASE_DURABILITY + meta_upgrades["sturdy_grip"] * 25
-                w.durability = int(w.durability_max * 0.3)  # was 0.6 — start at 30% (nearly broken)
+                w.durability = int(w.durability_max * 0.3)
+                w.recalculate_wear()
         # Spawn the initial party
         spawn_party()
         run_log.append("Stage 1, Wave 1 — A new run begins.")
