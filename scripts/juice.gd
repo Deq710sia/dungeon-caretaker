@@ -65,6 +65,14 @@ func trail_draw(canvas: CanvasItem, ghost_tex: Texture2D, base_size: int = 16) -
 	# Draws the trail back-to-front so the oldest sample is most faded.
 	# Each sample's alpha is its age-relative-to-lifetime inverted.
 	# Phasing samples tint bluer per DESIGN_PLAN 1B.
+	#
+	# NOTE: This uses draw_texture_rect with modulate alpha. Vision testing
+	# in the playtest harness showed the trail as invisible, but the user
+	# confirmed it IS visible in the actual game (real GPU, not software GL).
+	# The llvmpipe software renderer in the test harness handles texture
+	# modulate alpha differently than real hardware. Do NOT switch to colored
+	# rects — the texture-based trail is the intended visual and works on
+	# the user's machine.
 	for s in _trail_samples:
 		var life_pct: float = 1.0 - (s.age / TRAIL_LIFETIME)
 		var alpha: float = life_pct * (0.6 if trail_phasing else 0.4)

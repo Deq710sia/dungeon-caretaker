@@ -23,8 +23,8 @@ var gear: Weapon = null
 
 func _ready() -> void:
 	var p := get_parent()
-	if p and p.get("ghost") != null and p.ghost.carrying != null:
-		gear = p.ghost.carrying
+	if p and p.get("carrying") != null:
+		gear = p.carrying
 	var lbl := Label.new()
 	lbl.text = "GRINDSTONE — hold to pour"
 	lbl.add_theme_font_size_override("font_size", 8)

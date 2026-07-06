@@ -126,10 +126,6 @@ func _process(delta: float) -> void:
 		_bracket_left_pressed = false
 	if not Input.is_key_pressed(KEY_BRACKETRIGHT):
 		_bracket_right_pressed = false
-	# Map view controls
-	if map_view_active:
-		if Input.is_action_just_pressed("interact") and not interact_pressed:
-			map_view_active = false
 	Juice.update_particles(delta)
 	queue_redraw()
 
@@ -274,7 +270,6 @@ func _try_recruit() -> void:
 		Juice.add_trauma(0.3)
 		Juice.hit_stop(0.06)
 		Juice.spawn_particles(RECRUIT_POS, 10, Palette.TEXT_GREEN, 35.0, 0.5)
-		Juice.hit_stop(0.06)
 		SFX.play("recruit")
 	else:
 		Juice.spawn_particles(RECRUIT_POS, 4, Palette.TEXT_RED, 20.0, 0.3)
@@ -284,7 +279,6 @@ func _ring_bell() -> void:
 	Juice.add_trauma(0.5)
 	Juice.hit_stop(0.1)
 	Juice.spawn_particles(BELL_POS, 12, Palette.TEXT_GOLD, 40.0, 0.6)
-	Juice.hit_stop(0.1)
 	SFX.play("bell")
 	await get_tree().create_timer(0.3).timeout
 	GameState.set_phase("battle")

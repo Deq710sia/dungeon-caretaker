@@ -646,7 +646,13 @@ func _draw() -> void:
                 else:
                         draw_texture(Sprites.get_sprite("corpse"), Vector2(cx - 8, cy - 8))
                         var bob := int(sin(Time.get_ticks_msec() * 0.004 + c.pos.x) * 2)
-                        var gear_tex := Sprites.get_weapon_sprite_wear(c.gear_type, c.get("weapon", null).wear_state if c.get("weapon", null) else Weapon.WearState.DAMAGED, c.get("weapon", null).is_haunted() if c.get("weapon", null) else false) if c.get("weapon", null) else Sprites.get_weapon_sprite(c.gear_type, c.gear_state)
+                        # Cache the weapon lookup once (was calling c.get 4× per frame)
+                        var w = c.get("weapon", null)
+                        var gear_tex: Texture2D
+                        if w != null:
+                                gear_tex = Sprites.get_weapon_sprite_wear(c.gear_type, w.wear_state, w.is_haunted())
+                        else:
+                                gear_tex = Sprites.get_weapon_sprite(c.gear_type, c.gear_state)
                         draw_texture(gear_tex, Vector2(cx - 8, cy - 20 + bob))
                         _draw_gear_glow(Vector2(cx, cy - 12 + bob))
                         if near_interactive == c:

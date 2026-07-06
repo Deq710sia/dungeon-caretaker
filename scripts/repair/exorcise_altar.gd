@@ -18,8 +18,8 @@ var gear: Weapon = null
 
 func _ready() -> void:
 	var p := get_parent()
-	if p and p.get("ghost") != null and p.ghost.carrying != null:
-		gear = p.ghost.carrying
+	if p and p.get("carrying") != null:
+		gear = p.carrying
 	if gear != null:
 		is_cursed = gear.state == Weapon.State.CURSED
 	_build_sigil()

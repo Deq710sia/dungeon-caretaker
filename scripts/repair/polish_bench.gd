@@ -28,8 +28,8 @@ var gear: Weapon = null
 func _ready() -> void:
 	# Get the gear from parent
 	var p := get_parent()
-	if p and p.get("ghost") != null and p.ghost.carrying != null:
-		gear = p.ghost.carrying
+	if p and p.get("carrying") != null:
+		gear = p.carrying
 	# Setup area
 	var vp := Vector2(480, 270)
 	area_origin = Vector2(vp.x * 0.20, vp.y * 0.30)

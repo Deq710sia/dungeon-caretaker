@@ -268,9 +268,6 @@ static func roll_affliction(p_type: String) -> Dictionary:
 func state_name() -> String:
 	return STATE_NAMES[state]
 
-func state_color() -> Color:
-	return STATE_COLORS[state]
-
 func wear_name() -> String:
 	return WEAR_NAMES[wear_state]
 
@@ -412,9 +409,6 @@ func record_kill(enemy_type: String) -> void:
 	if not is_legendary and kill_log.size() >= LEGENDARY_KILL_THRESHOLD:
 		is_legendary = true
 		history.append("%s has drunk enough blood to earn a legend. It will not be forgotten." % display_name)
-
-func survive_wave() -> void:
-	waves_survived += 1
 
 ## Assigns this weapon to an adventurer, unequipping it from whoever held it
 ## before (if anyone). Encapsulated here so callers never have to touch

@@ -245,14 +245,6 @@ func _random_name(_seed_i: int) -> String:
         var names := ["Bram", "Wren", "Cael", "Mira", "Edric", "Solis", "Thora", "Quill",
                 "Harlan", "Isolde", "Corwin", "Vashti", "Petra", "Ambrose", "Sasha", "Lyra",
                 "Gareth", "Eluned", "Roderick", "Fenella"]
-        # Use a global shuffle so the same name doesn't repeat across recruits
-        # in the same run. Track used names in a static-ish var on GameState.
-        if not has_meta("_used_names"):
-                var used := []
-                for n in names:
-                        if n in _recently_used_names:
-                                used.append(n)
-                set_meta("_used_names", used)
         # Filter out recently-used names, shuffle the rest, pick the first.
         var available := []
         for n in names:
@@ -274,7 +266,8 @@ var _recently_used_names: Array = []
 ## Can recruit if: at least one living member (to vouch) AND party isn't full.
 ## A wiped party can't recruit — that's the lose condition.
 func can_recruit() -> bool:
-        return living_party_count() > 0 and living_party_count() < MAX_PARTY_SIZE
+        var n := living_party_count()
+        return n > 0 and n < MAX_PARTY_SIZE
 
 func recruit_cost() -> int:
         # Scales with stage so late-game recruits feel like an investment.

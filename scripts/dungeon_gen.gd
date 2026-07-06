@@ -108,29 +108,3 @@ func get_noise() -> FastNoiseLite:
 func hazard_pixel_pos(hazard: Dictionary) -> Vector2:
 	var pos: Vector2 = hazard.pos
 	return Vector2(pos.x * 16 + 8, pos.y * 16 + 8)
-
-## Serializes the generation to a Dictionary for storage in GameState.
-func to_dict() -> Dictionary:
-	return {
-		"stage": stage,
-		"corridor_w": corridor_w,
-		"corridor_h": corridor_h,
-		"narrow_zones": narrow_zones,
-		"hazards": hazards,
-		"noise_seed": noise_seed,
-	}
-
-## Deserializes from a Dictionary (stored in GameState).
-static func from_dict(d: Dictionary) -> DungeonGen:
-	var gen := DungeonGen.new()
-	gen.stage = d.get("stage", 1)
-	gen.corridor_w = d.get("corridor_w", 18)
-	gen.corridor_h = d.get("corridor_h", 60)
-	gen.narrow_zones = d.get("narrow_zones", [])
-	gen.hazards = d.get("hazards", [])
-	gen.noise_seed = d.get("noise_seed", 0)
-	gen._noise = FastNoiseLite.new()
-	gen._noise.seed = gen.noise_seed
-	gen._noise.frequency = 0.3
-	gen._noise.noise_type = FastNoiseLite.TYPE_CELLULAR
-	return gen

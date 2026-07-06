@@ -4,6 +4,42 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.8.1 — Code Audit Fixes + Repair Minigame Bug (2026-07-07)
+
+### Critical: Repair Minigames Now Display the Weapon
+**Changed:** All 4 repair minigames (oil_grindstone, polish_bench, exorcise_altar, reforge_furnace) had `p.ghost.carrying` which referenced the old `ghost` dict that was removed when workshop migrated to `var carrying`. The weapon was always `null` during minigames — the centerpiece art was invisible. Fixed: `p.ghost.carrying` → `p.carrying` in all 4 files.
+
+**Intention:** This was the highest-impact bug found in the audit. The minigames functioned (quality was applied on completion) but the weapon art — the whole point of the minigame visual — was missing.
+
+### Trail Reverted to Working Version
+**Changed:** Reverted `juice.gd trail_draw` back to `draw_texture_rect` with alpha 0.6/0.4 (the version the user confirmed was working). A previous attempt to switch to colored rects and raise the alpha broke the trail visibility. Added a comment explaining that the playtest harness's software renderer (llvmpipe) doesn't show the trail, but it IS visible on real hardware.
+
+**Intention:** The trail was working before. Don't fix what isn't broken. The playtest harness limitation (software GL) is documented so future audits don't try to "fix" the trail again.
+
+### Dead Code Removed
+**Changed:**
+- `weapon.gd`: Removed `survive_wave()` (never called) and `state_color()` (never called)
+- `dungeon_gen.gd`: Removed `to_dict()` and `from_dict()` (never used — dungeon gen isn't saved to disk)
+- `game_state.gd`: Removed dead `_used_names` meta-storage block in `_random_name` (the actual filtering uses `_recently_used_names` directly)
+- `planning.gd`: Removed unreachable map-view close branch (the `interact_pressed` guard made it dead code)
+
+### Redundant Checks Fixed
+**Changed:**
+- `game_state.gd can_recruit()`: Was calling `living_party_count()` twice. Now caches the result.
+- `planning.gd`: Removed redundant `Juice.hit_stop()` double-calls in `_try_recruit` and `_ring_bell` (hit_stop uses `max()`, so calling twice with the same value is a no-op).
+- `salvage.gd`: Cached `c.get("weapon", null)` in the corpse draw code (was calling it 4× per corpse per frame in an unreadable one-liner).
+
+### Deep Dive Results
+**Checked:** Scanned all 23 scripts for:
+- Type inference crashes (`var := dict.access` pattern) — none found
+- Cross-script duplication — identified `_draw_glow` (identical in battle + workshop) and ghost-draw block (duplicated in 3 phases) as refactor candidates for future
+- Obsolete patterns — all `ghost` dict references migrated to `move`/`carrying` (except the 4 repair minigames, now fixed)
+- Efficiency issues — per-frame allocations in `filter()` lambdas noted but low-priority
+
+**Playtest verified:** Full loop (gate → salvage → workshop → upgrade → planning → battle → results) runs without crashes in headless mode. All 18 screenshots captured in visual mode.
+
+---
+
 ## v0.8 — DungeonGen Script + Crash Fixes + Warning Cleanup (2026-07-07)
 
 ### Extracted DungeonGen Into Its Own Script
