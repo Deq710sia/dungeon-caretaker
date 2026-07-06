@@ -64,7 +64,7 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	var vp := Vector2(320, 180)
-	draw_rect(Rect2(Vector2.ZERO, vp), Color(0.05, 0.04, 0.10, 0.95), true)
+	draw_rect(Rect2(Vector2.ZERO, vp), Color(0.05, 0.03, 0.08, 1.0), true)
 	# Draw the WEAPON in the center (the centerpiece!)
 	if gear != null:
 		var weapon_tex := Sprites.get_weapon_sprite(gear.type, gear.state)

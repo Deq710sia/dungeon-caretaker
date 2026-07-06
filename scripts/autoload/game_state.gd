@@ -43,11 +43,11 @@ var meta_upgrades: Dictionary = {
 }
 
 const UPGRADE_DEFS: Dictionary = {
-        "fleet_shade": {"name": "Fleet Shade", "desc": "+15% ghost speed in salvage", "max": 5, "cost_base": 30, "cost_growth": 20},
+        "fleet_shade": {"name": "Fleet Shade", "desc": "+15% ghost speed", "max": 5, "cost_base": 30, "cost_growth": 20},
         "master_forge": {"name": "Master Forge", "desc": "+10% repair quality", "max": 5, "cost_base": 40, "cost_growth": 25},
-        "sturdy_grip": {"name": "Sturdy Grip", "desc": "+25 weapon max durability", "max": 5, "cost_base": 50, "cost_growth": 30},
-        "adventurer_training": {"name": "Adventurer Training", "desc": "+5% party combat skill", "max": 5, "cost_base": 60, "cost_growth": 35},
-        "salvage_expert": {"name": "Salvage Expert", "desc": "+1 salvage slot, better finds", "max": 3, "cost_base": 45, "cost_growth": 25},
+        "sturdy_grip": {"name": "Sturdy Grip", "desc": "+25 max durability", "max": 5, "cost_base": 50, "cost_growth": 30},
+        "adventurer_training": {"name": "Adventurer Training", "desc": "+5% combat skill", "max": 5, "cost_base": 60, "cost_growth": 35},
+        "salvage_expert": {"name": "Salvage Expert", "desc": "+1 salvage slot", "max": 3, "cost_base": 45, "cost_growth": 25},
 }
 
 func _ready() -> void:

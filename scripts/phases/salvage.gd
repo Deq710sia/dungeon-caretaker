@@ -241,11 +241,11 @@ func _find_nearest_interactive() -> void:
                         near_interactive = h
         if near_interactive is Dictionary:
                 if near_interactive.has("corpse_name"):
-                        hud_hint.text = "[E] Salvage %s's %s" % [near_interactive.corpse_name, near_interactive.gear_name]
+                        hud_hint.text = "[E] Salvage %s" % near_interactive.gear_name
                 elif near_interactive.has("type"):
                         hud_hint.text = "Hazard: %s — step away or [E] to disarm" % near_interactive.type.to_upper()
         else:
-                hud_hint.text = "WASD: move | E: interact | Find corpses, reach exit"
+                hud_hint.text = "WASD:move E:interact Find exit"
 
 func _handle_interact() -> void:
         if near_interactive is Dictionary:

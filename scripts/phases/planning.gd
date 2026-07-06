@@ -12,7 +12,7 @@ const ADVENTURER_RADIUS: float = 14.0
 const MAP_TABLE_POS := Vector2(160, 50)
 const WEAPON_RACK_POS := Vector2(40, 50)
 const BELL_POS := Vector2(280, 50)
-const RECRUIT_POS := Vector2(220, 90)
+const RECRUIT_POS := Vector2(280, 50)
 # Adventurers stand in a row at the bottom
 const ADVENTURER_Y: float = 130
 
@@ -357,7 +357,7 @@ func _draw() -> void:
         if map_view_active:
                 _draw_map_view()
         # Bottom hint
-        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 6), "WASD: move | E: interact", 8, Palette.TEXT_DIM)
+        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 6), "WASD:move E:interact", 8, Palette.TEXT_DIM)
 
 func _draw_map_view() -> void:
         # Dim background

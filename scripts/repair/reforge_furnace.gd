@@ -99,7 +99,7 @@ func _process_hammer(_delta: float) -> void:
 
 func _draw() -> void:
         var vp := Vector2(320, 180)
-        draw_rect(Rect2(Vector2.ZERO, vp), Color(0.10, 0.06, 0.10, 0.95), true)
+        draw_rect(Rect2(Vector2.ZERO, vp), Color(0.05, 0.03, 0.08, 1.0), true)
         var stage_names := ["MELT", "POUR", "HAMMER"]
         if stage < 3:
                 GameFont.draw_string_centered(self, Vector2(vp.x / 2, 18), stage_names[stage], 8, Palette.TEXT_GOLD)

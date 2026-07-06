@@ -57,7 +57,7 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
         var vp := Vector2(320, 180)
-        draw_rect(Rect2(Vector2.ZERO, vp), Color(0.05, 0.04, 0.07, 0.95), true)
+        draw_rect(Rect2(Vector2.ZERO, vp), Color(0.05, 0.03, 0.08, 1.0), true)
         # Grindstone (large, center-left)
         var wheel_center := Vector2(vp.x * 0.35, vp.y * 0.55)
         var wheel_r: float = 45.0

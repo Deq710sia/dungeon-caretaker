@@ -37,7 +37,7 @@ func _build_graves() -> void:
 		# Nobody's died yet in THIS run — these are the caretaker's
 		# predecessors, establishing why the dungeon entrance is already
 		# littered with weapons for the taking.
-		names = ["Toren the Bold", "Yselde the Wise"]
+		names = ["Toren", "Yselde"]
 	else:
 		names = []  # a clean wave — no fresh graves to add
 	var spacing: float = min(70.0, 280.0 / max(1, names.size()))
@@ -47,7 +47,7 @@ func _build_graves() -> void:
 
 func _build_hud() -> void:
 	hint_label = Label.new()
-	hint_label.text = "WASD: move | E: open the gate"
+	hint_label.text = "WASD:move E:open gate"
 	hint_label.add_theme_font_size_override("font_size", 8)
 	hint_label.add_theme_color_override("font_color", Palette.TEXT_DIM)
 	hint_label.position = Vector2(0, ROOM_H - 12)

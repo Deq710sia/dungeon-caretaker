@@ -60,14 +60,14 @@ func _refresh() -> void:
 		name_lbl.text = "%s L%d/%d" % [def.name, lvl, def.max]
 		name_lbl.add_theme_font_size_override("font_size", 8)
 		name_lbl.add_theme_color_override("font_color", Palette.TEXT if not maxed else Palette.TEXT_GREEN)
-		name_lbl.custom_minimum_size = Vector2(100, 16)
+		name_lbl.custom_minimum_size = Vector2(80, 16)
 		row.add_child(name_lbl)
 		var desc_lbl := Label.new()
 		desc_lbl.text = def.desc
 		desc_lbl.add_theme_font_size_override("font_size", 8)
 		desc_lbl.add_theme_color_override("font_color", Palette.TEXT_DIM)
 		desc_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		desc_lbl.custom_minimum_size = Vector2(120, 16)
+		desc_lbl.custom_minimum_size = Vector2(160, 16)
 		row.add_child(desc_lbl)
 		var buy_btn := Button.new()
 		if maxed:

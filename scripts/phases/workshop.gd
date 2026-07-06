@@ -12,8 +12,8 @@ const STATIONS := [
         {"key": "arsenal",   "name": "ARSENAL",   "sprite": "chest",      "pos": Vector2(30, 50)},
         {"key": "polish",    "name": "POLISH",    "sprite": "bench",      "pos": Vector2(90, 50),  "states": [Weapon.State.BLOODIED]},
         {"key": "oil_grind", "name": "GRIND",     "sprite": "grindstone", "pos": Vector2(150, 50), "states": [Weapon.State.RUSTED]},
-        {"key": "exorcise",  "name": "EXORCISE",  "sprite": "altar",      "pos": Vector2(210, 50), "states": [Weapon.State.HAUNTED, Weapon.State.CURSED]},
-        {"key": "reforge",   "name": "REFORGE",   "sprite": "furnace",    "pos": Vector2(270, 50), "states": [Weapon.State.SHATTERED]},
+        {"key": "exorcise",  "name": "ALTAR",  "sprite": "altar",      "pos": Vector2(210, 50), "states": [Weapon.State.HAUNTED, Weapon.State.CURSED]},
+        {"key": "reforge",   "name": "FORGE",   "sprite": "furnace",    "pos": Vector2(270, 50), "states": [Weapon.State.SHATTERED]},
 ]
 
 var ghost: Dictionary = {
@@ -119,11 +119,11 @@ func _build_hud() -> void:
         _update_hud()
 
 func _update_hud() -> void:
-        hud_bell.text = "Bell: %.0fs" % bell_timer
+        hud_bell.text = "%.0fs" % bell_timer
         hud_shards.text = "Shards: %d" % GameState.soul_shards
         if ghost.carrying != null:
                 var w: Weapon = ghost.carrying
-                hud_carrying.text = "Carry: %s" % w.display_name
+                hud_carrying.text = "Carry: " + w.display_name.substr(0, 12)
                 hud_carrying.add_theme_color_override("font_color", w.wear_color())
         else:
                 hud_carrying.text = "Carry: -"
@@ -369,7 +369,7 @@ func _draw() -> void:
         # Particles
         Juice.draw_particles(self)
         # Hint
-        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 6), "WASD: move | E: interact | TAB: inspect weapon", 8, Palette.TEXT_DIM)
+        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 6), "WASD:move E:interact TAB:inspect", 8, Palette.TEXT_DIM)
 
 func _draw_glow(pos: Vector2, radius: int, color: Color) -> void:
         var center := Vector2(int(pos.x), int(pos.y))
