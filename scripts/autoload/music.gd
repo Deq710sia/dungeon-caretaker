@@ -124,9 +124,14 @@ func _render_theme() -> AudioStreamWAV:
 	_render_drums(o, n)
 	# Reverb
 	_apply_reverb(o, n)
-	# Gentle master
+	# Gentle master — soft saturation + high-shelf rolloff to tame harshness
+	var hs_state: float = 0.0
+	var hs_alpha: float = 1.0 - exp(-2.0 * PI * 8000.0 / SR)  # rolloff above 8kHz
 	for i in n:
-		o[i] = tanh(o[i] * 0.7)
+		# High-shelf rolloff (one-pole lowpass on the signal, mixed back)
+		hs_state = hs_state + hs_alpha * (o[i] - hs_state)
+		o[i] = o[i] * 0.7 + hs_state * 0.3  # 30% of the rolled-off version
+		o[i] = tanh(o[i] * 0.65)
 	var bytes := PackedByteArray()
 	bytes.resize(n * 2)
 	for i in n:
@@ -138,38 +143,39 @@ func _render_theme() -> AudioStreamWAV:
 	w.data = bytes
 	return w
 
-# --- Layer 1: Bass (sustained saw, root notes, 2-beat duration) ---
+# --- Layer 1: Bass (sustained saw through lowpass — warm, not buzzy) ---
 func _render_bass(out: PackedFloat32Array, start: int, len: int, chord: Dictionary) -> void:
 	var bass_freq: float = chord["bass"]
 	var ph := 0.0
+	var lp_state: float = 0.0
+	# One-pole lowpass @ 400Hz — removes saw buzz, keeps warm fundamental
+	var alpha: float = 1.0 - exp(-2.0 * PI * 400.0 / SR)
 	for i in len:
 		if start + i >= out.size():
 			break
 		ph += bass_freq / SR
-		# Sawtooth: 2*(ph - floor(ph+0.5)) — rich harmonics
+		# Sawtooth core
 		var saw: float = 2.0 * (ph - floor(ph + 0.5))
-		# One-pole lowpass at ~300Hz for warm bass body
-		# (simplified: just smooth the saw)
-		var lp: float = saw * 0.7
-		# ADSR: 5ms attack, sustain, 30ms release
+		# REAL lowpass (state-variable, not amplitude scaling)
+		lp_state = lp_state + alpha * (saw - lp_state)
+		# ADSR: 8ms attack, sustain, 50ms release
 		var env: float
-		var atk: int = int(0.005 * SR)
-		var rel: int = int(0.03 * SR)
+		var atk: int = int(0.008 * SR)
+		var rel: int = int(0.05 * SR)
 		if i < atk:
 			env = float(i) / atk
 		elif i > len - rel:
 			env = float(len - i) / rel
 		else:
 			env = 1.0
-		out[start + i] += lp * env * 0.28
+		out[start + i] += lp_state * env * 0.26
 
-# --- Layer 2: Chord stabs (saw + harmonics, 2-beat stabs, speder2 voicings) ---
+# --- Layer 2: Chord stabs (gentle harmonics + dropping lowpass — soft, not buzzy) ---
 func _render_chords(out: PackedFloat32Array, start: int, len: int, chord: Dictionary, chord_idx: int) -> void:
 	var comp_freqs: Array = chord["comp"]
 	var comp_amps: Array = chord["amps"]
-	# Stab pattern: hit on beat 1 of the 2-beat segment, and a softer hit on beat 2
-	var stab_positions: Array = [0.0, 1.0]  # beat 1 (full), beat 2 (softer)
-	var stab_amps: Array = [1.0, 0.6]
+	var stab_positions: Array = [0.0, 1.0]
+	var stab_amps: Array = [1.0, 0.55]
 	var stab_dur: int = int(0.3 * SR)
 	var phases: Array = []
 	phases.resize(comp_freqs.size())
@@ -178,28 +184,32 @@ func _render_chords(out: PackedFloat32Array, start: int, len: int, chord: Dictio
 		var pos: float = stab_positions[s]
 		var amp_mult: float = stab_amps[s]
 		var stab_start: int = start + int(pos * BEAT_DUR * SR)
+		var lp_state: float = 0.0
 		for i in stab_dur:
 			if stab_start + i >= out.size():
 				break
-			# Exp decay
-			var env: float = exp(-float(i) / (0.12 * SR)) * amp_mult
-			# 3ms attack
-			if i < int(0.003 * SR):
-				env *= float(i) / int(0.003 * SR)
-			# Noise attack
+			# Exp decay (softer)
+			var env: float = exp(-float(i) / (0.15 * SR)) * amp_mult
+			if i < int(0.005 * SR):
+				env *= float(i) / int(0.005 * SR)
+			# Soft noise attack (very low amplitude)
 			var noise_atk: float = 0.0
-			if i < int(0.003 * SR):
-				noise_atk = randf_range(-1.0, 1.0) * (1.0 - float(i) / int(0.003 * SR)) * 0.2
-			# Saw (additive 1/n harmonics)
+			if i < int(0.004 * SR):
+				noise_atk = randf_range(-1.0, 1.0) * (1.0 - float(i) / int(0.004 * SR)) * 0.08
+			# Gentler harmonics (h2=0.25, h3=0.12 — was 0.5, 0.33 — too bright)
 			var sample: float = 0.0
 			for j in comp_freqs.size():
 				var drift: float = sin(float(stab_start + i) / SR * 4.0 + j * 1.7) * 0.002
 				phases[j] += comp_freqs[j] * (1.0 + drift) / SR
 				var h1: float = sin(phases[j])
-				var h2: float = sin(phases[j] * 2.0) * 0.5
-				var h3: float = sin(phases[j] * 3.0) * 0.33
+				var h2: float = sin(phases[j] * 2.0) * 0.25
+				var h3: float = sin(phases[j] * 3.0) * 0.12
 				sample += (h1 + h2 + h3) * comp_amps[j]
-			out[stab_start + i] += (sample + noise_atk) * env * 0.09
+			# Lowpass that drops 3kHz→800Hz over the stab (bright at attack, warm in sustain)
+			var cutoff: float = 3000.0 - 2200.0 * (float(i) / stab_dur)
+			var alpha: float = 1.0 - exp(-2.0 * PI * cutoff / SR)
+			lp_state = lp_state + alpha * (sample - lp_state)
+			out[stab_start + i] += (lp_state + noise_atk) * env * 0.075
 
 # --- Layer 3: Arpeggio (high-register sine counter-line, 8th notes) ---
 func _render_arp(out: PackedFloat32Array, start: int, len: int, chord: Dictionary, chord_idx: int) -> void:
@@ -276,55 +286,86 @@ func _render_drums(out: PackedFloat32Array, n: int) -> void:
 			_render_cowbell(out, beat_start, n)
 
 func _render_kick(out: PackedFloat32Array, start: int, n: int) -> void:
-	var kick_dur: int = int(0.12 * SR)
+	var kick_dur: int = int(0.14 * SR)
 	var ph := 0.0
+	var click_lp: float = 0.0
+	var click_alpha: float = 1.0 - exp(-2.0 * PI * 2000.0 / SR)  # lowpass the click
 	for i in kick_dur:
 		if start + i >= n:
 			break
-		# Pitch drop: 80Hz → 40Hz over 30ms
 		var t: float = float(i) / SR
 		var freq: float = 80.0 * exp(-t / 0.03) + 40.0
 		ph += freq / SR
-		# Sine body + click at start
 		var body: float = sin(ph)
+		# Soft click (lowpass-filtered, lower amplitude — was too harsh)
 		var click: float = 0.0
-		if i < int(0.002 * SR):
-			click = randf_range(-1.0, 1.0) * (1.0 - float(i) / int(0.002 * SR)) * 0.5
-		# Exp decay
-		var env: float = exp(-float(i) / (0.05 * SR))
-		out[start + i] += (body + click) * env * 0.32
+		if i < int(0.003 * SR):
+			var raw_click: float = randf_range(-1.0, 1.0) * (1.0 - float(i) / int(0.003 * SR))
+			click_lp = click_lp + click_alpha * (raw_click - click_lp)
+			click = click_lp * 0.25
+		var env: float = exp(-float(i) / (0.06 * SR))
+		out[start + i] += (body + click) * env * 0.30
 
 func _render_clap(out: PackedFloat32Array, start: int, n: int) -> void:
-	var clap_dur: int = int(0.08 * SR)
+	# Bandpass-filtered noise: highpass @ 800Hz + lowpass @ 3kHz = softer "psh"
+	var clap_dur: int = int(0.1 * SR)
+	var hp_state: float = 0.0
+	var lp_state: float = 0.0
+	var hp_alpha: float = 1.0 - exp(-2.0 * PI * 800.0 / SR)
+	var lp_alpha: float = 1.0 - exp(-2.0 * PI * 3000.0 / SR)
+	var prev_raw: float = 0.0
 	for i in clap_dur:
 		if start + i >= n:
 			break
-		# Noise burst with bandpass-ish character (just noise + fast decay)
-		var env: float = exp(-float(i) / (0.025 * SR))
-		out[start + i] += randf_range(-1.0, 1.0) * env * 0.12
+		var raw: float = randf_range(-1.0, 1.0)
+		# Highpass: y = x - prev_x + (1-hp_alpha)*prev_y
+		hp_state = raw - prev_raw + (1.0 - hp_alpha) * hp_state
+		prev_raw = raw
+		# Lowpass
+		lp_state = lp_state + lp_alpha * (hp_state - lp_state)
+		var env: float = exp(-float(i) / (0.035 * SR))
+		out[start + i] += lp_state * env * 0.10
 
 func _render_hat(out: PackedFloat32Array, start: int, n: int) -> void:
-	var hat_dur: int = int(0.04 * SR)
+	# Highpass-filtered noise @ 7kHz (softer "tss", not harsh white noise)
+	var hat_dur: int = int(0.05 * SR)
+	var hp_state: float = 0.0
+	var hp_alpha: float = 1.0 - exp(-2.0 * PI * 7000.0 / SR)
+	var prev_raw: float = 0.0
 	for i in hat_dur:
 		if start + i >= n:
 			break
-		var env: float = exp(-float(i) / (0.015 * SR))
-		out[start + i] += randf_range(-1.0, 1.0) * env * 0.05
+		var raw: float = randf_range(-1.0, 1.0)
+		hp_state = raw - prev_raw + (1.0 - hp_alpha) * hp_state
+		prev_raw = raw
+		var env: float = exp(-float(i) / (0.02 * SR))
+		out[start + i] += hp_state * env * 0.035
 
 func _render_cowbell(out: PackedFloat32Array, start: int, n: int) -> void:
-	var cow_dur: int = int(0.15 * SR)
-	# Cowbell: two square oscillators at ~840Hz and ~540Hz (classic 808 cowbell)
+	# Cowbell: two SINE oscillators (not square — squares are piercing) through bandpass
+	var cow_dur: int = int(0.18 * SR)
 	var ph1 := 0.0
 	var ph2 := 0.0
+	var lp_state: float = 0.0
+	var hp_state: float = 0.0
+	var prev_hp: float = 0.0
+	var lp_alpha: float = 1.0 - exp(-2.0 * PI * 4000.0 / SR)
+	var hp_alpha: float = 1.0 - exp(-2.0 * PI * 600.0 / SR)
 	for i in cow_dur:
 		if start + i >= n:
 			break
 		ph1 += 840.0 / SR
 		ph2 += 540.0 / SR
-		var sq1: float = 1.0 if fmod(ph1, TAU) < PI else -1.0
-		var sq2: float = 1.0 if fmod(ph2, TAU) < PI else -1.0
-		var env: float = exp(-float(i) / (0.06 * SR))
-		out[start + i] += (sq1 * 0.6 + sq2 * 0.4) * env * 0.06
+		# Sine waves (warm, not buzzy like squares)
+		var s1: float = sin(ph1) * 0.6
+		var s2: float = sin(ph2) * 0.4
+		var raw: float = s1 + s2
+		# Bandpass: highpass then lowpass
+		hp_state = raw - prev_hp + (1.0 - hp_alpha) * hp_state
+		prev_hp = raw
+		lp_state = lp_state + lp_alpha * (hp_state - lp_state)
+		var env: float = exp(-float(i) / (0.08 * SR))
+		out[start + i] += lp_state * env * 0.045
 
 # --- Reverb (one-comb feedback delay, SNES-style room) ---
 func _apply_reverb(out: PackedFloat32Array, n: int) -> void:

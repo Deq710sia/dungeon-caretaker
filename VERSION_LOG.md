@@ -4,6 +4,65 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.18 — Music Timbre Softening (Real Filtering, No More Raw Squares/Saws/Noise) (2026-07-07)
+
+### Problem: Individual Sounds Were Harsh Despite Good Composition
+**Diagnosis:** The v0.17 composition was fine but every individual timbre was garish because:
+1. **Cowbell** used raw **square waves** (840+540Hz) — squares are inherently piercing
+2. **Bass** used raw **sawtooth** with fake lowpass (just `*0.7` amplitude) — buzzy
+3. **Chords** used additive saw harmonics at full 1/n amplitude (h2=0.5, h3=0.33) — too bright
+4. **Clap/hats** used raw **white noise** — harsh "tss" not soft "psh"
+5. **No real filtering anywhere** — every oscillator ran raw through the mix
+
+### Fix: Real DSP Filtering On Every Layer
+
+**1. Bass: saw → one-pole lowpass @ 400Hz**
+- Implemented real state-variable lowpass: `lp_state = lp_state + alpha * (input - lp_state)` where `alpha = 1 - exp(-2π·cutoff/SR)`
+- Cutoff 400Hz removes saw buzz, keeps warm fundamental + 2nd harmonic
+- Was: `saw * 0.7` (amplitude scaling, no filtering)
+
+**2. Chords: gentler harmonics + dropping lowpass**
+- Harmonics reduced: h2 0.5→0.25, h3 0.33→0.12 (less bright)
+- Added one-pole lowpass that drops 3kHz→800Hz over the stab (bright at attack, warm in sustain — mimics a struck string's brightness decay)
+- Noise attack amplitude reduced 0.2→0.08
+
+**3. Cowbell: square → sine + bandpass**
+- Replaced two square oscillators with two **sine** oscillators (warm, not buzzy)
+- Added bandpass: highpass @ 600Hz + lowpass @ 4kHz
+- Longer envelope (0.06s→0.08s decay), lower amplitude (0.06→0.045)
+
+**4. Clap: raw noise → bandpass-filtered noise**
+- Highpass @ 800Hz + lowpass @ 3kHz = softer "psh" not harsh "tss"
+- Longer decay (0.025s→0.035s)
+
+**5. Hats: raw noise → highpass-filtered noise**
+- Highpass @ 7kHz (softer, less宽带)
+- Longer decay (0.015s→0.02s), lower amplitude (0.05→0.035)
+
+**6. Kick: lowpass the click**
+- Click transient now runs through lowpass @ 2kHz (was raw noise — harsh)
+- Click amplitude reduced 0.5→0.25
+
+**7. Master: added high-shelf rolloff**
+- One-pole lowpass @ 8kHz mixed back at 30% — tames any remaining harshness above 8kHz
+- Gentler saturation: `tanh(x*0.65)` (was 0.7)
+
+### Verification
+Spectral comparison (peak dB per band):
+| Band | v0.17 (harsh) | v0.18 (soft) | Reduction |
+|------|---------------|--------------|-----------|
+| bass (0-250Hz) | -8.2 dB | -8.3 dB | ~0 (preserved) |
+| lowmid (250-2kHz) | -11.8 dB | -16.2 dB | -4 dB |
+| highmid (2-6kHz) | -14.9 dB | -27.3 dB | **-12 dB** |
+| high (6-12kHz) | -17.9 dB | -32.2 dB | **-14 dB** |
+| air (12-20kHz) | -17.2 dB | -30.2 dB | **-13 dB** |
+
+The harsh highmid/high/air bands are reduced 12-14dB while bass/lowmid (the warmth) are preserved. Overall: peak -8dB, RMS -19.3dB (healthy, similar to v0.17).
+
+Preview at `/home/z/my-project/download/music_preview/main_theme_v5_soft.wav`.
+
+---
+
 ## v0.17 — Movement Overhaul (Momentum System + Chain Degradation + Tap Pulse) + Speder2 Music (2026-07-07)
 
 ### Movement: Complete Redesign Based on Game Design Analysis
