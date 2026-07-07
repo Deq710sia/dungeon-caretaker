@@ -55,7 +55,7 @@ func _generate(fallen_count: int, salvage_expert: int) -> void:
 	# --- Hazards: placed in/near narrow zones (harder to avoid) ---
 	hazards.clear()
 	var hazard_count: int = 4 + stage * 2
-	var htypes: Array[String] = ["pit", "fire", "spikes"]
+	var htypes: Array[String] = ["pit", "fire", "spikes", "debris"]
 	for i in hazard_count:
 		var narrow_idx: int = i % narrow_zones.size() if not narrow_zones.is_empty() else -1
 		var y: int

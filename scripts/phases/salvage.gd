@@ -12,6 +12,10 @@ const VIEW_H: int = 270
 const BASE_GHOST_HP: int = 5
 const INTERACT_RADIUS: float = 16.0
 const SALVAGE_TIMER: float = 45.0  # seconds before forced exit
+# Push-your-luck: the main exit is at the corridor midpoint. Past it is
+# the "deeper" section with better gear but more hazards. The player can
+# leave anytime (reach the exit) or push deeper for more reward.
+const DEEPER_GEAR_CHANCE: float = 0.30  # chance deeper corpses have legendary/cursed gear
 
 var move: GhostMovement
 var ghost_hp: int = 5
@@ -139,7 +143,12 @@ func _build_level() -> void:
                         _add_bonus_corpses(sim.size())
                 else:
                         _add_bonus_corpses(0)
-        exit_pos = Vector2(corridor_w * TILE / 2, (corridor_h - 3) * TILE)
+        # Main exit at the MIDPOINT of the corridor (push-your-luck: the player
+        # can leave here, or push deeper for more gear + more hazards).
+        # The deeper section (past the exit) has bonus corpses with better gear.
+        exit_pos = Vector2(corridor_w * TILE / 2, (corridor_h / 2) * TILE)
+        # Add deeper-section bonus corpses (past the exit, harder to reach)
+        _add_deeper_corpses()
         # Decorative props
         for i in corridor_h / 8:
                 var y := (4 + i * 8) * TILE
@@ -187,6 +196,44 @@ func _add_bonus_corpses(fallen_count: int) -> void:
                         "death_cause": death_pool[i % death_pool.size()],
                         "collected": false,
                         "weapon": null,
+                        "is_deeper": false,
+                })
+
+## Push-your-luck: adds bonus corpses in the DEEPER section of the corridor
+## (past the main exit). These corpses have better gear — chance of legendary
+## or cursed weapons. The player must pass the exit to reach them, risking
+## more hazards and ghost HP for better rewards. This is the "exceed
+## expectations" curve from the design philosophy: the floor (reach exit)
+## is guaranteed, the ceiling (collect everything) costs real risk.
+func _add_deeper_corpses() -> void:
+        var deeper_count: int = 1 + int(GameState.stage / 2)
+        var name_pool := CORPSE_NAMES.duplicate()
+        name_pool.shuffle()
+        var death_pool := CORPSE_DEATHS.duplicate()
+        death_pool.shuffle()
+        var all_types := ["sword", "helm", "staff", "robe"]
+        all_types.shuffle()
+        for i in deeper_count:
+                # Place in the deeper section (past the exit at corridor_h / 2)
+                var y_tile: int = (corridor_h / 2) + 4 + i * 5
+                var x_tile: int = 2 + (i * 5) % (corridor_w - 4)
+                var type: String = all_types[i % all_types.size()]
+                var is_special: bool = randf() < DEEPER_GEAR_CHANCE
+                var gear_name: String = _gen_weapon_name(type)
+                if is_special:
+                        var special_prefixes := ["Legendary", "Cursed", "Ancient", "Volatile"]
+                        gear_name = "%s %s" % [special_prefixes[randi() % special_prefixes.size()], gear_name]
+                corpses.append({
+                        "pos": Vector2(x_tile * TILE + TILE / 2.0, y_tile * TILE + TILE / 2.0),
+                        "gear_type": type,
+                        "gear_state": Weapon.State.RUSTED,
+                        "gear_name": gear_name,
+                        "corpse_name": name_pool[i % name_pool.size()],
+                        "death_cause": death_pool[i % death_pool.size()],
+                        "collected": false,
+                        "weapon": null,
+                        "is_deeper": true,
+                        "is_special": is_special,
                 })
 
 func _gen_weapon_name(type: String) -> String:
@@ -328,7 +375,8 @@ func _check_hazard_touch() -> void:
         for h in hazards:
                 if not h.active:
                         continue
-                # Phase bypasses fire and spikes (NOT pits)
+                # Phase bypasses fire and spikes (NOT pits or debris — you still
+                # fall into pits and debris still hits you even when incorporeal)
                 if move.is_phasing() and h.type in ["fire", "spikes"]:
                         continue
                 if move.pos.distance_to(h.pos) < 14.0:
@@ -454,6 +502,18 @@ func _start_qte(hazard: Dictionary) -> void:
                                 "index": 0,
                                 "hazard": hazard,
                         }
+                "debris":
+                        # Reverse QTE — DON'T press anything. The falling debris will
+                        # miss if you stay still. Pressing any key = failure (you
+                        # flinched into the debris). This is the "Dumb Ways to Die"
+                        # reverse QTE — the comedy is in NOT acting.
+                        active_qte = {
+                                "type": "reverse",
+                                "verb": "DON'T MOVE!",
+                                "timer": 3.0,
+                                "max_timer": 3.0,
+                                "hazard": hazard,
+                        }
                 _:
                         active_qte = {
                                 "type": "timing",
@@ -513,6 +573,13 @@ func _input(event: InputEvent) -> void:
                                         if active_qte.index >= active_qte.pattern.size():
                                                 _qte_success()
                                 elif pressed != "":
+                                        _qte_fail()
+                "reverse":
+                        # Reverse QTE: pressing ANY movement/interact/space key = failure
+                        # (you flinched into the debris). The only way to succeed is to
+                        # NOT press anything until the timer expires.
+                        if event is InputEventKey and event.pressed:
+                                if event.keycode in [KEY_SPACE, KEY_E, KEY_W, KEY_A, KEY_S, KEY_D, KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT]:
                                         _qte_fail()
 
 func _qte_success() -> void:
@@ -644,6 +711,16 @@ func _draw() -> void:
                                                 var sx := hx - 6 + i * 6
                                                 draw_rect(Rect2(sx, hy - 4, 2, 8), Palette.STEEL_LT, true)
                                                 draw_rect(Rect2(sx, hy - 4, 1, 8), Palette.STEEL, true)
+                                "debris":
+                                        # Falling debris — drawn as brown rocks suspended above
+                                        # the ground with a shadow underneath
+                                        for i in 3:
+                                                var dx := hx - 6 + i * 6
+                                                var dy := hy - 6 + int(sin(Time.get_ticks_msec() * 0.005 + i) * 2)
+                                                draw_rect(Rect2(dx, dy, 4, 4), Palette.STONE, true)
+                                                draw_rect(Rect2(dx, dy, 3, 1), Palette.STONE_LT, true)
+                                        # Shadow on the ground
+                                        draw_rect(Rect2(hx - 8, hy + 4, 16, 2), Color(0, 0, 0, 0.3), true)
                         # Only show proximity indicator when VERY close (harder to see)
                         if move.pos.distance_to(h.pos) < 20:
                                 var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
@@ -652,7 +729,10 @@ func _draw() -> void:
                                         var px := int(h.pos.x + cos(a) * 12)
                                         var py := int(h.pos.y + sin(a) * 12)
                                         draw_rect(Rect2(px, py, 2, 2), Color(0.95, 0.40, 0.40, pulse), true)
-        # Corpses
+        # Corpses — visual identity:
+        #   YOUR fallen (weapon != null): blue soul-glow + name + death cause
+        #   Bonus corpses (is_deeper == false): gold glow + name only
+        #   Deeper corpses (is_deeper == true): purple glow + name + "DEEPER"
         for c in corpses:
                 var cx := int(c.pos.x)
                 var cy := int(c.pos.y)
@@ -669,10 +749,24 @@ func _draw() -> void:
                         else:
                                 gear_tex = Sprites.get_weapon_sprite(c.gear_type, c.gear_state)
                         draw_texture(gear_tex, Vector2(cx - 8, cy - 20 + bob))
-                        DrawUtils.draw_radial_glow(self, Vector2(cx, cy - 12 + bob), [8, 5, 3], Color(0.95, 0.85, 0.40, 0.15), 1.0)
+                        # Corpse identity glow — blue for YOUR fallen, gold for bonus,
+                        # purple for deeper section (push-your-luck reward indicator)
+                        var is_yours: bool = w != null
+                        var is_deeper: bool = c.get("is_deeper", false)
+                        if is_yours:
+                                DrawUtils.draw_radial_glow(self, Vector2(cx, cy - 12 + bob), [10, 6, 3], Color(0.45, 0.78, 1.0, 0.25), 1.0)
+                        elif is_deeper:
+                                DrawUtils.draw_radial_glow(self, Vector2(cx, cy - 12 + bob), [10, 6, 3], Color(0.65, 0.40, 0.85, 0.25), 1.0)
+                        else:
+                                DrawUtils.draw_radial_glow(self, Vector2(cx, cy - 12 + bob), [8, 5, 3], Color(0.95, 0.85, 0.40, 0.15), 1.0)
                         if near_interactive == c:
+                                # YOUR fallen show death cause; deeper show "DEEPER" tag
                                 GameFont.draw_string_centered(self, Vector2(cx, cy - 32), c.corpse_name, 8, Palette.TEXT_GOLD)
                                 GameFont.draw_string_centered(self, Vector2(cx, cy - 26), c.gear_name, 8, Palette.TEXT_BLUE)
+                                if is_yours:
+                                        GameFont.draw_string_centered(self, Vector2(cx, cy - 38), c.death_cause, 8, Palette.TEXT_DIM)
+                                elif is_deeper and c.get("is_special", false):
+                                        GameFont.draw_string_centered(self, Vector2(cx, cy - 38), "DEEPER - special", 8, Palette.GLOW_PURP)
         # Exit
         var ex := int(exit_pos.x)
         var ey := int(exit_pos.y)
@@ -680,6 +774,14 @@ func _draw() -> void:
         DrawUtils.draw_radial_glow(self, exit_pos, [16, 10, 5], Palette.LIGHT_EXIT, 1.5)
         var exit_pulse := 0.5 + 0.3 * sin(Time.get_ticks_msec() * 0.003)
         GameFont.draw_string_centered(self, Vector2(ex, ey - 16), "EXIT", 8, Color(0.55, 0.95, 0.75, exit_pulse))
+        # Push-your-luck: show "DEEPER ↓" below the exit to indicate the
+        # optional deeper section with better gear
+        var deeper_count := 0
+        for c in corpses:
+                if c.get("is_deeper", false) and not c.collected:
+                        deeper_count += 1
+        if deeper_count > 0:
+                GameFont.draw_string_centered(self, Vector2(ex, ey + 10), "DEEPER ↓ (%d)" % deeper_count, 8, Palette.GLOW_PURP)
         # Ghost trail + ghost (shared draw method — underground variant)
         GhostMovement.draw_ghost(self, move, true)
         # QTE
@@ -737,6 +839,20 @@ func _draw_qte() -> void:
                                 draw_rect(Rect2(key_x - 5, key_y - 4, 10, 10), c, false, 1)
                                 GameFont.draw_string_centered(self, Vector2(key_x, key_y + 3), pattern[i], 8, c)
                         GameFont.draw_string_centered(self, bar_center + Vector2(0, -10), active_qte.verb, 8, Palette.TEXT_GOLD)
+                "reverse":
+                        # Reverse QTE: big "DON'T MOVE!" text with a shrinking timer bar.
+                        # The bar shrinks from full to empty — when it empties, you succeed
+                        # (you stayed still). Any key press = instant fail.
+                        var time_pct: float = float(active_qte.timer) / float(active_qte.max_timer)
+                        var bar_w := 30
+                        var bar_h := 5
+                        # Red bar that shrinks (opposite of the spam bar which fills)
+                        draw_rect(Rect2(int(bar_center.x) - bar_w / 2, int(bar_center.y), bar_w, bar_h), Palette.DARK, true)
+                        draw_rect(Rect2(int(bar_center.x) - bar_w / 2, int(bar_center.y), int(bar_w * time_pct), bar_h), Palette.TEXT_RED, true)
+                        draw_rect(Rect2(int(bar_center.x) - bar_w / 2, int(bar_center.y), bar_w, bar_h), Palette.TEXT_DIM, false, 1)
+                        # Pulsing "DON'T MOVE!" text
+                        var pulse := 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.01)
+                        GameFont.draw_string_centered(self, bar_center + Vector2(0, -10), active_qte.verb, 8, Color(0.98, 0.42 + 0.2 * pulse, 0.42))
 
 func _on_phase_exit() -> void:
         # No carried weapon to return in salvage

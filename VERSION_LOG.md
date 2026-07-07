@@ -4,6 +4,33 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.10 — Priority 2 Complete: Push-Your-Luck, Corpse Identity, 4th QTE (2026-07-07)
+
+### Push-Your-Luck Salvage
+**Changed:** The main exit is now at the corridor MIDPOINT, not the end. Past the exit is a "deeper" section with bonus corpses that have better gear (30% chance of legendary/cursed names). The player can leave at the exit (guaranteed floor) or push deeper for more reward (ceiling). The exit now shows "DEEPER ↓ (N)" indicating how many special corpses are in the deeper section.
+
+**Intention:** This is the "exceed expectations" curve from the design philosophy. The floor (reach exit) is always achievable. The ceiling (collect everything) costs real risk — more hazards, more ghost HP, less time. The player decides how hard to push. The marginal cost rises (more hazards deeper) faster than the reward (limited corpses), so it's always a live decision.
+
+### Corpse Identity
+**Changed:** Corpses now have visual identity:
+- **YOUR fallen** (actual party gear): blue soul-glow + name + death cause text
+- **Bonus corpses** (random NPCs): gold glow + name only
+- **Deeper corpses**: purple glow + name + "DEEPER - special" tag
+
+**Intention:** The design plan called for "your fallen have a blue soul-glow, random corpses don't." The visual difference is immediate — the player knows which corpses carry their actual gear (with preserved history/kill logs) vs. which are random fill. The purple glow on deeper corpses signals "this is the push-your-luck reward."
+
+### 4th QTE Type: Debris (Reverse QTE)
+**Changed:** New "debris" hazard type with a reverse QTE — "DON'T MOVE!" The player must NOT press any key for 3 seconds. Pressing any movement/interact/space key = instant failure (you flinched into the debris). Succeeding by doing nothing is the "Dumb Ways to Die" comedy beat. Added to dungeon gen hazard rotation (pit, fire, spikes, debris).
+
+**Intention:** The design plan called for "Falling debris: Do nothing (don't click the glowing bell — reverse QTE)." This is the 4th and final QTE type. Each hazard now has a distinct minigame: timing (pit), spam (fire), pattern (spikes), reverse (debris). The reverse QTE is the comedy one — failure is entertaining because you PANICKED.
+
+### Phase Verb Bypass Updated
+**Changed:** Phase verb now bypasses fire and spikes but NOT pits or debris. You can phase through fire and spikes (incorporeal), but pits still make you fall and debris still hits you even when phasing (the floor is still there, the rocks are still physical).
+
+**Intention:** Gives the phase verb tactical depth — it's not a universal "skip all hazards" button. Some hazards require QTE skill regardless of phasing.
+
+---
+
 ## v0.9 — Feedback Fixes: Shrine, Fleet Shade, Interact Bug, Movement, Corpses (2026-07-07)
 
 ### Shrine Shard Cost Now Updates
