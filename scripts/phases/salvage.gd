@@ -659,6 +659,9 @@ func _update_phase_hud() -> void:
         if move.is_phasing():
                 hud_phase.text = "PHASING! %.1fs" % move.phase_active
                 hud_phase.add_theme_color_override("font_color", Palette.GLOW_BLUE)
+        elif move.is_coasting():
+                hud_phase.text = "COAST %.1fs" % move._coast_timer
+                hud_phase.add_theme_color_override("font_color", Color(0.7, 0.8, 1.0))
         elif move.phase_cd > 0:
                 var bank_text := " +%4.1f bank" % move.phase_bank if move.phase_bank > 0.1 else ""
                 hud_phase.text = "[SPACE] cd %.1fs%s" % [move.phase_cd, bank_text]

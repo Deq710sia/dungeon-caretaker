@@ -1,212 +1,368 @@
 class_name GhostMovement
 extends RefCounted
-## Shared movement + phase verb logic for the ghost. Each walkable phase
-## (salvage, workshop, planning, gate) owns a GhostMovement instance and
-## calls its update() in _physics_process/_process. This normalizes the
-## movement values across all phases — no more duplicated speed/accel/friction
-## constants that drift out of sync.
+## Shared movement + phase verb logic for the ghost. State-based movement
+## system inspired by Phantom Forces movement tech — momentum is player-
+## generated through state transitions and timing, not granted by buttons.
 ##
-## The phase provides: current position, bounds, and whether input is allowed
-## (e.g. salvage blocks input during QTE, planning blocks during map view).
-## GhostMovement handles: velocity, acceleration, friction, facing, bob,
-## squash, footsteps, trail, and the phase verb (activate/cancel/bank).
+## Movement states:
+##   FLOAT  — normal walking. Pulse-timing inputs gives small speed boost.
+##   PHASE  — incorporeal dash (2x speed, costs shard, bypasses hazards).
+##   DIVE   — momentum burst on phase cancel. Boost scales with remaining
+##            phase energy. Cancel early = big burst. Cancel late = small.
+##   COAST  — carrying converted momentum. Low deceleration. Pulse-timing
+##            extends coast duration instead of just adding speed.
+##            Weapon weight is halved during coast (riding momentum, not
+##            generating it).
+##
+## The skill chain:
+##   1. Build speed (pulse-timing in FLOAT)
+##   2. Phase (2x speed, committed direction)
+##   3. Cancel phase early (DIVE — big momentum burst)
+##   4. Pulse-time inputs during COAST to extend the momentum
+##   5. Phase again to restart the chain
+##
+## Each step is a skill check. Mistime the cancel = weak boost. Stop
+## pulsing during coast = lose speed. The player builds speed through
+## terrain + timing, not through a button that gives speed.
 
-# --- Movement constants (single source of truth) ---
+enum State { FLOAT, PHASE, DIVE, COAST }
+
+# --- Movement constants ---
 const BASE_SPEED: float = 55.0
 const ACCEL: float = 220.0
-const DECEL_MULT: float = 0.3  # decel is 30% of accel (low = responsive direction changes)
-const PHASE_SPEED_MULT: float = 2.0  # speed multiplier while phasing
-const WEAPON_WEIGHT_MULT: float = 0.12  # each carried weapon reduces speed by 12%
+const DECEL_MULT: float = 0.3       # FLOAT decel (30% of accel)
+const COAST_DECEL_MULT: float = 0.08 # COAST decel (8% — barely slows)
+const PHASE_SPEED_MULT: float = 2.0
+const WEAPON_WEIGHT_MULT: float = 0.12
+const COAST_WEIGHT_REDUCTION: float = 0.5  # weapon weight halved during coast
 
-# Momentum carrying: release a direction, then re-press within this window
-# to get a speed boost. Rewards rhythmic pulsed input instead of just
-# holding keys. No new button — deepens the existing walk verb.
-# The boost is subtle (15%) and decays — you can't stack it infinitely.
-const PULSE_WINDOW: float = 0.35   # seconds after release to qualify for boost
-const PULSE_BOOST: float = 1.15    # 15% speed boost on well-timed re-press
-const PULSE_BOOST_DECAY: float = 2.5  # how fast boost decays back to 1.0 (per second)
+# Pulse timing (momentum carrying) — works in FLOAT and COAST
+const PULSE_WINDOW: float = 0.35
+const PULSE_BOOST: float = 1.15       # FLOAT: 15% boost
+const COAST_PULSE_EXTEND: float = 0.2 # COAST: each pulse extends coast by 0.2s
+const PULSE_BOOST_DECAY: float = 2.5
 
-## Effective speed — includes Fleet Shade upgrade (+15% per level) and
-## weapon weight penalty (-12% per carried weapon). Called per-frame so
-## upgrades and pickups take effect immediately.
-func get_speed() -> float:
-        var mult: float = 1.0 + float(GameState.meta_upgrades.get("fleet_shade", 0)) * 0.15
-        var weight_penalty: float = carry_count * WEAPON_WEIGHT_MULT
-        return BASE_SPEED * mult * (1.0 - weight_penalty)
-
-## Number of weapons currently carried (set by the owning phase).
-var carry_count: int = 0
-
-# --- Phase verb constants ---
+# Phase verb constants
 const PHASE_DURATION: float = 1.5
 const PHASE_CD: float = 4.0
 const PHASE_COST: int = 1
 const PHASE_BANK_MAX: float = 3.0
-const MOMENTUM_BOOST_MULT: float = 2.0  # velocity burst on manual cancel
+
+# DIVE — momentum burst on phase cancel
+const DIVE_MIN_MULT: float = 1.2     # minimum burst mult (cancel at 0s remaining)
+const DIVE_MAX_MULT: float = 2.5     # maximum burst mult (cancel at full duration)
+const DIVE_DURATION: float = 0.4     # how long the dive burst lasts
+const DIVE_DECAY: float = 3.0        # how fast dive mult decays to 1.0
+
+# COAST — carrying converted momentum
+const COAST_MIN_SPEED: float = 40.0  # below this, coast ends (back to FLOAT)
+const COAST_BASE_DURATION: float = 0.6  # base coast time after a dive
 
 # --- State ---
+var state: int = State.FLOAT
 var pos: Vector2
 var vel: Vector2 = Vector2.ZERO
 var facing: Vector2 = Vector2.DOWN
 var bob: float = 0.0
 var squash: float = 1.0
+var carry_count: int = 0
 
 # --- Phase verb state ---
 var phase_active: float = 0.0
 var phase_cd: float = 0.0
-var phase_bank: float = 0.0  # banked time from early cancel — reduces NEXT cooldown
+var phase_bank: float = 0.0
+
+# --- Internal timers ---
 var _footstep_timer: float = 0.0
-var _last_input_dir: Vector2 = Vector2.ZERO  # for momentum boost on cancel
-var _prev_input_dir: Vector2 = Vector2.ZERO  # for detecting press/release edges
-var _no_input_timer: float = 0.0  # counts up when no input (for pulse window)
-var _pulse_mult: float = 1.0  # current pulse boost multiplier (decays to 1.0)
+var _last_input_dir: Vector2 = Vector2.ZERO
+var _prev_input_dir: Vector2 = Vector2.ZERO
+var _no_input_timer: float = 0.0
+var _pulse_mult: float = 1.0
+var _dive_mult: float = 1.0
+var _dive_timer: float = 0.0
+var _coast_timer: float = 0.0
 
-## Called every physics/idle tick by the owning phase.
-## `input_dir` is the normalized direction from held keys (or Vector2.ZERO
-## if no input / input blocked). `delta` is the frame time.
-## Returns the new velocity (also stored in `vel`).
-func update(input_dir: Vector2, delta: float) -> void:
-        # Phase verb timers
-        phase_cd = max(0, phase_cd - delta)
-        if phase_active > 0:
-                phase_active = max(0, phase_active - delta)
-                if phase_active == 0:
-                        Juice.trail_phasing = false
-                        SFX.play("phase_out", 1.0, -3.0)
-        # --- Momentum carrying: detect press/release edges ---
-        # When input goes from zero → non-zero, check if it was within the
-        # pulse window after a release. If so, apply a speed boost.
-        var just_pressed: bool = (_prev_input_dir == Vector2.ZERO and input_dir != Vector2.ZERO)
-        var just_released: bool = (_prev_input_dir != Vector2.ZERO and input_dir == Vector2.ZERO)
-        if just_released:
-                _no_input_timer = 0.0  # start counting the release gap
-        if input_dir != Vector2.ZERO:
-                _no_input_timer = 0.0
-        else:
-                _no_input_timer += delta
-        if just_pressed and _no_input_timer < PULSE_WINDOW:
-                # Well-timed re-press! Apply a subtle boost that decays.
-                # Only boost if there was actual momentum to carry (vel wasn't zero).
-                if vel.length() > 5.0:
-                        _pulse_mult = PULSE_BOOST
-        # Decay pulse boost back to 1.0
-        _pulse_mult = lerp(_pulse_mult, 1.0, 1.0 - exp(-delta * PULSE_BOOST_DECAY))
-        _prev_input_dir = input_dir
-        # --- Normal movement ---
-        # Velocity-driven bob: 3Hz idle → 9Hz top speed
-        var speed_pct: float = vel.length() / get_speed()
-        bob += delta * (3.0 + speed_pct * 6.0)
-        squash = lerp(squash, 1.0, 1.0 - exp(-delta * 8.0))
-        # Apply pulse boost to target speed (multiplicative, decays naturally)
-        var target_speed: float = get_speed() * _pulse_mult * (PHASE_SPEED_MULT if phase_active > 0 else 1.0)
-        if input_dir != Vector2.ZERO:
-                input_dir = input_dir.normalized()
-                facing = input_dir
-                _last_input_dir = input_dir
-                vel = vel.move_toward(input_dir * target_speed, ACCEL * delta)
-        else:
-                vel = vel.move_toward(Vector2.ZERO, ACCEL * DECEL_MULT * delta)
-        pos += vel * delta
-        # Footstep whoosh — interval scales with speed
-        _footstep_timer += delta
-        if speed_pct > 0.25 and _footstep_timer > 0.30 / maxf(0.4, speed_pct):
-                _footstep_timer = 0.0
-                SFX.play("footstep", 0.85 + randf() * 0.25, -8.0, 0.04)
-        # Ghost trail
-        Juice.trail_sample(pos)
+## Effective speed — includes Fleet Shade upgrade and weapon weight.
+## During COAST, weapon weight is halved (riding momentum, not generating it).
+func get_speed() -> float:
+	var mult: float = 1.0 + float(GameState.meta_upgrades.get("fleet_shade", 0)) * 0.15
+	var weight_penalty: float = carry_count * WEAPON_WEIGHT_MULT
+	if state == State.COAST:
+		weight_penalty *= COAST_WEIGHT_REDUCTION
+	return BASE_SPEED * mult * (1.0 - weight_penalty)
 
-## Try to activate or cancel the phase verb. Call this when the player
-## presses the phase key. Returns true if the verb state changed.
-func try_activate_phase() -> bool:
-        if phase_active > 0:
-                # Manual cancel — bank remaining time (reduces next cooldown) and
-                # apply a momentum boost in the current facing direction.
-                var remaining := phase_active
-                phase_bank = minf(PHASE_BANK_MAX, phase_bank + remaining)
-                phase_active = 0.0
-                Juice.trail_phasing = false
-                SFX.play("phase_out", 1.0, -3.0)
-                # Momentum boost — burst in last input direction
-                if _last_input_dir != Vector2.ZERO:
-                        vel = _last_input_dir * get_speed() * MOMENTUM_BOOST_MULT
-                        Juice.spawn_particles(pos, 6, Palette.GLOW_BLUE, 30.0, 0.4)
-                return true
-        if phase_cd > 0:
-                return false
-        if GameState.soul_shards < PHASE_COST:
-                SFX.play("deny")
-                return false
-        GameState.soul_shards -= PHASE_COST
-        GameState.shards_changed.emit(GameState.soul_shards)
-        # Banked time reduces the cooldown (not adds to duration). The meter
-        # you didn't spend is refunded as a shorter cooldown next time.
-        phase_active = PHASE_DURATION
-        phase_cd = max(0.0, PHASE_CD - phase_bank)
-        phase_bank = 0.0
-        Juice.trail_phasing = true
-        Juice.add_trauma(0.15)
-        Juice.spawn_particles(pos, 8, Palette.GLOW_BLUE, 35.0, 0.5)
-        SFX.play("phase_in", 1.0, -2.0)
-        return true
-
-## Returns true if currently phasing (for draw logic).
+## Returns true if currently phasing (for draw logic + hazard bypass).
 func is_phasing() -> bool:
-        return phase_active > 0
+	return state == State.PHASE
 
 ## Returns the phase cooldown progress 0-1 (for HUD/draw).
 func cooldown_pct() -> float:
-        if phase_cd <= 0:
-                return 1.0
-        return 1.0 - (phase_cd / PHASE_CD)
+	if phase_cd <= 0:
+		return 1.0
+	return 1.0 - (phase_cd / PHASE_CD)
+
+## Returns true if in COAST state (for visual feedback — trail tint, etc.)
+func is_coasting() -> bool:
+	return state == State.COAST
+
+## Main update — called every physics/idle tick by the owning phase.
+func update(input_dir: Vector2, delta: float) -> void:
+	# Phase verb timers
+	phase_cd = max(0, phase_cd - delta)
+	if phase_active > 0:
+		phase_active = max(0, phase_active - delta)
+		if phase_active == 0:
+			# Phase ended naturally (timer expired) — transition to FLOAT
+			# with a small dive (less than a manual cancel)
+			_enter_dive(0.2)  # 20% of max dive — natural phase end gives a tiny boost
+	# State-specific update
+	match state:
+		State.PHASE:  _update_phase(input_dir, delta)
+		State.DIVE:   _update_dive(input_dir, delta)
+		State.COAST:  _update_coast(input_dir, delta)
+		_:            _update_float(input_dir, delta)
+	_prev_input_dir = input_dir
+	# Shared: footstep + trail
+	var speed_pct: float = vel.length() / get_speed()
+	_footstep_timer += delta
+	if speed_pct > 0.25 and _footstep_timer > 0.30 / maxf(0.4, speed_pct):
+		_footstep_timer = 0.0
+		SFX.play("footstep", 0.85 + randf() * 0.25, -8.0, 0.04)
+	Juice.trail_sample(pos)
+
+# --- FLOAT: normal walking with pulse-timing boost ---
+func _update_float(input_dir: Vector2, delta: float) -> void:
+	state = State.FLOAT
+	# Pulse detection
+	_detect_pulse(input_dir, delta)
+	# Bob + squash
+	var speed_pct: float = vel.length() / get_speed()
+	bob += delta * (3.0 + speed_pct * 6.0)
+	squash = lerp(squash, 1.0, 1.0 - exp(-delta * 8.0))
+	# Movement
+	var target_speed: float = get_speed() * _pulse_mult
+	_apply_movement(input_dir, target_speed, ACCEL, ACCEL * DECEL_MULT, delta)
+
+# --- PHASE: incorporeal dash ---
+func _update_phase(input_dir: Vector2, delta: float) -> void:
+	# Bob faster during phase (spectral energy)
+	var speed_pct: float = vel.length() / get_speed()
+	bob += delta * (6.0 + speed_pct * 8.0)
+	squash = lerp(squash, 1.0, 1.0 - exp(-delta * 8.0))
+	# Movement — phase is 2x speed, committed to facing direction
+	var target_speed: float = get_speed() * PHASE_SPEED_MULT
+	if input_dir != Vector2.ZERO:
+		input_dir = input_dir.normalized()
+		facing = input_dir
+		_last_input_dir = input_dir
+		vel = vel.move_toward(input_dir * target_speed, ACCEL * delta)
+	else:
+		# During phase, keep moving in facing direction even without input
+		vel = vel.move_toward(facing * target_speed, ACCEL * delta)
+	pos += vel * delta
+
+# --- DIVE: momentum burst on phase cancel ---
+func _update_dive(input_dir: Vector2, delta: float) -> void:
+	_dive_timer -= delta
+	# Dive mult decays from peak to 1.0
+	_dive_mult = lerp(_dive_mult, 1.0, 1.0 - exp(-delta * DIVE_DECAY))
+	# Bob is fast during dive (burst energy)
+	var speed_pct: float = vel.length() / get_speed()
+	bob += delta * (8.0 + speed_pct * 6.0)
+	squash = lerp(squash, 1.0, 1.0 - exp(-delta * 10.0))
+	# Movement — dive uses the dive_mult as a speed multiplier
+	var target_speed: float = get_speed() * _dive_mult
+	if input_dir != Vector2.ZERO:
+		input_dir = input_dir.normalized()
+		facing = input_dir
+		_last_input_dir = input_dir
+		# During dive, steer toward input but maintain burst speed
+		vel = vel.move_toward(input_dir * target_speed, ACCEL * 1.5 * delta)
+	else:
+		# No input — keep going in current direction (burst momentum)
+		vel = vel.move_toward(facing * target_speed, ACCEL * 0.5 * delta)
+	pos += vel * delta
+	# When dive mult decays enough, transition to COAST
+	if _dive_timer <= 0 or _dive_mult < 1.1:
+		_enter_coast()
+
+# --- COAST: carrying converted momentum ---
+func _update_coast(input_dir: Vector2, delta: float) -> void:
+	_coast_timer -= delta
+	# Pulse detection — in coast, pulses EXTEND duration instead of boosting speed
+	_detect_coast_pulse(input_dir, delta)
+	# Bob is smooth during coast (gliding)
+	var speed_pct: float = vel.length() / get_speed()
+	bob += delta * (4.0 + speed_pct * 5.0)
+	squash = lerp(squash, 1.0, 1.0 - exp(-delta * 6.0))
+	# Movement — very low deceleration (riding momentum)
+	var target_speed: float = get_speed()
+	if input_dir != Vector2.ZERO:
+		input_dir = input_dir.normalized()
+		facing = input_dir
+		_last_input_dir = input_dir
+		# Can steer during coast but can't exceed base speed
+		vel = vel.move_toward(input_dir * target_speed, ACCEL * 0.8 * delta)
+	else:
+		# No input — barely decelerate (coasting)
+		vel = vel.move_toward(Vector2.ZERO, ACCEL * COAST_DECEL_MULT * delta)
+	pos += vel * delta
+	# Coast ends when: timer expires, speed drops too low, or phase starts
+	if _coast_timer <= 0 or vel.length() < COAST_MIN_SPEED:
+		state = State.FLOAT
+
+# --- Pulse detection for FLOAT state ---
+func _detect_pulse(input_dir: Vector2, delta: float) -> void:
+	var just_pressed: bool = (_prev_input_dir == Vector2.ZERO and input_dir != Vector2.ZERO)
+	if input_dir != Vector2.ZERO:
+		_no_input_timer = 0.0
+	else:
+		_no_input_timer += delta
+	if just_pressed and _no_input_timer < PULSE_WINDOW:
+		if vel.length() > 5.0:
+			_pulse_mult = PULSE_BOOST
+	_pulse_mult = lerp(_pulse_mult, 1.0, 1.0 - exp(-delta * PULSE_BOOST_DECAY))
+
+# --- Pulse detection for COAST state — extends duration ---
+func _detect_coast_pulse(input_dir: Vector2, delta: float) -> void:
+	var just_pressed: bool = (_prev_input_dir == Vector2.ZERO and input_dir != Vector2.ZERO)
+	if input_dir != Vector2.ZERO:
+		_no_input_timer = 0.0
+	else:
+		_no_input_timer += delta
+	if just_pressed and _no_input_timer < PULSE_WINDOW:
+		if vel.length() > 5.0:
+			# Extend coast duration instead of boosting speed
+			_coast_timer += COAST_PULSE_EXTEND
+			_pulse_mult = PULSE_BOOST  # small speed boost too
+			Juice.spawn_particles(pos, 3, Palette.GLOW_BLUE, 15.0, 0.15)
+	_pulse_mult = lerp(_pulse_mult, 1.0, 1.0 - exp(-delta * PULSE_BOOST_DECAY))
+
+# --- Shared movement application ---
+func _apply_movement(input_dir: Vector2, target_speed: float, accel: float, decel: float, delta: float) -> void:
+	if input_dir != Vector2.ZERO:
+		input_dir = input_dir.normalized()
+		facing = input_dir
+		_last_input_dir = input_dir
+		vel = vel.move_toward(input_dir * target_speed, accel * delta)
+	else:
+		vel = vel.move_toward(Vector2.ZERO, decel * delta)
+	pos += vel * delta
+
+# --- State transitions ---
+
+## Enter DIVE state from phase cancel. The dive mult scales with remaining
+## phase energy — cancel early = big burst, cancel late = small burst.
+func _enter_dive(energy_pct: float) -> void:
+	state = State.DIVE
+	# energy_pct: 0.0 = no energy left, 1.0 = full energy
+	# Map to dive mult: DIVE_MIN_MULT at 0 energy, DIVE_MAX_MULT at full
+	_dive_mult = lerpf(DIVE_MIN_MULT, DIVE_MAX_MULT, energy_pct)
+	_dive_timer = DIVE_DURATION
+	# Burst velocity in facing direction
+	if _last_input_dir != Vector2.ZERO:
+		vel = _last_input_dir * get_speed() * _dive_mult
+	else:
+		vel = facing * get_speed() * _dive_mult
+	Juice.trail_phasing = false
+	SFX.play("phase_out", 1.0, -3.0)
+	Juice.spawn_particles(pos, 6, Palette.GLOW_BLUE, 30.0, 0.4)
+	squash = 0.7  # compress on dive entry (stretches out as it decays)
+
+## Enter COAST state from dive.
+func _enter_coast() -> void:
+	state = State.COAST
+	_coast_timer = COAST_BASE_DURATION
+	# Carry current velocity into coast (don't reset)
+	_dive_mult = 1.0
+
+## Try to activate or cancel the phase verb.
+func try_activate_phase() -> bool:
+	if state == State.PHASE:
+		# Manual cancel — convert remaining phase energy into a DIVE.
+		# The more time was left, the bigger the burst (zingus principle:
+		# you're converting stored energy into raw momentum).
+		var remaining_pct: float = phase_active / PHASE_DURATION
+		phase_bank = minf(PHASE_BANK_MAX, phase_bank + phase_active)
+		phase_active = 0.0
+		_enter_dive(remaining_pct)
+		return true
+	if state == State.COAST:
+		# Can phase out of coast — converts coast momentum into phase
+		# (keeps the chain going)
+		_start_phase()
+		return true
+	if phase_cd > 0:
+		return false
+	if GameState.soul_shards < PHASE_COST:
+		SFX.play("deny")
+		return false
+	_start_phase()
+	return true
+
+func _start_phase() -> void:
+	GameState.soul_shards -= PHASE_COST
+	GameState.shards_changed.emit(GameState.soul_shards)
+	phase_active = PHASE_DURATION
+	phase_cd = max(0.0, PHASE_CD - phase_bank)
+	phase_bank = 0.0
+	state = State.PHASE
+	Juice.trail_phasing = true
+	Juice.add_trauma(0.15)
+	Juice.spawn_particles(pos, 8, Palette.GLOW_BLUE, 35.0, 0.5)
+	SFX.play("phase_in", 1.0, -2.0)
 
 ## Reset all state (called on phase enter by the owning phase).
 func reset(p_pos: Vector2) -> void:
-        pos = p_pos
-        vel = Vector2.ZERO
-        facing = Vector2.DOWN
-        bob = 0.0
-        squash = 1.0
-        phase_active = 0.0
-        phase_cd = 0.0
-        phase_bank = 0.0
-        _footstep_timer = 0.0
-        _last_input_dir = Vector2.ZERO
+	pos = p_pos
+	vel = Vector2.ZERO
+	facing = Vector2.DOWN
+	bob = 0.0
+	squash = 1.0
+	state = State.FLOAT
+	phase_active = 0.0
+	phase_cd = 0.0
+	phase_bank = 0.0
+	_footstep_timer = 0.0
+	_last_input_dir = Vector2.ZERO
+	_prev_input_dir = Vector2.ZERO
+	_no_input_timer = 0.0
+	_pulse_mult = 1.0
+	_dive_mult = 1.0
+	_dive_timer = 0.0
+	_coast_timer = 0.0
 
-## Draws the ghost sprite with trail, phase-verb visual, and cooldown ring.
-## Call this from the owning phase's _draw(). The `is_underground` param
-## selects between the normal phase visual (semi-transparent blue) and the
-## salvage "underground" visual (very transparent + dark border ring that
-## reads as sinking below the floor).
-##
-## This replaces ~15 lines of duplicated draw code that was copy-pasted
-## across salvage, workshop, and planning. Now any new walkable phase just
-## calls `move.draw_ghost(self)` — no copy-paste, no drift.
+## Draws the ghost sprite with trail, phase visual, and cooldown ring.
 static func draw_ghost(canvas: CanvasItem, mv: GhostMovement, is_underground: bool = false) -> void:
-        var bob_val := int(sin(mv.bob) * 1.5)
-        var gx := int(mv.pos.x)
-        var gy := int(mv.pos.y)
-        # Shadow
-        canvas.draw_rect(Rect2(gx - 5, gy + 6, 10, 2), Color(0, 0, 0, 0.3), true)
-        var ghost_tex := Sprites.get_sprite("ghost")
-        var sw := int(16.0 / maxf(0.1, mv.squash))
-        var sh := int(16 * mv.squash)
-        # Trail (drawn before the sprite so the current sprite sits on top)
-        Juice.trail_draw(canvas, ghost_tex, 16)
-        # Phase verb visual
-        var ghost_mod := Color(1, 1, 1, 1)
-        if mv.is_phasing():
-                var phase_pct := mv.phase_active / PHASE_DURATION
-                if is_underground:
-                        # Salvage: very transparent + deep blue (reads as sinking below floor)
-                        ghost_mod = Color(0.35, 0.55, 0.85, 0.3 + 0.15 * phase_pct)
-                else:
-                        # Workshop/planning: semi-transparent blue
-                        ghost_mod = Color(0.55, 0.75, 0.95, 0.5 + 0.15 * phase_pct)
-        canvas.draw_texture_rect(ghost_tex, Rect2(gx - sw / 2, gy - sh / 2 + bob_val, sw, sh), false, ghost_mod)
-        # Underground border ring (salvage only — suggests the floor is covering the ghost)
-        if is_underground and mv.is_phasing():
-                canvas.draw_arc(Vector2(gx, gy + bob_val), 10, 0, TAU, 16, Color(0.1, 0.15, 0.3, 0.5), 2)
-        # Cooldown ring (shown when on cooldown, not while active)
-        if mv.phase_cd > 0 and not mv.is_phasing():
-                var cd_pct: float = mv.cooldown_pct()
-                canvas.draw_arc(Vector2(gx, gy), 12.0, -PI / 2, -PI / 2 + TAU * cd_pct, 16, Palette.TEXT_DIM, 1.5)
+	var bob_val := int(sin(mv.bob) * 1.5)
+	var gx := int(mv.pos.x)
+	var gy := int(mv.pos.y)
+	# Shadow
+	canvas.draw_rect(Rect2(gx - 5, gy + 6, 10, 2), Color(0, 0, 0, 0.3), true)
+	var ghost_tex := Sprites.get_sprite("ghost")
+	var sw := int(16.0 / maxf(0.1, mv.squash))
+	var sh := int(16 * mv.squash)
+	# Trail
+	Juice.trail_draw(canvas, ghost_tex, 16)
+	# Visual modulate based on state
+	var ghost_mod := Color(1, 1, 1, 1)
+	if mv.state == State.PHASE:
+		var phase_pct := mv.phase_active / PHASE_DURATION
+		if is_underground:
+			ghost_mod = Color(0.35, 0.55, 0.85, 0.3 + 0.15 * phase_pct)
+		else:
+			ghost_mod = Color(0.55, 0.75, 0.95, 0.5 + 0.15 * phase_pct)
+	elif mv.state == State.DIVE:
+		# Dive: bright white-blue flash that fades
+		ghost_mod = Color(0.8, 0.9, 1.0, 0.8)
+	elif mv.state == State.COAST:
+		# Coast: faint blue tint (riding spectral momentum)
+		ghost_mod = Color(0.7, 0.8, 1.0, 0.85)
+	canvas.draw_texture_rect(ghost_tex, Rect2(gx - sw / 2, gy - sh / 2 + bob_val, sw, sh), false, ghost_mod)
+	# Underground border ring (salvage only)
+	if is_underground and mv.state == State.PHASE:
+		canvas.draw_arc(Vector2(gx, gy + bob_val), 10, 0, TAU, 16, Color(0.1, 0.15, 0.3, 0.5), 2)
+	# Cooldown ring
+	if mv.phase_cd > 0 and mv.state != State.PHASE:
+		var cd_pct: float = mv.cooldown_pct()
+		canvas.draw_arc(Vector2(gx, gy), 12.0, -PI / 2, -PI / 2 + TAU * cd_pct, 16, Palette.TEXT_DIM, 1.5)
