@@ -86,15 +86,29 @@ func _build_level() -> void:
                         "cooldown": 0.0,
                 })
         # Corpses: actual fallen party gear + bonus corpses
+        # Fallen party gear is placed at the death position (recorded in battle)
+        # so the player finds their gear where they actually died.
         var fallen_gear: Array = GameState.last_battle_result.get("fallen_gear", [])
         if not fallen_gear.is_empty():
                 for i in fallen_gear.size():
                         var fg: Dictionary = fallen_gear[i]
                         var w: Weapon = fg["weapon"]
-                        var x := (2 + (i * 5) % (corridor_w - 4)) * TILE + TILE / 2
-                        var y := (10 + i * 8) * TILE + TILE / 2
+                        # Use death_tile if available (actual death position from battle)
+                        # Otherwise fall back to a spread layout.
+                        var death_tile: Variant = fg.get("death_tile", null)
+                        var cx: float
+                        var cy: float
+                        if death_tile != null:
+                                cx = death_tile.x * TILE + TILE / 2.0
+                                cy = death_tile.y * TILE + TILE / 2.0
+                                # Clamp to corridor bounds
+                                cx = clampf(cx, TILE, (corridor_w - 1) * TILE)
+                                cy = clampf(cy, TILE * 3, (corridor_h - 3) * TILE)
+                        else:
+                                cx = (2 + (i * 5) % (corridor_w - 4)) * TILE + TILE / 2
+                                cy = (10 + i * 8) * TILE + TILE / 2
                         corpses.append({
-                                "pos": Vector2(x, y),
+                                "pos": Vector2(cx, cy),
                                 "gear_type": w.type,
                                 "gear_state": w.state,
                                 "gear_name": w.display_name,
@@ -233,6 +247,9 @@ func _build_hud() -> void:
         hud_layer.add_child(hud_phase)
 
 func _physics_process(delta: float) -> void:
+        # Reset interact_pressed BEFORE any early returns
+        if not Input.is_action_pressed("interact"):
+                interact_pressed = false
         if finished:
                 return
         if Juice.is_hit_stopped():
@@ -268,8 +285,6 @@ func _physics_process(delta: float) -> void:
         if Input.is_action_just_pressed("interact") and not interact_pressed:
                 interact_pressed = true
                 _handle_interact()
-        if not Input.is_action_pressed("interact"):
-                interact_pressed = false
         # Phase verb
         if active_qte.is_empty() and Input.is_action_just_pressed("phase"):
                 move.try_activate_phase()

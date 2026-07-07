@@ -40,6 +40,10 @@ func _ready() -> void:
 	move.reset(Vector2(160, 90))
 	_adventurers_arrive()
 	_build_hud()
+	GameState.shards_changed.connect(_on_shards_changed)
+
+func _on_shards_changed(new_count: int) -> void:
+	hud_shards.text = "Shards: %d" % new_count
 
 func _adventurers_arrive() -> void:
 	adventurers.clear()
@@ -90,6 +94,11 @@ func _build_hud() -> void:
 	add_child(prompt_label)
 
 func _process(delta: float) -> void:
+	# Reset interact_pressed BEFORE any early returns — if hit_stop or
+	# other early-exit conditions fire, the interact guard would get
+	# stuck as true and block all further interactions for the phase.
+	if not Input.is_action_pressed("interact"):
+		interact_pressed = false
 	if Juice.is_hit_stopped():
 		return
 	# Input + movement via shared GhostMovement
@@ -106,8 +115,6 @@ func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("interact") and not interact_pressed:
 		interact_pressed = true
 		_handle_interact()
-	if not Input.is_action_pressed("interact"):
-		interact_pressed = false
 	# Phase verb (not while map view is open)
 	if not map_view_active and Input.is_action_just_pressed("phase"):
 		move.try_activate_phase()

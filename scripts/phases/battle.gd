@@ -379,9 +379,11 @@ func _attack_party(enemy: Dictionary, unit: Dictionary) -> void:
 		unit.alive = false
 		unit.hp = 0
 		unit.adv.alive = false
-		# Track which enemy type killed this unit — used by apply_combat_damage
-		# in _end_battle to apply the death-cause affliction layer 2.
+		# Track which enemy type killed this unit AND where they died.
+		# Used by apply_combat_damage (death-cause affliction) and by
+		# salvage (corpse placement at actual death location).
 		unit.killed_by = enemy.sprite
+		unit.death_pos = unit.pos
 		Juice.add_trauma(0.4)
 		Juice.hit_stop(0.12)
 		Juice.spawn_particles(unit.pos, 10, Palette.BLOOD, 50.0, 0.7)
@@ -397,17 +399,23 @@ func _end_battle() -> void:
 	# death-cause affliction). party_units holds the combat-side dicts
 	# which have the killed_by field set when the unit died.
 	var killed_by_map: Dictionary = {}
+	var death_pos_map: Dictionary = {}  # name → death position (tile coords)
 	for u in party_units:
 		if not u.alive and u.get("killed_by", "") != "":
-			killed_by_map[u.adv.get("name", "?")] = u.killed_by
+			var uname: String = u.adv.get("name", "?")
+			killed_by_map[uname] = u.killed_by
+			# Convert pixel position to tile coords for salvage placement
+			var dpos: Vector2 = u.get("death_pos", Vector2(CORRIDOR_W * TILE / 2, corridor_h * TILE / 2))
+			death_pos_map[uname] = Vector2(int(dpos.x / TILE), int(dpos.y / TILE))
 	for adv in GameState.party:
 		var equipped_w: Variant = adv.get("equipped_weapon")
 		var equipped_a: Variant = adv.get("equipped_armor")
 		var owner_died: bool = not adv.get("alive", true)
 		var adv_name: String = adv.get("name", "?")
 		var killer: String = killed_by_map.get(adv_name, "")
+		var death_tile: Vector2 = death_pos_map.get(adv_name, Vector2(CORRIDOR_W / 2, corridor_h / 2))
 		if owner_died:
-			# Dead adventurer: their gear stays on the ground
+			# Dead adventurer: their gear stays on the ground at death position
 			if equipped_w != null:
 				equipped_w.apply_combat_damage(true, killer)
 				fallen_gear.append({
@@ -416,6 +424,7 @@ func _end_battle() -> void:
 					"class": adv.get("class", "knight"),
 					"slot": "weapon",
 					"cause": "slain by %s" % (killer if killer != "" else "the enemy"),
+					"death_tile": death_tile,
 				})
 			if equipped_a != null:
 				equipped_a.apply_combat_damage(true, killer)
@@ -425,6 +434,7 @@ func _end_battle() -> void:
 					"class": adv.get("class", "knight"),
 					"slot": "armor",
 					"cause": "slain by %s" % (killer if killer != "" else "the enemy"),
+					"death_tile": death_tile,
 				})
 		else:
 			# Living adventurer: their gear returns to arsenal
@@ -581,12 +591,10 @@ func _draw() -> void:
 	var cd_c := Palette.TEXT_GREEN if phase_cd <= 0 else Palette.TEXT_DIM
 	draw_rect(Rect2(hud_pos + Vector2(4, 150), Vector2(40, 5)), Palette.DARK, true)
 	draw_rect(Rect2(hud_pos + Vector2(4, 150), Vector2(int(40 * cd_pct), 5)), cd_c, true)
-	# DESIGN_PLAN 1B: Phase verb — unified verb label, matches salvage.
-	# Was "[1]Haunt". Now shows shard cost so the player sees the price.
 	var phase_label := "[SPACE]PHASE -%ds" % PHASE_COST if phase_cd <= 0 else "[SPACE]phase %.1fs" % phase_cd
 	GameFont.draw_string(self, hud_pos + Vector2(4, 148), phase_label, 8, cd_c)
 	if phase_active > 0:
-		GameFont.draw_string_centered(self, hud_pos + Vector2(VIEW_W / 2, 148), "PHASING!", 8, Palette.GLOW_BLUE)
+		GameFont.draw_string_centered(self, hud_pos + Vector2(VIEW_W / 2, 148), "PHASING — enemies slowed!", 8, Palette.GLOW_BLUE)
 
 func _on_continue() -> void:
 	GameState.set_phase("results")

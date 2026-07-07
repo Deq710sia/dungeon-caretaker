@@ -384,7 +384,12 @@ func repair_curve(quality: float) -> float:
 	var logistic := 1.0 / (1.0 + exp(-10.0 * (q - 0.5)))
 	var restore := logistic * 0.6
 	if durability_pct() < 0.15:
-		restore *= 0.7
+		# Nearly-broken weapons are harder to fix — a single forge pass
+		# shouldn't fully restore a shattered weapon. Was 0.7 (too generous
+		# — a perfect pass from BROKEN gave 42% = WORN/yellow). Now 0.4
+		# so a perfect pass gives ~24% = DAMAGED/orange, requiring multiple
+		# forge visits to fully restore.
+		restore *= 0.4
 	return restore
 
 ## Applies one repair pass at the given quality, restoring durability along

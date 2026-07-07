@@ -12,10 +12,16 @@ extends RefCounted
 ## squash, footsteps, trail, and the phase verb (activate/cancel/bank).
 
 # --- Movement constants (single source of truth) ---
-const SPEED: float = 55.0
+const BASE_SPEED: float = 55.0
 const ACCEL: float = 220.0
-const DECEL_MULT: float = 0.6  # decel is 60% of accel (coasts on release)
+const DECEL_MULT: float = 0.3  # decel is 30% of accel (low = responsive direction changes)
 const PHASE_SPEED_MULT: float = 2.0  # speed multiplier while phasing
+
+## Effective speed — includes Fleet Shade upgrade (+15% per level).
+## Called per-frame so upgrades take effect immediately after purchase.
+func get_speed() -> float:
+	var mult: float = 1.0 + float(GameState.meta_upgrades.get("fleet_shade", 0)) * 0.15
+	return BASE_SPEED * mult
 
 # --- Phase verb constants ---
 const PHASE_DURATION: float = 1.5
@@ -51,12 +57,12 @@ func update(input_dir: Vector2, delta: float) -> void:
 			Juice.trail_phasing = false
 			SFX.play("phase_out", 1.0, -3.0)
 	# Velocity-driven bob: 3Hz idle → 9Hz top speed
-	var speed_pct: float = vel.length() / SPEED
+	var speed_pct: float = vel.length() / get_speed()
 	bob += delta * (3.0 + speed_pct * 6.0)
 	squash = lerp(squash, 1.0, 1.0 - exp(-delta * 8.0))
 	# Movement — full accel when input present (fast direction changes),
 	# 60% decel when no input (coasts slightly on release).
-	var target_speed: float = SPEED * (PHASE_SPEED_MULT if phase_active > 0 else 1.0)
+	var target_speed: float = get_speed() * (PHASE_SPEED_MULT if phase_active > 0 else 1.0)
 	if input_dir != Vector2.ZERO:
 		input_dir = input_dir.normalized()
 		facing = input_dir
@@ -86,7 +92,7 @@ func try_activate_phase() -> bool:
 		SFX.play("phase_out", 1.0, -3.0)
 		# Momentum boost — burst in last input direction
 		if _last_input_dir != Vector2.ZERO:
-			vel = _last_input_dir * SPEED * MOMENTUM_BOOST_MULT
+			vel = _last_input_dir * get_speed() * MOMENTUM_BOOST_MULT
 			Juice.spawn_particles(pos, 6, Palette.GLOW_BLUE, 30.0, 0.4)
 		return true
 	if phase_cd > 0:

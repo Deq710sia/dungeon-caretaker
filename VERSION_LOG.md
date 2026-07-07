@@ -4,6 +4,34 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.9 — Feedback Fixes: Shrine, Fleet Shade, Interact Bug, Movement, Corpses (2026-07-07)
+
+### Shrine Shard Cost Now Updates
+**Changed:** Planning phase now connects `GameState.shards_changed` signal. The shard HUD was never updating after recruit — the signal was missing. Now the shard count updates immediately when you recruit.
+
+### Fleet Shade Upgrade Wired
+**Changed:** `GhostMovement.SPEED` was a `const` — the Fleet Shade upgrade (+15% ghost speed per level) had NO effect. Changed to `get_speed()` which reads `GameState.meta_upgrades["fleet_shade"]` per-frame. Upgrades take effect immediately after purchase.
+
+### Interact Bug Fixed (Phase Verb Breaking Planning)
+**Changed:** `interact_pressed = false` was placed AFTER the `Juice.is_hit_stopped()` early return. If hit_stop was active (which happens during `_assign_weapon` and `_try_recruit`), the interact guard got stuck as `true` and blocked ALL further interactions for the rest of the phase. Fixed: moved the reset to the TOP of `_process`/`_physics_process` in planning, workshop, and salvage — before any early returns.
+
+### Movement Sticking Reduced
+**Changed:** `GhostMovement.DECEL_MULT` lowered from 0.6 to 0.3 (30% of accel). Direction changes are now much more responsive — the ghost barely slows when you switch directions. Gate phase also updated to match (was using 300 accel / 0.6 decel, now 220 accel / 0.3 decel).
+
+### Salvage Corpses at Death Positions
+**Changed:** Battle now records `unit.death_pos` (pixel position) when a party member dies. This is passed through `fallen_gear` as `death_tile` (tile coords). Salvage uses this to place corpses at the actual death location — the player finds their gear where they fell, not scattered randomly. Falls back to spread layout if no death_tile (first run / simulation).
+
+### Weapon Color After Reforge Fixed
+**Changed:** `repair_curve()` nearly-broken penalty increased from 0.7 to 0.4. A perfect forge pass from BROKEN now gives ~24% durability (DAMAGED/orange) instead of ~42% (WORN/yellow). Shattered weapons require multiple forge visits to fully restore — graduated repair actually graduates now.
+
+### Battle Phase Verb Clarity
+**Changed:** HUD text changed from "PHASING!" to "PHASING — enemies slowed!" so the player understands what the verb does in battle. The effect (60% enemy speed reduction + 50% slower enemy attacks) was always coded but the feedback didn't explain it.
+
+### Gate Movement Unified
+**Changed:** Gate phase movement constants updated to match GhostMovement (220 accel, 0.3 decel mult, 55 speed). Was using old values (300 accel, 0.6 decel) that felt different from every other phase.
+
+---
+
 ## v0.8.1 — Code Audit Fixes + Repair Minigame Bug (2026-07-07)
 
 ### Critical: Repair Minigames Now Display the Weapon
