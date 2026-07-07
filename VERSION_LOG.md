@@ -4,6 +4,61 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.22 — Added Real Melody (Singable Motif, Toby Fox Leitmotif Style) (2026-07-07)
+
+### Problem: No Melody
+**Diagnosis:** The old "lead" layer was not a melody — it was a sparse stab:
+- Skipped every 5th chord (`if chord_idx % 5 == 4: return`)
+- Played ONE note per chord (just a static frequency)
+- Entered at 0.66 beats (late) and only lasted 1.2 beats
+- Was quiet (0.085 amplitude, same as chords — not a lead voice)
+
+There was no singable line, no motif, no phrasing. Just occasional stabs.
+
+### Fix: Proper Singable Melody
+
+**1. New MELODY constant — 32 chords × 2-4 notes each = a real melodic line**
+
+**Section A (chords 1-16): Question + Answer motif**
+- Chord 1 (Cm6): question — rises Eb4→G4→A4→G4 (b3-5-6-5)
+- Chord 2 (BbM7(9)): answer — descends F4→D4→C4→D4 (5-3-9-3)
+- Chord 3 (Cm6): repeat question
+- Chord 4 (G7#5#9): answer transforms with altered tones — B4→A#4→G4→F4
+- Pattern repeats through chord 16 with variations
+
+**Section B (chords 17-32): Countermelody, higher register**
+- Transforms the motif up an octave
+- Chord 17 (DbM7(9)): Ab4→C5→Eb5→C5 (5-7-9-7)
+- Chord 23 (EbM7(9)): rises to F5 — the high point of the melody
+- Returns to A motif for the final 8 chords
+
+**2. Melody is now the LOUD lead voice**
+- Amplitude: 0.085 → 0.14 (65% louder, sits above the mix)
+- 2-4 notes per chord (was 1)
+- Notes are placed at specific beat positions (0.0, 0.5, 1.0, 1.5) for rhythmic phrasing
+
+**3. Proper ADSR for legato phrasing**
+- 15ms attack (smooth note onset, not clicky)
+- Sustain through the note
+- 60ms release (legato — notes connect smoothly)
+- Vibrato (5Hz, ±0.4%) for life
+
+**4. Doubled with detune**
+- Two voices at ±0.3% detune with shared vibrato
+- Richer than single oscillator, chorused width
+
+**5. Richer tone**
+- Sine + 2nd harmonic (0.25) + 3rd harmonic (0.08) — warm lead, not thin sine
+
+### Verification
+- 30s stereo loop, peak -8.0dB, RMS -19.6dB (healthy)
+- Melody is now audible as a singable line above the comp/bass/drums
+- Question/answer phrasing creates musical structure
+- Countermelody in B section provides contrast
+- Preview at `/home/z/my-project/download/music_preview/main_theme_v9_melody.wav`
+
+---
+
 ## v0.21 — Music Bug Fixes (MIDI Analysis Found 3 Critical Bugs) (2026-07-07)
 
 ### Diagnosis: Transcribed to MIDI, Found 3 Critical Bugs

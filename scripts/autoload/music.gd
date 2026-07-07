@@ -316,41 +316,283 @@ func _render_arp(L: PackedFloat32Array, R: PackedFloat32Array, start: int, len: 
 				R[start + note_start + j - haas_delay] += v * 0.85
 		note_idx += 1
 
-# --- Layer 4: Lead (saw + vibrato, doubled with detune, panned center) ---
+
+# --- Melody definitions (singable motif, Toby Fox leitmotif style) ---
+# Each note: {pos: beat position in 2-beat chord, freq: Hz, dur: beats}
+# Section A: question motif (chords 1-2) + answer motif (chords 3-4), repeats
+# Section B: countermelody (chords 17-24) — higher register, transformed motif
+# Section A2: restatement (chords 25-32)
+
+const MELODY := [
+	# === SECTION A (chords 1-16) — Question + Answer motif ===
+	# Chord 1 (Cm6): question — rises 5-3-5 (Eb-D-G... wait, let me use scale degrees)
+	# Cm6 = C-Eb-G-A. Melody over it: Eb4 (b3) -> G4 (5) -> A4 (6) -> G4 (5)
+	[
+		{pos=0.0, freq=311.13, dur=0.5},   # Eb4 (b3)
+		{pos=0.5, freq=392.00, dur=0.5},   # G4 (5)
+		{pos=1.0, freq=440.00, dur=0.5},   # A4 (6)
+		{pos=1.5, freq=392.00, dur=0.5},   # G4 (5) — back down
+	],
+	# Chord 2 (BbM7(9)): answer — descends from the high note
+	# BbM7(9) = Bb-D-F-A-C. Melody: F4 (5) -> D4 (3) -> C4 (9th) -> D4 (3)
+	[
+		{pos=0.0, freq=349.23, dur=0.5},   # F4 (5)
+		{pos=0.5, freq=293.66, dur=0.5},   # D4 (3)
+		{pos=1.0, freq=261.63, dur=0.5},   # C4 (9th)
+		{pos=1.5, freq=293.66, dur=0.5},   # D4 (3) — back up
+	],
+	# Chord 3 (Cm6): repeat question motif
+	[
+		{pos=0.0, freq=311.13, dur=0.5},
+		{pos=0.5, freq=392.00, dur=0.5},
+		{pos=1.0, freq=440.00, dur=0.5},
+		{pos=1.5, freq=392.00, dur=0.5},
+	],
+	# Chord 4 (G7#5#9): answer transforms — uses altered tones for tension
+	# G7#5#9 = G-B-D#-F-A#. Melody: B4 (3) -> A#4 (#9) -> G4 (root) -> F4 (b7)
+	[
+		{pos=0.0, freq=493.88, dur=0.5},   # B4 (3)
+		{pos=0.5, freq=466.16, dur=0.5},   # A#4 (#9)
+		{pos=1.0, freq=392.00, dur=0.5},   # G4 (root)
+		{pos=1.5, freq=349.23, dur=0.5},   # F4 (b7) — descends to resolve
+	],
+	# Chord 5 (Cm7(9)): motif variation — starts higher
+	[
+		{pos=0.0, freq=466.16, dur=0.5},   # Bb4 (9th)
+		{pos=0.5, freq=440.00, dur=0.5},   # A4 (root up... wait Cm7 = C-Eb-G-Bb-D)
+		{pos=1.0, freq=392.00, dur=0.5},   # G4 (5)
+		{pos=1.5, freq=440.00, dur=0.5},   # A4 — passing
+	],
+	# Chord 6 (BbM7(9)): answer
+	[
+		{pos=0.0, freq=415.30, dur=0.5},   # G#4 — passing tone (chromatic approach)
+		{pos=0.5, freq=440.00, dur=0.5},   # A4 (3rd of Bb... wait BbM7 = Bb-D-F-A-C)
+		{pos=1.0, freq=523.25, dur=0.5},   # C5 (9th)
+		{pos=1.5, freq=466.16, dur=0.5},   # Bb4 (root)
+	],
+	# Chord 7 (Cm7(9)): repeat
+	[
+		{pos=0.0, freq=466.16, dur=0.5},
+		{pos=0.5, freq=440.00, dur=0.5},
+		{pos=1.0, freq=392.00, dur=0.5},
+		{pos=1.5, freq=440.00, dur=0.5},
+	],
+	# Chord 8 (Dm7(9)): transition — rising line
+	# Dm7(9) = D-F-A-C-E. Melody: A4 -> C5 -> E5 (rising)
+	[
+		{pos=0.0, freq=440.00, dur=0.5},   # A4 (5)
+		{pos=0.5, freq=523.25, dur=0.5},   # C5 (b7)
+		{pos=1.0, freq=659.25, dur=1.0},   # E5 (9) — held long
+	],
+	# Chord 9 (Daug7): tension — altered tones
+	# Daug7 = D-F#-A#-C. Melody: A#4 -> C5 -> A#4
+	[
+		{pos=0.0, freq=466.16, dur=0.5},   # A#4 (#5)
+		{pos=0.5, freq=523.25, dur=0.5},   # C5 (b7)
+		{pos=1.0, freq=466.16, dur=1.0},   # A#4 — held
+	],
+	# Chord 10 (Cm6): return to motif
+	[
+		{pos=0.0, freq=311.13, dur=0.5},
+		{pos=0.5, freq=392.00, dur=0.5},
+		{pos=1.0, freq=440.00, dur=0.5},
+		{pos=1.5, freq=392.00, dur=0.5},
+	],
+	# Chord 11 (BbM7(9)): answer
+	[
+		{pos=0.0, freq=349.23, dur=0.5},
+		{pos=0.5, freq=293.66, dur=0.5},
+		{pos=1.0, freq=261.63, dur=0.5},
+		{pos=1.5, freq=293.66, dur=0.5},
+	],
+	# Chord 12 (Cm7(9)): motif
+	[
+		{pos=0.0, freq=466.16, dur=0.5},
+		{pos=0.5, freq=440.00, dur=0.5},
+		{pos=1.0, freq=392.00, dur=0.5},
+		{pos=1.5, freq=440.00, dur=0.5},
+	],
+	# Chord 13 (G7#5#9): tension
+	[
+		{pos=0.0, freq=493.88, dur=0.5},
+		{pos=0.5, freq=466.16, dur=0.5},
+		{pos=1.0, freq=392.00, dur=0.5},
+		{pos=1.5, freq=349.23, dur=0.5},
+	],
+	# Chord 14 (Cm6): motif
+	[
+		{pos=0.0, freq=311.13, dur=0.5},
+		{pos=0.5, freq=392.00, dur=0.5},
+		{pos=1.0, freq=440.00, dur=0.5},
+		{pos=1.5, freq=392.00, dur=0.5},
+	],
+	# Chord 15 (BbM7(9)): answer
+	[
+		{pos=0.0, freq=349.23, dur=0.5},
+		{pos=0.5, freq=293.66, dur=0.5},
+		{pos=1.0, freq=261.63, dur=0.5},
+		{pos=1.5, freq=293.66, dur=0.5},
+	],
+	# Chord 16 (G7#5#9): tension resolving to Section B
+	[
+		{pos=0.0, freq=493.88, dur=0.5},
+		{pos=0.5, freq=466.16, dur=0.5},
+		{pos=1.0, freq=392.00, dur=1.0},   # held — anticipates B section
+	],
+	# === SECTION B (chords 17-32) — Countermelody, higher register ===
+	# Chord 17 (DbM7(9)): countermelody — higher, transformed motif
+	# DbM7(9) = Db-F-Ab-C-Eb. Melody: Ab4 -> C5 -> Eb5 -> C5
+	[
+		{pos=0.0, freq=415.30, dur=0.5},   # Ab4 (5)
+		{pos=0.5, freq=523.25, dur=0.5},   # C5 (7)
+		{pos=1.0, freq=622.25, dur=0.5},   # Eb5 (9)
+		{pos=1.5, freq=523.25, dur=0.5},   # C5 (7)
+	],
+	# Chord 18 (DbmM7): dark turn
+	# DbmM7 = Db-E-Ab-C. Melody: E4 -> Ab4 -> C5 -> Ab4
+	[
+		{pos=0.0, freq=329.63, dur=0.5},   # E4 (b3)
+		{pos=0.5, freq=415.30, dur=0.5},   # Ab4 (5)
+		{pos=1.0, freq=523.25, dur=0.5},   # C5 (7)
+		{pos=1.5, freq=415.30, dur=0.5},   # Ab4 (5)
+	],
+	# Chord 19 (Cm7(11)): descending
+	[
+		{pos=0.0, freq=466.16, dur=0.5},   # Bb4
+		{pos=0.5, freq=440.00, dur=0.5},   # A4
+		{pos=1.0, freq=392.00, dur=0.5},   # G4
+		{pos=1.5, freq=349.23, dur=0.5},   # F4 (11th)
+	],
+	# Chord 20 (Faug7): tension
+	# Faug7 = F-A-C#-E#. Melody: A4 -> C#5 -> A4
+	[
+		{pos=0.0, freq=440.00, dur=0.5},   # A4 (3)
+		{pos=0.5, freq=554.37, dur=0.5},   # C#5 (#5)
+		{pos=1.0, freq=440.00, dur=1.0},   # A4 — held
+	],
+	# Chord 21 (Bbm7(9)): motif
+	# Bbm7(9) = Bb-Db-F-Ab-C-Eb. Melody: F4 -> Ab4 -> C5 -> Ab4
+	[
+		{pos=0.0, freq=349.23, dur=0.5},   # F4 (5)
+		{pos=0.5, freq=415.30, dur=0.5},   # Ab4 (b7)
+		{pos=1.0, freq=523.25, dur=0.5},   # C5 (9)
+		{pos=1.5, freq=415.30, dur=0.5},   # Ab4 (b7)
+	],
+	# Chord 22 (Bbm7(11)): answer
+	[
+		{pos=0.0, freq=466.16, dur=0.5},   # Bb4 (root)
+		{pos=0.5, freq=415.30, dur=0.5},   # Ab4 (b7)
+		{pos=1.0, freq=349.23, dur=0.5},   # F4 (5)
+		{pos=1.5, freq=415.30, dur=0.5},   # Ab4 (b7)
+	],
+	# Chord 23 (EbM7(9)): rising
+	# EbM7(9) = Eb-G-Bb-D-F. Melody: Bb4 -> D5 -> F5
+	[
+		{pos=0.0, freq=466.16, dur=0.5},   # Bb4 (5)
+		{pos=0.5, freq=587.33, dur=0.5},   # D5 (7)
+		{pos=1.0, freq=698.46, dur=1.0},   # F5 (9) — high point
+	],
+	# Chord 24 (Dm7b5): turn back
+	# Dm7b5 = D-F-Ab-C. Melody: F5 -> D5 -> C5 -> A4
+	[
+		{pos=0.0, freq=698.46, dur=0.5},   # F5 (b3... wait Dm7b5 = D-F-Ab-C-Eb)
+		{pos=0.5, freq=587.33, dur=0.5},   # D5 (root)
+		{pos=1.0, freq=523.25, dur=0.5},   # C5 (b7)
+		{pos=1.5, freq=440.00, dur=0.5},   # A4 (b5)
+	],
+	# Chord 25 (G7#5#9): tension
+	[
+		{pos=0.0, freq=493.88, dur=0.5},
+		{pos=0.5, freq=466.16, dur=0.5},
+		{pos=1.0, freq=392.00, dur=0.5},
+		{pos=1.5, freq=349.23, dur=0.5},
+	],
+	# Chord 26 (Cm6): return to A motif
+	[
+		{pos=0.0, freq=311.13, dur=0.5},
+		{pos=0.5, freq=392.00, dur=0.5},
+		{pos=1.0, freq=440.00, dur=0.5},
+		{pos=1.5, freq=392.00, dur=0.5},
+	],
+	# Chord 27 (BbM7(9)): answer
+	[
+		{pos=0.0, freq=349.23, dur=0.5},
+		{pos=0.5, freq=293.66, dur=0.5},
+		{pos=1.0, freq=261.63, dur=0.5},
+		{pos=1.5, freq=293.66, dur=0.5},
+	],
+	# Chord 28 (Cm7(9)): motif
+	[
+		{pos=0.0, freq=466.16, dur=0.5},
+		{pos=0.5, freq=440.00, dur=0.5},
+		{pos=1.0, freq=392.00, dur=0.5},
+		{pos=1.5, freq=440.00, dur=0.5},
+	],
+	# Chord 29 (G7#5#9): tension
+	[
+		{pos=0.0, freq=493.88, dur=0.5},
+		{pos=0.5, freq=466.16, dur=0.5},
+		{pos=1.0, freq=392.00, dur=0.5},
+		{pos=1.5, freq=349.23, dur=0.5},
+	],
+	# Chord 30 (Cm6): motif
+	[
+		{pos=0.0, freq=311.13, dur=0.5},
+		{pos=0.5, freq=392.00, dur=0.5},
+		{pos=1.0, freq=440.00, dur=0.5},
+		{pos=1.5, freq=392.00, dur=0.5},
+	],
+	# Chord 31 (BbM7(9)): answer
+	[
+		{pos=0.0, freq=349.23, dur=0.5},
+		{pos=0.5, freq=293.66, dur=0.5},
+		{pos=1.0, freq=261.63, dur=0.5},
+		{pos=1.5, freq=293.66, dur=0.5},
+	],
+	# Chord 32 (Cm6): resolve back to start — long final note
+	[
+		{pos=0.0, freq=311.13, dur=0.5},   # Eb4 (b3)
+		{pos=0.5, freq=392.00, dur=1.5},   # G4 (5) — held long, resolves to loop
+	],
+]
+# --- Layer 4: Melody (singable motif, 2-4 notes per chord, doubled with detune) ---
 func _render_lead(L: PackedFloat32Array, R: PackedFloat32Array, start: int, len: int, chord: Dictionary, chord_idx: int) -> void:
-	if chord_idx % 5 == 4:
+	if chord_idx >= MELODY.size():
 		return
-	var lead_freq: float = chord["lead"]
-	var lead_start: int = int(0.66 * BEAT_DUR * SR)
-	var lead_dur: int = int(1.2 * BEAT_DUR * SR)
-	var ph1 := 0.0
-	var ph2 := 0.0
+	var melody_notes: Array = MELODY[chord_idx]
 	var detune: float = 0.003  # ±0.3% for chorus
-	for i in lead_dur:
-		if lead_start + i >= len or start + lead_start + i >= L.size():
-			break
-		var vibrato: float = sin(float(i) / SR * TAU * 5.0) * 0.003
-		ph1 += lead_freq * (1.0 - detune) * (1.0 + vibrato) / SR
-		ph2 += lead_freq * (1.0 + detune) * (1.0 + vibrato) / SR
-		# Saw + lowpass for warm lead
-		var saw1: float = 2.0 * (ph1 - floor(ph1 + 0.5))
-		var saw2: float = 2.0 * (ph2 - floor(ph2 + 0.5))
-		var alpha: float = 1.0 - exp(-2.0 * PI * 2500.0 / SR)
-		# Simplified: just use sine + 2nd harmonic for cleaner tone
-		var s1: float = sin(ph1) + sin(ph1 * 2.0) * 0.3
-		var s2: float = sin(ph2) + sin(ph2 * 2.0) * 0.3
-		var env: float
-		var atk: int = int(0.008 * SR)
-		var rel: int = int(0.1 * SR)
-		if i < atk:
-			env = float(i) / atk
-		elif i > lead_dur - rel:
-			env = float(lead_dur - i) / rel
-		else:
-			env = 1.0
-		# Pan slightly L/R for width
-		L[start + lead_start + i] += s1 * env * 0.085
-		R[start + lead_start + i] += s2 * env * 0.085
+	for note_data in melody_notes:
+		var note_pos: float = note_data["pos"]
+		var note_freq: float = note_data["freq"]
+		var note_dur_beats: float = note_data["dur"]
+		var note_start: int = int(note_pos * BEAT_DUR * SR)
+		var note_dur: int = int(note_dur_beats * BEAT_DUR * SR)
+		var ph1 := 0.0
+		var ph2 := 0.0
+		for i in note_dur:
+			if note_start + i >= len or start + note_start + i >= L.size():
+				break
+			# Vibrato (5Hz, subtle)
+			var vibrato: float = sin(float(i) / SR * TAU * 5.0) * 0.004
+			ph1 += note_freq * (1.0 - detune) * (1.0 + vibrato) / SR
+			ph2 += note_freq * (1.0 + detune) * (1.0 + vibrato) / SR
+			# Sine + 2nd harmonic + subtle 3rd for rich lead tone
+			var s1: float = sin(ph1) + sin(ph1 * 2.0) * 0.25 + sin(ph1 * 3.0) * 0.08
+			var s2: float = sin(ph2) + sin(ph2 * 2.0) * 0.25 + sin(ph2 * 3.0) * 0.08
+			# ADSR: 15ms attack, sustain, 60ms release (legato feel)
+			var env: float
+			var atk: int = int(0.015 * SR)
+			var rel: int = int(0.06 * SR)
+			if i < atk:
+				env = float(i) / atk
+			elif i > note_dur - rel:
+				env = float(note_dur - i) / rel
+			else:
+				env = 1.0
+			# MELODY IS LOUDER than other layers — it's the lead voice
+			# Was 0.085, now 0.14 (the melody should be audible above everything)
+			L[start + note_start + i] += s1 * env * 0.14
+			R[start + note_start + i] += s2 * env * 0.14
 
 # --- Layer 5: Drums (complex pattern with shaker, ghost notes, breaks, swing) ---
 func _render_drums(L: PackedFloat32Array, R: PackedFloat32Array, n: int) -> void:
