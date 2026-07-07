@@ -85,19 +85,33 @@ func _prerender_all() -> void:
 	_streams["phase_out"] = _render(_phase_out)
 
 func _blip() -> PackedFloat32Array:
+	# UI blip — sine wave (not square) with a perfect 5th harmonic.
+	# The 5th adds warmth without dissonance. Notes: A5 (880Hz) + E6 (1319Hz).
 	var n := int(0.12 * SR); var e := _env(n, 0.005, 0.06); var o := PackedFloat32Array(); o.resize(n)
-	var ph := 0.0
+	var ph1 := 0.0
+	var ph2 := 0.0
 	for i in n:
-		ph += (880.0 - 300.0 * float(i)/n) / SR
-		o[i] = (1.0 if fmod(ph,1.0) < 0.5 else -1.0) * e[i] * 0.3
+		var f1: float = 880.0 - 300.0 * float(i) / n
+		ph1 += f1 / SR
+		ph2 += f1 * 1.498 / SR  # perfect 5th ratio
+		o[i] = (sin(ph1) * 0.6 + sin(ph2) * 0.25) * e[i] * 0.25
 	return o
 
 func _chime() -> PackedFloat32Array:
+	# Maj9 chord-timbre (warm, cushion-like). Open voicing: root + 9th + 3rd(oct up) + 5th(oct up).
+	# A4(440) + B4(494) + C#5(554) + E5(659). Sine layers with amplitude scaling.
 	var n := int(0.5 * SR); var e := _env(n, 0.01, 0.4); var o := PackedFloat32Array(); o.resize(n)
+	var freqs := [440.0, 494.0, 554.0, 659.0]
+	var amps := [0.35, 0.20, 0.15, 0.10]  # root loudest, extensions quieter
+	var phases: Array = [0.0, 0.0, 0.0, 0.0]
 	for i in n:
-		var t := float(i)/SR
-		var s := sin(TAU*880*t) + 0.6*sin(TAU*1318*t) + 0.4*sin(TAU*1760*t)
-		o[i] = s * e[i] * 0.2
+		var sample := 0.0
+		for j in freqs.size():
+			# Micro-pitch drift (±2 cents = ±0.12%) to prevent static phase
+			var drift: float = sin(float(i) / SR * 5.0 + j) * 0.0012
+			phases[j] += freqs[j] * (1.0 + drift) / SR
+			sample += sin(phases[j]) * amps[j]
+		o[i] = sample * e[i] * 0.2
 	return o
 
 func _thud() -> PackedFloat32Array:
@@ -146,12 +160,19 @@ func _shatter() -> PackedFloat32Array:
 	return o
 
 func _coin() -> PackedFloat32Array:
+	# Maj9 chord-timbre (warm pickup). Two-stage: root+9th, then 3rd+5th up an octave.
+	# Notes: B4(494)+C#5(554) → D#5(622)+F#5(740). Open voicing, amplitude scaled.
 	var n := int(0.22 * SR); var e := _env(n, 0.003, 0.12); var o := PackedFloat32Array(); o.resize(n)
 	var split := n / 2
+	var phases: Array = [0.0, 0.0]
 	for i in n:
-		var t := float(i)/SR
-		var f := 988.0 if i < split else 1319.0
-		o[i] = sin(TAU*f*t) * e[i] * 0.3
+		var freqs: Array = [494.0, 554.0] if i < split else [622.0, 740.0]
+		var amps: Array = [0.35, 0.15] if i < split else [0.30, 0.12]
+		var sample := 0.0
+		for j in 2:
+			phases[j] += freqs[j] / SR
+			sample += sin(phases[j]) * amps[j]
+		o[i] = sample * e[i] * 0.25
 	return o
 
 func _select() -> PackedFloat32Array:
@@ -223,23 +244,39 @@ func _footstep() -> PackedFloat32Array:
 	return o
 
 func _phase_in() -> PackedFloat32Array:
-	# Descending sweep ~250ms, 880Hz -> 220Hz. Sine + filtered noise swell.
-	# Reads as the ghost thinning out / dropping into the spectral layer.
-	var n := int(0.25 * SR); var e := _env(n, 0.005, 0.18); var o := PackedFloat32Array(); o.resize(n)
-	var ph := 0.0
+	# m6 chord-timbre (anxious, transparent). Descending sweep with layered intervals.
+	# Root descends 880→220Hz. Layered: min3rd (1.189x), tritone (1.414x), 5th (1.498x).
+	# The tritone creates the "going incorporeal" unease. Slow attack (15ms) lets the
+	# dissonance read as texture. Extension amplitudes scaled down (Speder2 technique).
+	var n := int(0.25 * SR); var e := _env(n, 0.015, 0.18); var o := PackedFloat32Array(); o.resize(n)
+	var phases: Array = [0.0, 0.0, 0.0, 0.0]
+	var ratios := [1.0, 1.189, 1.414, 1.498]  # root, m3, tritone, 5th
+	var amps := [0.4, 0.15, 0.08, 0.12]  # tritone quietest (most dissonant)
 	for i in n:
-		var f := 880.0 - 660.0 * (float(i) / n)
-		ph += f / SR
-		o[i] = (sin(ph) * 0.4 + randf_range(-1, 1) * 0.25 * (1.0 - float(i) / n)) * e[i] * 0.32
+		var base_f: float = 880.0 - 660.0 * (float(i) / n)
+		var sample := 0.0
+		for j in ratios.size():
+			var drift: float = sin(float(i) / SR * 4.0 + j) * 0.0015
+			phases[j] += base_f * ratios[j] * (1.0 + drift) / SR
+			sample += sin(phases[j]) * amps[j]
+		o[i] = sample * e[i] * 0.3
 	return o
 
 func _phase_out() -> PackedFloat32Array:
-	# Soft rising chime ~200ms, 330Hz -> 660Hz. The snap-back from
-	# incorporeal — brighter and shorter than phase_in.
-	var n := int(0.20 * SR); var e := _env(n, 0.004, 0.14); var o := PackedFloat32Array(); o.resize(n)
-	var ph := 0.0
+	# mM7 chord-timbre (unstable but crisp). Rising sweep 330→660Hz.
+	# Layered: min3rd (1.189x), 5th (1.498x), maj7 (1.888x).
+	# The maj7 against the min3rd creates the "snapping back" tension.
+	# Faster attack than phase_in (5ms) for a crisper return.
+	var n := int(0.20 * SR); var e := _env(n, 0.005, 0.14); var o := PackedFloat32Array(); o.resize(n)
+	var phases: Array = [0.0, 0.0, 0.0, 0.0]
+	var ratios := [1.0, 1.189, 1.498, 1.888]  # root, m3, 5th, maj7
+	var amps := [0.4, 0.18, 0.12, 0.08]  # maj7 quietest (most dissonant)
 	for i in n:
-		var f := 330.0 + 330.0 * (float(i) / n)
-		ph += f / SR
-		o[i] = (sin(ph) * 0.5 + 0.3 * sin(ph * 2.0)) * e[i] * 0.25
+		var base_f: float = 330.0 + 330.0 * (float(i) / n)
+		var sample := 0.0
+		for j in ratios.size():
+			var drift: float = sin(float(i) / SR * 6.0 + j) * 0.0012
+			phases[j] += base_f * ratios[j] * (1.0 + drift) / SR
+			sample += sin(phases[j]) * amps[j]
+		o[i] = sample * e[i] * 0.25
 	return o
