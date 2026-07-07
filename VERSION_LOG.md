@@ -4,6 +4,59 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.21 — Music Bug Fixes (MIDI Analysis Found 3 Critical Bugs) (2026-07-07)
+
+### Diagnosis: Transcribed to MIDI, Found 3 Critical Bugs
+User said "the layers were fucked everything was fucked." Generated a MIDI file from the music data to see exactly what notes were playing when. Found:
+
+**BUG 1: Bass timing overlap (CRITICAL)**
+- Walking bass played **4 notes per chord** but each chord was only **2 beats long**
+- Notes 3 and 4 of the bass extended 2 beats past the chord boundary into the NEXT chord
+- Result: two bass notes + two chord stabs from DIFFERENT chords played simultaneously
+- This was the "fucked layers" — notes from adjacent chords colliding
+
+**BUG 2: Bass beat 3 formula was wrong**
+- `bass_freq * pow(2.0, 5.0/12.0)` = perfect 4th above root
+- A 4th clashes with m7 chords (creates sus4 feel, not a chord tone)
+- Multiple chords flagged: "Beat 3 (F2) is NOT a chord tone of Cm7(9)"
+
+**BUG 3: Multiple chord voicings were wrong chords entirely**
+- G7#5#9: `[G3, C4, D4, G#4]` = root/4th/5th/#9 — **missing 3rd (B) and #5 (D#) entirely**
+- Dm7(9): `[A3, C4, E4, G#4]` = Am7#5 — **completely wrong chord**
+- Daug7: had wrong notes
+- Faug7: had wrong notes
+- DbmM7: `[A#3, C4, E4, B4]` — A# is not a chord tone of DbmM7
+
+### Fixes Applied
+
+**1. Bass: 4 notes → 2 notes per chord**
+- Note 1: root (beat 1 of the 2-beat chord)
+- Note 2: chromatic approach to next root (beat 2)
+- Approach from below if descending, from above if ascending
+- No more overlap — bass stays within its chord boundary
+
+**2. Bass approach direction is now intelligent**
+- If current root > next root: approach from above (half-step up from next)
+- If current root ≤ next root: approach from below (half-step down from next)
+- All 32 chords verified: every approach is a proper half-step from the next root
+
+**3. Fixed 5 chord voicings:**
+- G7#5#9: `[G3,C4,D4,G#4]` → `[B3,D#4,F4,A#4]` (3, #5, b7, #9 — correct rootless altered)
+- Dm7(9): `[A3,C4,E4,G#4]` → `[F3,A3,C4,E4]` (3, 5, b7, 9 — correct rootless)
+- Daug7: `[B3,D#4,F4,G#4]` → `[F#3,A#3,C4,D4]` (3, #5, b7, root-up)
+- Faug7: `[A3,D#4,F4,G#4]` → `[A3,C#4,Eb4,F4]` (3, #5, b7, 7)
+- DbmM7: `[A#3,C4,E4,B4]` → `[E4,G#4,C5,E5]` (b3, 5, 7, 9 — correct rootless)
+
+### Verification
+- MIDI analysis confirms: all 32 bass approaches are proper half-steps
+- No more bass/chord overlap (2 notes in 2 beats = exact fit)
+- All chord voicings match their labels
+- 30s stereo loop, peak -7.5dB, RMS -18.1dB
+- Preview at `/home/z/my-project/download/music_preview/main_theme_v8_fixed.wav`
+- MIDI file at `/home/z/my-project/download/music_preview/main_theme_analysis.mid`
+
+---
+
 ## v0.20 — Rhythmic Complexity + Speder2 Feel (Walking Bass, Swing, Ghost Notes, Shaker, Breaks) (2026-07-07)
 
 ### Problem: Drums Were Just 4-on-the-Floor + Hats + Cowbell (Too Simple)

@@ -60,32 +60,32 @@ const CHORDS := [
 	{"bass": 58.27, "comp": [220.00, 261.63, 311.13, 415.30], "amps": [0.20, 0.18, 0.12, 0.08], "arp": [311.13, 349.23, 415.30, 466.16], "lead": 466.16},  # BbM7(9): D-F-A-C-E (3,5,7,9)
 	# Bar 2: Cm6 - G7#5#9
 	{"bass": 65.41, "comp": [196.00, 246.94, 311.13, 349.23], "amps": [0.18, 0.20, 0.10, 0.14], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 523.25},
-	{"bass": 49.00, "comp": [196.00, 261.63, 293.66, 415.30], "amps": [0.20, 0.16, 0.08, 0.10], "arp": [293.66, 349.23, 415.30, 466.16], "lead": 466.16},  # G7#5#9: B-Eb-Bb-Db (3,#5,#9,b7 wait...)
+	{"bass": 49.00, "comp": [246.94, 311.13, 349.23, 466.16], "amps": [0.20, 0.14, 0.16, 0.08], "arp": [311.13, 349.23, 466.16, 523.25], "lead": 466.16},  # G7#5#9: B-Eb-Bb-Db (3,#5,#9,b7 wait...)
 	# Bar 3: Cm7(9) - BbM7(9)
 	{"bass": 65.41, "comp": [196.00, 233.08, 311.13, 392.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 392.00},  # Cm7(9): Eb-G-Bb-D (b3,5,b7,9)
 	{"bass": 58.27, "comp": [220.00, 261.63, 311.13, 415.30], "amps": [0.20, 0.18, 0.12, 0.08], "arp": [311.13, 349.23, 415.30, 466.16], "lead": 415.30},
 	# Bar 4: Cm7(9) - Dm7(9)→Daug7
 	{"bass": 65.41, "comp": [196.00, 233.08, 311.13, 392.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 523.25},
-	{"bass": 73.42, "comp": [220.00, 261.63, 329.63, 415.30], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [329.63, 392.00, 466.16, 523.25], "lead": 466.16},  # Dm7(9): F-A-C-E (b3,5,b7,9)
+	{"bass": 73.42, "comp": [174.61, 220.00, 261.63, 329.63], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [329.63, 392.00, 466.16, 523.25], "lead": 466.16},  # Dm7(9): F-A-C-E (b3,5,b7,9)
 	# Bar 5: Daug7 - Cm6
-	{"bass": 73.42, "comp": [246.94, 311.13, 349.23, 415.30], "amps": [0.18, 0.14, 0.12, 0.10], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 523.25},  # Daug7: F#-Bb-D-F (3,#5,7)
+	{"bass": 73.42, "comp": [185.00, 233.08, 261.63, 293.66], "amps": [0.18, 0.12, 0.16, 0.14], "arp": [293.66, 349.23, 466.16, 523.25], "lead": 523.25},  # Daug7: F#-Bb-D-F (3,#5,7)
 	{"bass": 65.41, "comp": [196.00, 246.94, 311.13, 349.23], "amps": [0.18, 0.20, 0.10, 0.14], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 466.16},
 	# Bar 6: BbM7(9) - Cm7(9)
 	{"bass": 58.27, "comp": [220.00, 261.63, 311.13, 415.30], "amps": [0.20, 0.18, 0.12, 0.08], "arp": [311.13, 349.23, 415.30, 466.16], "lead": 415.30},
 	{"bass": 65.41, "comp": [196.00, 233.08, 311.13, 392.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 392.00},
 	# Bar 7: G7#5#9 - Cm6
-	{"bass": 49.00, "comp": [196.00, 261.63, 293.66, 415.30], "amps": [0.20, 0.16, 0.08, 0.10], "arp": [293.66, 349.23, 415.30, 466.16], "lead": 466.16},
+	{"bass": 49.00, "comp": [246.94, 311.13, 349.23, 466.16], "amps": [0.20, 0.14, 0.16, 0.08], "arp": [311.13, 349.23, 466.16, 523.25], "lead": 466.16},
 	{"bass": 65.41, "comp": [196.00, 246.94, 311.13, 349.23], "amps": [0.18, 0.20, 0.10, 0.14], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 523.25},
 	# Bar 8: BbM7(9) - G7#5#9 (turn to F minor)
 	{"bass": 58.27, "comp": [220.00, 261.63, 311.13, 415.30], "amps": [0.20, 0.18, 0.12, 0.08], "arp": [311.13, 349.23, 415.30, 466.16], "lead": 415.30},
-	{"bass": 49.00, "comp": [196.00, 261.63, 293.66, 415.30], "amps": [0.20, 0.16, 0.08, 0.10], "arp": [293.66, 349.23, 415.30, 466.16], "lead": 466.16},
+	{"bass": 49.00, "comp": [246.94, 311.13, 349.23, 466.16], "amps": [0.20, 0.14, 0.16, 0.08], "arp": [311.13, 349.23, 466.16, 523.25], "lead": 466.16},
 	# === SECTION B (bars 9-16, F minor → Bb → Gm return) ===
 	# Bar 9: DbM7(9) - DbmM7
 	{"bass": 69.30, "comp": [233.08, 277.18, 329.63, 440.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [329.63, 392.00, 466.16, 554.37], "lead": 554.37},  # DbM7(9): F-Ab-C-Eb-G (3,5,7,9)
-	{"bass": 69.30, "comp": [233.08, 261.63, 329.63, 493.88], "amps": [0.18, 0.14, 0.16, 0.08], "arp": [329.63, 392.00, 466.16, 523.25], "lead": 523.25},  # DbmM7: Fb-Ab-Db-E (b3,5,7 of Dbm)
+	{"bass": 69.30, "comp": [329.63, 415.30, 523.25, 659.25], "amps": [0.18, 0.12, 0.16, 0.08], "arp": [329.63, 415.30, 523.25, 659.25], "lead": 523.25},  # DbmM7: Fb-Ab-Db-E (b3,5,7 of Dbm)
 	# Bar 10: Cm7(11) - Faug7
 	{"bass": 65.41, "comp": [196.00, 233.08, 311.13, 466.16], "amps": [0.20, 0.18, 0.14, 0.06], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 523.25},  # Cm7(11): Eb-G-Bb-F (b3,5,b7,11)
-	{"bass": 87.31, "comp": [220.00, 311.13, 349.23, 415.30], "amps": [0.18, 0.12, 0.14, 0.10], "arp": [349.23, 415.30, 466.16, 523.25], "lead": 466.16},  # Faug7: A-C#-F (3,#5,7)
+	{"bass": 87.31, "comp": [220.00, 277.18, 311.13, 349.23], "amps": [0.18, 0.12, 0.16, 0.10], "arp": [349.23, 415.30, 466.16, 523.25], "lead": 466.16},  # Faug7: A-C#-F (3,#5,7)
 	# Bar 11: Bbm7(9) - Bbm7(11)
 	{"bass": 58.27, "comp": [185.00, 220.00, 277.18, 349.23], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [277.18, 349.23, 415.30, 466.16], "lead": 466.16},  # Bbm7(9): Db-F-Ab-C-Eb (b3,5,b7,9)
 	{"bass": 58.27, "comp": [185.00, 220.00, 277.18, 415.30], "amps": [0.20, 0.18, 0.14, 0.06], "arp": [277.18, 349.23, 415.30, 466.16], "lead": 523.25},  # Bbm7(11): +11th
@@ -93,13 +93,13 @@ const CHORDS := [
 	{"bass": 77.78, "comp": [233.08, 293.66, 349.23, 440.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [349.23, 440.00, 523.25, 587.33], "lead": 587.33},  # EbM7(9): G-Bb-D-F-A (3,5,7,9)
 	{"bass": 73.42, "comp": [220.00, 261.63, 311.13, 392.00], "amps": [0.18, 0.14, 0.16, 0.10], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 523.25},  # Dm7b5: F-Ab-C-Eb (b3,b5,b7,9)
 	# Bar 13: G7#5#9 - Cm6
-	{"bass": 49.00, "comp": [196.00, 261.63, 293.66, 415.30], "amps": [0.20, 0.16, 0.08, 0.10], "arp": [293.66, 349.23, 415.30, 466.16], "lead": 466.16},
+	{"bass": 49.00, "comp": [246.94, 311.13, 349.23, 466.16], "amps": [0.20, 0.14, 0.16, 0.08], "arp": [311.13, 349.23, 466.16, 523.25], "lead": 466.16},
 	{"bass": 65.41, "comp": [196.00, 246.94, 311.13, 349.23], "amps": [0.18, 0.20, 0.10, 0.14], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 523.25},
 	# Bar 14: BbM7(9) - Cm7(9)
 	{"bass": 58.27, "comp": [220.00, 261.63, 311.13, 415.30], "amps": [0.20, 0.18, 0.12, 0.08], "arp": [311.13, 349.23, 415.30, 466.16], "lead": 466.16},
 	{"bass": 65.41, "comp": [196.00, 233.08, 311.13, 392.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 392.00},
 	# Bar 15: G7#5#9 - Cm6
-	{"bass": 49.00, "comp": [196.00, 261.63, 293.66, 415.30], "amps": [0.20, 0.16, 0.08, 0.10], "arp": [293.66, 349.23, 415.30, 466.16], "lead": 466.16},
+	{"bass": 49.00, "comp": [246.94, 311.13, 349.23, 466.16], "amps": [0.20, 0.14, 0.16, 0.08], "arp": [311.13, 349.23, 466.16, 523.25], "lead": 466.16},
 	{"bass": 65.41, "comp": [196.00, 246.94, 311.13, 349.23], "amps": [0.18, 0.20, 0.10, 0.14], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 523.25},
 	# Bar 16: BbM7(9) - Cm6 (resolve back to start)
 	{"bass": 58.27, "comp": [220.00, 261.63, 311.13, 415.30], "amps": [0.20, 0.18, 0.12, 0.08], "arp": [311.13, 349.23, 415.30, 466.16], "lead": 415.30},
@@ -154,25 +154,29 @@ func _render_theme() -> AudioStreamWAV:
 	w.data = bytes
 	return w
 
-# --- Layer 1: Walking bass (saw + sub, 4 quarter notes, chromatic approach) ---
-# Walks: beat1=root, beat2=3rd or 5th, beat3=5th, beat4=chromatic approach to next root
-# Sidechain: ducks 6dB when kick hits (kick on every beat)
+# --- Layer 1: Bass (saw + sub, 2 notes per chord: root + chromatic approach) ---
+# FIX: was 4 notes per 2-beat chord (overlap bug). Now 2 notes = 1 beat each.
+# Note 1 = root (beat 1 of chord), Note 2 = chromatic approach to next root (beat 2).
+# Sidechain: ducks 6dB when kick hits.
 func _render_bass(L: PackedFloat32Array, R: PackedFloat32Array, start: int, len: int, chord: Dictionary, chord_idx: int) -> void:
 	var bass_freq: float = chord["bass"]
-	# Walking bass: derive 4 notes from root + chord_idx for variation
-	# beat1 = root, beat2 = 5th (1.5x), beat3 = root (octave up or same), beat4 = chromatic approach
 	var next_bass: float = bass_freq
 	if chord_idx + 1 < CHORDS.size():
 		next_bass = CHORDS[chord_idx + 1]["bass"]
-	# Chromatic approach: half-step above or below next root
-	var approach_freq: float = next_bass * pow(2.0, 1.0/12.0)  # up a half step
-	var walk_freqs: Array = [bass_freq, bass_freq * 1.5, bass_freq * pow(2.0, 5.0/12.0), approach_freq]
-	# If approach is too far, use the root again
-	if absf(log(approach_freq / next_bass)) > 0.1:
-		walk_freqs[3] = next_bass * pow(2.0, -1.0/12.0)  # down a half step instead
-	var beat_samples: int = int(BEAT_DUR * SR)
-	for beat in 4:
-		var note_freq: float = walk_freqs[beat]
+	else:
+		next_bass = CHORDS[0]["bass"]
+	# Chromatic approach: half-step below next root (leads DOWN into it)
+	# or half-step above (leads UP). Pick whichever is closer to current root.
+	var approach_up: float = next_bass * pow(2.0, 1.0/12.0)
+	var approach_down: float = next_bass * pow(2.0, -1.0/12.0)
+	var approach_freq: float = approach_down  # default: approach from below
+	# If current root is above next root, approach from above
+	if bass_freq > next_bass:
+		approach_freq = approach_up
+	var bass_notes: Array = [bass_freq, approach_freq]
+	var beat_samples: int = int(BEAT_DUR * SR)  # 1 beat per note (2 beats per chord = 2 notes)
+	for beat in 2:
+		var note_freq: float = bass_notes[beat]
 		var sub_freq: float = note_freq * 0.5
 		var note_start: int = beat * beat_samples
 		var ph_saw := 0.0
@@ -189,7 +193,6 @@ func _render_bass(L: PackedFloat32Array, R: PackedFloat32Array, start: int, len:
 			lp_state = lp_state + alpha * (saw - lp_state)
 			var sub: float = sin(ph_sub) * 0.4
 			var bass_sample: float = lp_state + sub
-			# ADSR
 			var env: float
 			var atk: int = int(0.008 * SR)
 			var rel: int = int(0.04 * SR)
@@ -201,8 +204,8 @@ func _render_bass(L: PackedFloat32Array, R: PackedFloat32Array, start: int, len:
 				env = 1.0
 			# Sidechain: duck on kick (kick hits at start of each beat)
 			var sc_env: float = 1.0
-			if i < int(0.08 * SR):  # 80ms duck
-				sc_env = 0.5 + 0.5 * (float(i) / int(0.08 * SR))  # 0.5→1.0 over 80ms
+			if i < int(0.08 * SR):
+				sc_env = 0.5 + 0.5 * (float(i) / int(0.08 * SR))
 			var v: float = bass_sample * env * sc_env * 0.22
 			L[start + note_start + i] += v
 			R[start + note_start + i] += v
