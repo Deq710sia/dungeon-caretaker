@@ -324,10 +324,6 @@ func _physics_process(delta: float) -> void:
                 if Input.is_action_pressed("move_up"):    input_dir.y -= 1
                 if Input.is_action_pressed("move_down"):  input_dir.y += 1
                 # Sidestep: tap a perpendicular direction for a micro-burst
-                if Input.is_action_just_pressed("move_left"):  move.try_sidestep(Vector2.LEFT)
-                if Input.is_action_just_pressed("move_right"): move.try_sidestep(Vector2.RIGHT)
-                if Input.is_action_just_pressed("move_up"):    move.try_sidestep(Vector2.UP)
-                if Input.is_action_just_pressed("move_down"):  move.try_sidestep(Vector2.DOWN)
         move.update(input_dir, delta)
         # Clamp to corridor bounds (respecting narrow zones)
         _clamp_to_corridor()

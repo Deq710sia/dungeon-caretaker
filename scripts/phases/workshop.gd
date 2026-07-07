@@ -160,10 +160,6 @@ func _process(delta: float) -> void:
         if Input.is_action_pressed("move_up"):    input_dir.y -= 1
         if Input.is_action_pressed("move_down"):  input_dir.y += 1
         # Sidestep
-        if Input.is_action_just_pressed("move_left"):  move.try_sidestep(Vector2.LEFT)
-        if Input.is_action_just_pressed("move_right"): move.try_sidestep(Vector2.RIGHT)
-        if Input.is_action_just_pressed("move_up"):    move.try_sidestep(Vector2.UP)
-        if Input.is_action_just_pressed("move_down"):  move.try_sidestep(Vector2.DOWN)
         move.update(input_dir, delta)
         move.pos.x = clampf(move.pos.x, 12, ROOM_W - 12)
         move.pos.y = clampf(move.pos.y, HUD_H + 30, ROOM_H - 40)

@@ -17,20 +17,22 @@ const ACCEL: float = 220.0
 const DECEL_MULT: float = 0.3  # decel is 30% of accel (low = responsive direction changes)
 const PHASE_SPEED_MULT: float = 2.0  # speed multiplier while phasing
 const WEAPON_WEIGHT_MULT: float = 0.12  # each carried weapon reduces speed by 12%
-# Sidestep: a micro-burst available during phase cooldown. Tap a direction
-# while holding another = quick dodge in the tapped direction. Separate
-# cooldown from phase verb so it doesn't compete with the dash.
-const SIDESTEP_SPEED: float = 120.0  # burst speed (2x normal)
-const SIDESTEP_DURATION: float = 0.2  # how long the burst lasts
-const SIDESTEP_CD: float = 1.5  # cooldown between sidesteps
+
+# Momentum carrying: release a direction, then re-press within this window
+# to get a speed boost. Rewards rhythmic pulsed input instead of just
+# holding keys. No new button — deepens the existing walk verb.
+# The boost is subtle (15%) and decays — you can't stack it infinitely.
+const PULSE_WINDOW: float = 0.35   # seconds after release to qualify for boost
+const PULSE_BOOST: float = 1.15    # 15% speed boost on well-timed re-press
+const PULSE_BOOST_DECAY: float = 2.5  # how fast boost decays back to 1.0 (per second)
 
 ## Effective speed — includes Fleet Shade upgrade (+15% per level) and
 ## weapon weight penalty (-12% per carried weapon). Called per-frame so
 ## upgrades and pickups take effect immediately.
 func get_speed() -> float:
-	var mult: float = 1.0 + float(GameState.meta_upgrades.get("fleet_shade", 0)) * 0.15
-	var weight_penalty: float = carry_count * WEAPON_WEIGHT_MULT
-	return BASE_SPEED * mult * (1.0 - weight_penalty)
+        var mult: float = 1.0 + float(GameState.meta_upgrades.get("fleet_shade", 0)) * 0.15
+        var weight_penalty: float = carry_count * WEAPON_WEIGHT_MULT
+        return BASE_SPEED * mult * (1.0 - weight_penalty)
 
 ## Number of weapons currently carried (set by the owning phase).
 var carry_count: int = 0
@@ -55,129 +57,120 @@ var phase_cd: float = 0.0
 var phase_bank: float = 0.0  # banked time from early cancel — reduces NEXT cooldown
 var _footstep_timer: float = 0.0
 var _last_input_dir: Vector2 = Vector2.ZERO  # for momentum boost on cancel
-# Sidestep state — micro-burst during phase cooldown
-var _sidestep_timer: float = 0.0
-var _sidestep_cd: float = 0.0
-var _sidestep_dir: Vector2 = Vector2.ZERO
+var _prev_input_dir: Vector2 = Vector2.ZERO  # for detecting press/release edges
+var _no_input_timer: float = 0.0  # counts up when no input (for pulse window)
+var _pulse_mult: float = 1.0  # current pulse boost multiplier (decays to 1.0)
 
 ## Called every physics/idle tick by the owning phase.
 ## `input_dir` is the normalized direction from held keys (or Vector2.ZERO
 ## if no input / input blocked). `delta` is the frame time.
 ## Returns the new velocity (also stored in `vel`).
 func update(input_dir: Vector2, delta: float) -> void:
-	# Phase verb timers
-	phase_cd = max(0, phase_cd - delta)
-	if phase_active > 0:
-		phase_active = max(0, phase_active - delta)
-		if phase_active == 0:
-			Juice.trail_phasing = false
-			SFX.play("phase_out", 1.0, -3.0)
-	# Sidestep timers
-	_sidestep_cd = max(0, _sidestep_cd - delta)
-	if _sidestep_timer > 0:
-		_sidestep_timer -= delta
-		# During sidestep: override velocity with burst direction
-		vel = _sidestep_dir * SIDESTEP_SPEED
-		pos += vel * delta
-		var ss_pct: float = vel.length() / get_speed()
-		bob += delta * (3.0 + ss_pct * 6.0)
-		squash = lerp(squash, 1.0, 1.0 - exp(-delta * 8.0))
-		Juice.trail_sample(pos)
-		return
-	# Velocity-driven bob: 3Hz idle → 9Hz top speed
-	var speed_pct: float = vel.length() / get_speed()
-	bob += delta * (3.0 + speed_pct * 6.0)
-	squash = lerp(squash, 1.0, 1.0 - exp(-delta * 8.0))
-	# Movement — full accel when input present (fast direction changes),
-	# 30% decel when no input.
-	var target_speed: float = get_speed() * (PHASE_SPEED_MULT if phase_active > 0 else 1.0)
-	if input_dir != Vector2.ZERO:
-		input_dir = input_dir.normalized()
-		facing = input_dir
-		_last_input_dir = input_dir
-		vel = vel.move_toward(input_dir * target_speed, ACCEL * delta)
-	else:
-		vel = vel.move_toward(Vector2.ZERO, ACCEL * DECEL_MULT * delta)
-	pos += vel * delta
-	# Footstep whoosh — interval scales with speed
-	_footstep_timer += delta
-	if speed_pct > 0.25 and _footstep_timer > 0.30 / maxf(0.4, speed_pct):
-		_footstep_timer = 0.0
-		SFX.play("footstep", 0.85 + randf() * 0.25, -8.0, 0.04)
-	# Ghost trail
-	Juice.trail_sample(pos)
-
-## Try to sidestep — a short micro-burst in the given direction. Available
-## even during phase cooldown. Separate 1.5s cooldown from the phase verb
-## so the player always has SOMETHING to do while waiting for the dash.
-func try_sidestep(dir: Vector2) -> bool:
-	if _sidestep_cd > 0 or _sidestep_timer > 0:
-		return false
-	if dir == Vector2.ZERO:
-		return false
-	_sidestep_dir = dir.normalized()
-	_sidestep_timer = SIDESTEP_DURATION
-	_sidestep_cd = SIDESTEP_CD
-	Juice.spawn_particles(pos, 4, Palette.GLOW_BLUE, 25.0, 0.2)
-	SFX.play("blip", 1.5, -4.0, 0.02)
-	return true
+        # Phase verb timers
+        phase_cd = max(0, phase_cd - delta)
+        if phase_active > 0:
+                phase_active = max(0, phase_active - delta)
+                if phase_active == 0:
+                        Juice.trail_phasing = false
+                        SFX.play("phase_out", 1.0, -3.0)
+        # --- Momentum carrying: detect press/release edges ---
+        # When input goes from zero → non-zero, check if it was within the
+        # pulse window after a release. If so, apply a speed boost.
+        var just_pressed: bool = (_prev_input_dir == Vector2.ZERO and input_dir != Vector2.ZERO)
+        var just_released: bool = (_prev_input_dir != Vector2.ZERO and input_dir == Vector2.ZERO)
+        if just_released:
+                _no_input_timer = 0.0  # start counting the release gap
+        if input_dir != Vector2.ZERO:
+                _no_input_timer = 0.0
+        else:
+                _no_input_timer += delta
+        if just_pressed and _no_input_timer < PULSE_WINDOW:
+                # Well-timed re-press! Apply a subtle boost that decays.
+                # Only boost if there was actual momentum to carry (vel wasn't zero).
+                if vel.length() > 5.0:
+                        _pulse_mult = PULSE_BOOST
+        # Decay pulse boost back to 1.0
+        _pulse_mult = lerp(_pulse_mult, 1.0, 1.0 - exp(-delta * PULSE_BOOST_DECAY))
+        _prev_input_dir = input_dir
+        # --- Normal movement ---
+        # Velocity-driven bob: 3Hz idle → 9Hz top speed
+        var speed_pct: float = vel.length() / get_speed()
+        bob += delta * (3.0 + speed_pct * 6.0)
+        squash = lerp(squash, 1.0, 1.0 - exp(-delta * 8.0))
+        # Apply pulse boost to target speed (multiplicative, decays naturally)
+        var target_speed: float = get_speed() * _pulse_mult * (PHASE_SPEED_MULT if phase_active > 0 else 1.0)
+        if input_dir != Vector2.ZERO:
+                input_dir = input_dir.normalized()
+                facing = input_dir
+                _last_input_dir = input_dir
+                vel = vel.move_toward(input_dir * target_speed, ACCEL * delta)
+        else:
+                vel = vel.move_toward(Vector2.ZERO, ACCEL * DECEL_MULT * delta)
+        pos += vel * delta
+        # Footstep whoosh — interval scales with speed
+        _footstep_timer += delta
+        if speed_pct > 0.25 and _footstep_timer > 0.30 / maxf(0.4, speed_pct):
+                _footstep_timer = 0.0
+                SFX.play("footstep", 0.85 + randf() * 0.25, -8.0, 0.04)
+        # Ghost trail
+        Juice.trail_sample(pos)
 
 ## Try to activate or cancel the phase verb. Call this when the player
 ## presses the phase key. Returns true if the verb state changed.
 func try_activate_phase() -> bool:
-	if phase_active > 0:
-		# Manual cancel — bank remaining time (reduces next cooldown) and
-		# apply a momentum boost in the current facing direction.
-		var remaining := phase_active
-		phase_bank = minf(PHASE_BANK_MAX, phase_bank + remaining)
-		phase_active = 0.0
-		Juice.trail_phasing = false
-		SFX.play("phase_out", 1.0, -3.0)
-		# Momentum boost — burst in last input direction
-		if _last_input_dir != Vector2.ZERO:
-			vel = _last_input_dir * get_speed() * MOMENTUM_BOOST_MULT
-			Juice.spawn_particles(pos, 6, Palette.GLOW_BLUE, 30.0, 0.4)
-		return true
-	if phase_cd > 0:
-		return false
-	if GameState.soul_shards < PHASE_COST:
-		SFX.play("deny")
-		return false
-	GameState.soul_shards -= PHASE_COST
-	GameState.shards_changed.emit(GameState.soul_shards)
-	# Banked time reduces the cooldown (not adds to duration). The meter
-	# you didn't spend is refunded as a shorter cooldown next time.
-	phase_active = PHASE_DURATION
-	phase_cd = max(0.0, PHASE_CD - phase_bank)
-	phase_bank = 0.0
-	Juice.trail_phasing = true
-	Juice.add_trauma(0.15)
-	Juice.spawn_particles(pos, 8, Palette.GLOW_BLUE, 35.0, 0.5)
-	SFX.play("phase_in", 1.0, -2.0)
-	return true
+        if phase_active > 0:
+                # Manual cancel — bank remaining time (reduces next cooldown) and
+                # apply a momentum boost in the current facing direction.
+                var remaining := phase_active
+                phase_bank = minf(PHASE_BANK_MAX, phase_bank + remaining)
+                phase_active = 0.0
+                Juice.trail_phasing = false
+                SFX.play("phase_out", 1.0, -3.0)
+                # Momentum boost — burst in last input direction
+                if _last_input_dir != Vector2.ZERO:
+                        vel = _last_input_dir * get_speed() * MOMENTUM_BOOST_MULT
+                        Juice.spawn_particles(pos, 6, Palette.GLOW_BLUE, 30.0, 0.4)
+                return true
+        if phase_cd > 0:
+                return false
+        if GameState.soul_shards < PHASE_COST:
+                SFX.play("deny")
+                return false
+        GameState.soul_shards -= PHASE_COST
+        GameState.shards_changed.emit(GameState.soul_shards)
+        # Banked time reduces the cooldown (not adds to duration). The meter
+        # you didn't spend is refunded as a shorter cooldown next time.
+        phase_active = PHASE_DURATION
+        phase_cd = max(0.0, PHASE_CD - phase_bank)
+        phase_bank = 0.0
+        Juice.trail_phasing = true
+        Juice.add_trauma(0.15)
+        Juice.spawn_particles(pos, 8, Palette.GLOW_BLUE, 35.0, 0.5)
+        SFX.play("phase_in", 1.0, -2.0)
+        return true
 
 ## Returns true if currently phasing (for draw logic).
 func is_phasing() -> bool:
-	return phase_active > 0
+        return phase_active > 0
 
 ## Returns the phase cooldown progress 0-1 (for HUD/draw).
 func cooldown_pct() -> float:
-	if phase_cd <= 0:
-		return 1.0
-	return 1.0 - (phase_cd / PHASE_CD)
+        if phase_cd <= 0:
+                return 1.0
+        return 1.0 - (phase_cd / PHASE_CD)
 
 ## Reset all state (called on phase enter by the owning phase).
 func reset(p_pos: Vector2) -> void:
-	pos = p_pos
-	vel = Vector2.ZERO
-	facing = Vector2.DOWN
-	bob = 0.0
-	squash = 1.0
-	phase_active = 0.0
-	phase_cd = 0.0
-	phase_bank = 0.0
-	_footstep_timer = 0.0
-	_last_input_dir = Vector2.ZERO
+        pos = p_pos
+        vel = Vector2.ZERO
+        facing = Vector2.DOWN
+        bob = 0.0
+        squash = 1.0
+        phase_active = 0.0
+        phase_cd = 0.0
+        phase_bank = 0.0
+        _footstep_timer = 0.0
+        _last_input_dir = Vector2.ZERO
 
 ## Draws the ghost sprite with trail, phase-verb visual, and cooldown ring.
 ## Call this from the owning phase's _draw(). The `is_underground` param
@@ -189,31 +182,31 @@ func reset(p_pos: Vector2) -> void:
 ## across salvage, workshop, and planning. Now any new walkable phase just
 ## calls `move.draw_ghost(self)` — no copy-paste, no drift.
 static func draw_ghost(canvas: CanvasItem, mv: GhostMovement, is_underground: bool = false) -> void:
-	var bob_val := int(sin(mv.bob) * 1.5)
-	var gx := int(mv.pos.x)
-	var gy := int(mv.pos.y)
-	# Shadow
-	canvas.draw_rect(Rect2(gx - 5, gy + 6, 10, 2), Color(0, 0, 0, 0.3), true)
-	var ghost_tex := Sprites.get_sprite("ghost")
-	var sw := int(16.0 / maxf(0.1, mv.squash))
-	var sh := int(16 * mv.squash)
-	# Trail (drawn before the sprite so the current sprite sits on top)
-	Juice.trail_draw(canvas, ghost_tex, 16)
-	# Phase verb visual
-	var ghost_mod := Color(1, 1, 1, 1)
-	if mv.is_phasing():
-		var phase_pct := mv.phase_active / PHASE_DURATION
-		if is_underground:
-			# Salvage: very transparent + deep blue (reads as sinking below floor)
-			ghost_mod = Color(0.35, 0.55, 0.85, 0.3 + 0.15 * phase_pct)
-		else:
-			# Workshop/planning: semi-transparent blue
-			ghost_mod = Color(0.55, 0.75, 0.95, 0.5 + 0.15 * phase_pct)
-	canvas.draw_texture_rect(ghost_tex, Rect2(gx - sw / 2, gy - sh / 2 + bob_val, sw, sh), false, ghost_mod)
-	# Underground border ring (salvage only — suggests the floor is covering the ghost)
-	if is_underground and mv.is_phasing():
-		canvas.draw_arc(Vector2(gx, gy + bob_val), 10, 0, TAU, 16, Color(0.1, 0.15, 0.3, 0.5), 2)
-	# Cooldown ring (shown when on cooldown, not while active)
-	if mv.phase_cd > 0 and not mv.is_phasing():
-		var cd_pct: float = mv.cooldown_pct()
-		canvas.draw_arc(Vector2(gx, gy), 12.0, -PI / 2, -PI / 2 + TAU * cd_pct, 16, Palette.TEXT_DIM, 1.5)
+        var bob_val := int(sin(mv.bob) * 1.5)
+        var gx := int(mv.pos.x)
+        var gy := int(mv.pos.y)
+        # Shadow
+        canvas.draw_rect(Rect2(gx - 5, gy + 6, 10, 2), Color(0, 0, 0, 0.3), true)
+        var ghost_tex := Sprites.get_sprite("ghost")
+        var sw := int(16.0 / maxf(0.1, mv.squash))
+        var sh := int(16 * mv.squash)
+        # Trail (drawn before the sprite so the current sprite sits on top)
+        Juice.trail_draw(canvas, ghost_tex, 16)
+        # Phase verb visual
+        var ghost_mod := Color(1, 1, 1, 1)
+        if mv.is_phasing():
+                var phase_pct := mv.phase_active / PHASE_DURATION
+                if is_underground:
+                        # Salvage: very transparent + deep blue (reads as sinking below floor)
+                        ghost_mod = Color(0.35, 0.55, 0.85, 0.3 + 0.15 * phase_pct)
+                else:
+                        # Workshop/planning: semi-transparent blue
+                        ghost_mod = Color(0.55, 0.75, 0.95, 0.5 + 0.15 * phase_pct)
+        canvas.draw_texture_rect(ghost_tex, Rect2(gx - sw / 2, gy - sh / 2 + bob_val, sw, sh), false, ghost_mod)
+        # Underground border ring (salvage only — suggests the floor is covering the ghost)
+        if is_underground and mv.is_phasing():
+                canvas.draw_arc(Vector2(gx, gy + bob_val), 10, 0, TAU, 16, Color(0.1, 0.15, 0.3, 0.5), 2)
+        # Cooldown ring (shown when on cooldown, not while active)
+        if mv.phase_cd > 0 and not mv.is_phasing():
+                var cd_pct: float = mv.cooldown_pct()
+                canvas.draw_arc(Vector2(gx, gy), 12.0, -PI / 2, -PI / 2 + TAU * cd_pct, 16, Palette.TEXT_DIM, 1.5)
