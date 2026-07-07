@@ -19,7 +19,7 @@ extends RefCounted
 ## read from the same DungeonGen instance.
 
 var stage: int = 1
-var corridor_w: int = 18
+var corridor_w: int = 12  # was 18 — narrower main corridor makes hazards harder to avoid
 var corridor_h: int = 60
 var narrow_zones: Array = []
 var hazards: Array = []
@@ -62,7 +62,7 @@ func _generate(fallen_count: int, salvage_expert: int) -> void:
 	var zone_spacing: int = fork_y / (zone_count + 1)
 	for i in zone_count:
 		var y_center: int = zone_spacing * (i + 1) + randi() % maxi(1, zone_spacing / 2)
-		var narrow_w: int = 8 + randi() % 5
+		var narrow_w: int = 5 + randi() % 3  # 5-7 tiles (was 8-12) — genuinely tight
 		var narrow_left: int = (corridor_w - narrow_w) / 2 + randi() % 4 - 2
 		narrow_zones.append({
 			"y_center": y_center,
@@ -113,19 +113,43 @@ func _generate(fallen_count: int, salvage_expert: int) -> void:
 	_noise.frequency = 0.3
 	_noise.noise_type = FastNoiseLite.TYPE_CELLULAR
 
-## Returns the left/right bounds at the given y. Main corridor uses
-## narrow_zones. Deeper section (y > fork_y) uses the narrow deeper geometry.
-func get_width_bounds_at_y(tile_y: int) -> Vector2i:
-	# Deeper section: narrow corridor offset to one side
+const FORK_TAPER_TILES: int = 4  # rows over which the corridor narrows after the fork
+
+## The exact, non-interpolated bounds for a single tile row. This is the
+## real shape of the dungeon at that row — used as the two endpoints that
+## get_width_bounds_at_y() blends between during the fork taper.
+func _hard_bounds_at_y(tile_y: int) -> Vector2i:
 	if tile_y > fork_y:
 		return Vector2i(deeper_offset, deeper_offset + deeper_w)
-	# Main corridor: check narrow zones
 	for nz in narrow_zones:
 		if abs(tile_y - nz.y_center) < nz.y_half:
 			return Vector2i(nz.width_left, nz.width_right)
 	return Vector2i(0, corridor_w)
 
-func get_width_at_y(tile_y: int) -> int:
+## Returns the left/right bounds at the given y, as floats. Used by BOTH
+## movement clamping and rendering (salvage.gd's wall/floor draw), so the
+## two can never disagree about where the walls are.
+##
+## Narrow zones already read fine as a hard edge (18 -> 8-12 tiles). The
+## fork is the one truly abrupt transition (18 -> 6-8, and offset to one
+## side), so it's the one that gets a taper: over FORK_TAPER_TILES rows
+## just past fork_y, this blends from the main corridor's width at the
+## fork down to the deeper section's narrow strip, so the corridor visibly
+## closes in around the player as they commit instead of cutting instantly.
+func get_width_bounds_at_y(tile_y: int) -> Vector2:
+	var dist_past_fork: int = tile_y - fork_y
+	if dist_past_fork > 0 and dist_past_fork <= FORK_TAPER_TILES:
+		var main_bounds: Vector2i = _hard_bounds_at_y(fork_y)
+		var deeper_bounds := Vector2i(deeper_offset, deeper_offset + deeper_w)
+		var t: float = float(dist_past_fork) / float(FORK_TAPER_TILES)
+		return Vector2(
+			lerpf(main_bounds.x, deeper_bounds.x, t),
+			lerpf(main_bounds.y, deeper_bounds.y, t)
+		)
+	var hard: Vector2i = _hard_bounds_at_y(tile_y)
+	return Vector2(hard.x, hard.y)
+
+func get_width_at_y(tile_y: int) -> float:
 	var bounds := get_width_bounds_at_y(tile_y)
 	return bounds.y - bounds.x
 

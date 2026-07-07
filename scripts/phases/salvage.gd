@@ -9,17 +9,15 @@ extends Node2D
 const TILE: int = 16
 const VIEW_W: int = 480
 const VIEW_H: int = 270
-const BASE_GHOST_HP: int = 5
+const BASE_SPIRIT: int = 3  # spirit integrity — replaces ghost HP. 3 failures = forced retreat.
 const INTERACT_RADIUS: float = 16.0
-const SALVAGE_TIMER: float = 45.0  # seconds before forced exit
-# Push-your-luck: the main exit is at the corridor midpoint. Past it is
-# the "deeper" section with better gear but more hazards. The player can
-# leave anytime (reach the exit) or push deeper for more reward.
-const DEEPER_GEAR_CHANCE: float = 0.30  # chance deeper corpses have legendary/cursed gear
+const SALVAGE_TIMER: float = 30.0  # tighter — was 45, too generous
+const DEEPER_GEAR_CHANCE: float = 0.30
+const DEEPER_TIME_COST: float = 0.5  # each tile past the fork costs this much extra timer per second
 
 var move: GhostMovement
-var ghost_hp: int = 5
-var ghost_hp_max: int = 5
+var spirit: int = 3  # spirit integrity (replaces spirit — a ghost doesn't have "HP")
+var spirit_max: int = 3
 var ghost_invuln: float = 0.0
 var camera_y: float = 0.0
 var cam: Camera2D
@@ -63,8 +61,8 @@ const CORPSE_DEATHS := [
 ]
 
 func _ready() -> void:
-        ghost_hp_max = BASE_GHOST_HP + int(GameState.meta_upgrades.get("ghost_resilience", 0))
-        ghost_hp = ghost_hp_max
+        spirit_max = BASE_SPIRIT + int(GameState.meta_upgrades.get("ghost_resilience", 0))
+        spirit = spirit_max
         move = GhostMovement.new()
         gen = GameState.get_dungeon_gen()
         corridor_w = gen.corridor_w
@@ -266,9 +264,9 @@ func _build_hud() -> void:
         hud_timer.size = Vector2(70, 12)
         panel.add_child(hud_timer)
         hud_hp = Label.new()
-        hud_hp.text = "HP: " + "♥".repeat(ghost_hp) + "·".repeat(ghost_hp_max - ghost_hp)
+        hud_hp.text = "Spirit: " + "◆".repeat(spirit) + "·".repeat(spirit_max - spirit)
         hud_hp.add_theme_font_size_override("font_size", 8)
-        hud_hp.add_theme_color_override("font_color", Palette.TEXT_RED)
+        hud_hp.add_theme_color_override("font_color", Palette.GLOW_BLUE)
         hud_hp.position = Vector2(220, 2)
         hud_hp.size = Vector2(110, 12)
         panel.add_child(hud_hp)
@@ -305,7 +303,14 @@ func _physics_process(delta: float) -> void:
         if Juice.is_hit_stopped():
                 return
         # Salvage timer — counts down, forced exit at 0
-        salvage_timer -= delta
+        # Deeper section has escalating time cost: each tile past the fork
+        # drains extra time. This makes the push-your-luck decision real —
+        # going deeper isn't just risking spirit, it's burning the clock.
+        var extra_drain: float = 0.0
+        if committed_deeper:
+                var tiles_past_fork: int = int(move.pos.y / TILE) - gen.fork_y
+                extra_drain = tiles_past_fork * DEEPER_TIME_COST * delta
+        salvage_timer -= (delta + extra_drain)
         hud_timer.text = "Time: %.0f" % max(0, salvage_timer)
         if salvage_timer <= 0:
                 hud_hint.text = "Time's up — forced retreat!"
@@ -371,7 +376,7 @@ func _clamp_to_corridor() -> void:
         # Use DungeonGen's width bounds (handles both main corridor narrow zones
         # AND the deeper section's narrow geometry)
         var ghost_tile_y := int(move.pos.y / TILE)
-        var bounds: Vector2i = gen.get_width_bounds_at_y(ghost_tile_y)
+        var bounds: Vector2 = gen.get_width_bounds_at_y(ghost_tile_y)
         var left: float = bounds.x * TILE
         var right: float = bounds.y * TILE
         move.pos.x = clampf(move.pos.x, left, right)
@@ -456,82 +461,94 @@ func _collect_corpse(c: Dictionary) -> void:
 func _take_hazard_damage(h: Dictionary) -> void:
         h.cooldown = 1.5
         ghost_invuln = 1.0
-        ghost_hp -= 1
+        spirit -= 1
         Juice.add_trauma(0.6)
         Juice.hit_stop(0.1)
         Juice.spawn_particles(move.pos, 10, Palette.TEXT_RED, 50.0, 0.4, Vector2(0, -1))
         SFX.play("thud")
         move.squash = 0.7
+        # Punishment 1: spirit drain (3 failures = forced retreat)
+        # Punishment 2: weapon durability damage to most recently salvaged weapon
+        # Punishment 3: lose the last salvaged corpse's weapon if spirit is critical (1 left)
         if not GameState.arsenal.is_empty():
                 var w: Weapon = GameState.arsenal[-1]
-                w.take_durability_damage(15, "hit by %s" % h.type)
-                hud_hint.text = "Hit! -1 HP | %s damaged!" % w.display_name
+                var dmg: int = 20  # was 15 — more punishing
+                w.take_durability_damage(dmg, "hit by %s" % h.type)
+                hud_hint.text = "Spirit damaged! -1 | %s took %d damage!" % [w.display_name, dmg]
+                # Critical spirit: drop the last salvaged weapon (it scatters back into the dungeon)
+                if spirit <= 1 and GameState.arsenal.size() > 1:
+                        var dropped: Weapon = GameState.arsenal.pop_back()
+                        dropped.take_durability_damage(30, "dropped during salvage panic")
+                        GameState.arsenal_changed.emit()
+                        hud_hint.text = "PANIC! Dropped %s! Spirit critical!" % dropped.display_name
+                        Juice.spawn_particles(move.pos, 8, Palette.TEXT_GOLD, 40.0, 0.6)
         else:
-                hud_hint.text = "Hit! -1 HP | Ghost HP: %d/%d" % [ghost_hp, ghost_hp_max]
+                hud_hint.text = "Spirit damaged! %d/%d remaining" % [spirit, spirit_max]
         var away: Vector2 = (move.pos - h.pos).normalized()
         move.pos += away * 16
         move.vel = away * 30
-        if ghost_hp <= 0:
-                hud_hint.text = "The ghost fades... forced to retreat!"
+        if spirit <= 0:
+                hud_hint.text = "Your spirit fragments — forced to retreat!"
                 _finish()
         else:
-                hud_hp.text = "HP: " + "♥".repeat(ghost_hp) + "·".repeat(ghost_hp_max - ghost_hp)
+                hud_hp.text = "Spirit: " + "◆".repeat(spirit) + "·".repeat(spirit_max - spirit)
 
 func _start_qte(hazard: Dictionary) -> void:
-        # 3 QTE types: timing bar (pit), spam (fire), pattern (spikes)
+        # 4 QTE types — all tightened for real danger:
+        #   timing: faster marker, smaller window
+        #   spam: higher target, less time
+        #   pattern: 5 keys (was 4), less time
+        #   reverse: less time to wait (more tension)
         var qte_type: String = hazard.get("type", "pit")
         match qte_type:
                 "pit":
-                        # Timing bar — hit the green zone on a sweeping bar
+                        # Timing bar — faster marker (1.2 was 0.8), tighter window
                         active_qte = {
                                 "type": "timing",
                                 "verb": "JUMP",
-                                "timer": 2.5,
-                                "max_timer": 2.5,
+                                "timer": 2.0,  # was 2.5
+                                "max_timer": 2.0,
                                 "target_x": 0.5,
                                 "marker_x": 0.0,
                                 "marker_dir": 1.0,
-                                "marker_speed": 0.8,
+                                "marker_speed": 1.2,  # was 0.8 — much faster
                                 "hazard": hazard,
                         }
                 "fire":
-                        # Spam — press SPACE rapidly to fill a meter before time runs out
+                        # Spam — need 1.5 (was 1.0), 0.12 per press (was 0.15), 2.5s (was 3.0)
                         active_qte = {
                                 "type": "spam",
                                 "verb": "MASH SPACE!",
-                                "timer": 3.0,
-                                "max_timer": 3.0,
+                                "timer": 2.5,  # was 3.0
+                                "max_timer": 2.5,
                                 "progress": 0.0,
-                                "target": 1.0,
+                                "target": 1.5,  # was 1.0 — need ~13 presses in 2.5s
                                 "last_press_time": 0.0,
                                 "hazard": hazard,
                         }
                 "spikes":
-                        # Pattern — press a sequence of keys (W A S D) in order
+                        # Pattern — 5 keys (was 4), 3.0s (was 4.0)
                         var pattern := []
                         var keys := ["W", "A", "S", "D"]
                         keys.shuffle()
-                        for i in 4:
+                        for i in 5:  # was 4
                                 pattern.append(keys[i % keys.size()])
                         active_qte = {
                                 "type": "pattern",
                                 "verb": "PATTERN",
-                                "timer": 4.0,
-                                "max_timer": 4.0,
+                                "timer": 3.0,  # was 4.0
+                                "max_timer": 3.0,
                                 "pattern": pattern,
                                 "index": 0,
                                 "hazard": hazard,
                         }
                 "debris":
-                        # Reverse QTE — DON'T press anything. The falling debris will
-                        # miss if you stay still. Pressing any key = failure (you
-                        # flinched into the debris). This is the "Dumb Ways to Die"
-                        # reverse QTE — the comedy is in NOT acting.
+                        # Reverse QTE — 2.5s (was 3.0) — less time to wait = more tension
                         active_qte = {
                                 "type": "reverse",
                                 "verb": "DON'T MOVE!",
-                                "timer": 3.0,
-                                "max_timer": 3.0,
+                                "timer": 2.5,
+                                "max_timer": 2.5,
                                 "hazard": hazard,
                         }
                 _:
@@ -550,7 +567,12 @@ func _start_qte(hazard: Dictionary) -> void:
 func _update_qte(delta: float) -> void:
         active_qte.timer -= delta
         if active_qte.timer <= 0:
-                _qte_fail()
+                # Reverse QTE is won by NOT acting — timeout is success, not failure.
+                # Every other QTE type times out as a failure.
+                if active_qte.type == "reverse":
+                        _qte_success()
+                else:
+                        _qte_fail()
                 return
         match active_qte.type:
                 "timing":
@@ -570,13 +592,13 @@ func _input(event: InputEvent) -> void:
                         if (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT) or \
                            (event is InputEventKey and event.pressed and event.keycode in [KEY_SPACE, KEY_E]):
                                 var diff: float = absf(active_qte.marker_x - active_qte.target_x)
-                                if diff <= 0.15:
+                                if diff <= 0.08:  # was 0.15 — much tighter window
                                         _qte_success()
                                 else:
                                         _qte_fail()
                 "spam":
                         if event is InputEventKey and event.pressed and event.keycode == KEY_SPACE:
-                                active_qte.progress += 0.15
+                                active_qte.progress += 0.12  # was 0.15 — need more presses
                                 if active_qte.progress >= active_qte.target:
                                         _qte_success()
                 "pattern":
@@ -643,14 +665,6 @@ func _update_phase_hud() -> void:
                 hud_phase.text = "[SPACE] PHASE ready%s" % bank_text
                 hud_phase.add_theme_color_override("font_color", Palette.TEXT_GREEN)
 
-func _get_corridor_width_at_y(tile_y: int) -> int:
-        # Returns the corridor width (in tiles) at the given y. Wide zones = full
-        # 18 tiles, narrow zones = width_right - width_left.
-        for nz in narrow_zones:
-                if abs(tile_y - nz.y_center) < nz.y_half:
-                        return nz.width_right - nz.width_left
-        return corridor_w
-
 func _draw() -> void:
         var cam_top := int((camera_y - VIEW_H / 2) / TILE) - 3
         var cam_bot := int((camera_y + VIEW_H / 2) / TILE) + 3
@@ -658,20 +672,12 @@ func _draw() -> void:
         cam_bot = min(corridor_h + 1, cam_bot)
         # Floor with noise-based detail (replaces hash)
         for y in range(cam_top, cam_bot + 1):
-                var width_at_y := _get_corridor_width_at_y(y)
-                var left_bound: int
-                var right_bound: int
-                # Compute left/right bounds for this y (wide or narrow)
-                var in_narrow := false
-                for nz in narrow_zones:
-                        if abs(y - nz.y_center) < nz.y_half:
-                                left_bound = nz.width_left
-                                right_bound = nz.width_right
-                                in_narrow = true
-                                break
-                if not in_narrow:
-                        left_bound = 0
-                        right_bound = corridor_w
+                # Single source of truth for corridor shape — same function
+                # movement clamping uses, so drawn walls and collision always
+                # agree (this also picks up the fork taper automatically).
+                var bounds: Vector2 = gen.get_width_bounds_at_y(y)
+                var left_bound: int = roundi(bounds.x)
+                var right_bound: int = roundi(bounds.y)
                 for x in range(left_bound - 1, right_bound + 1):
                         var p := Vector2(x * TILE, y * TILE)
                         if x < left_bound or x >= right_bound:
@@ -689,27 +695,22 @@ func _draw() -> void:
                                         draw_texture(Sprites.get_sprite("floor_blood"), p)
                                 else:
                                         draw_texture(Sprites.get_sprite("floor"), p)
-        # Side walls (only in wide zones; narrow zones have diagonal transitions)
+        # Side walls — one path for wide zones, narrow zones, AND the fork
+        # taper into the deeper section, since they all now come from the
+        # same gen.get_width_bounds_at_y() call. During the taper this draws
+        # at sub-tile x positions, which is what makes the corridor read as
+        # visibly closing in rather than cutting on a single row.
         for y in range(cam_top, cam_bot + 1):
-                var in_narrow := false
-                for nz in narrow_zones:
-                        if abs(y - nz.y_center) < nz.y_half:
-                                in_narrow = true
-                                # Draw narrow zone walls
-                                draw_texture(Sprites.get_sprite("wall"), Vector2((nz.width_left - 1) * TILE, y * TILE))
-                                draw_texture(Sprites.get_sprite("wall_mossy"), Vector2(nz.width_right * TILE, y * TILE))
-                                if y % 4 == 0:
-                                        draw_texture(Sprites.get_sprite("torch"), Vector2((nz.width_left - 1) * TILE, y * TILE))
-                                        draw_texture(Sprites.get_sprite("torch"), Vector2(nz.width_right * TILE, y * TILE))
-                                break
-                if not in_narrow:
-                        draw_texture(Sprites.get_sprite("wall"), Vector2(-TILE, y * TILE))
-                        draw_texture(Sprites.get_sprite("wall_mossy"), Vector2(corridor_w * TILE, y * TILE))
-                        if y % 4 == 0:
-                                draw_texture(Sprites.get_sprite("torch"), Vector2(-TILE, y * TILE))
-                                draw_texture(Sprites.get_sprite("torch"), Vector2(corridor_w * TILE, y * TILE))
-                                DrawUtils.draw_radial_glow(self, Vector2(-TILE + 8, y * TILE + 8), [20, 14, 8], Palette.LIGHT_TORCH, 0.8)
-                                DrawUtils.draw_radial_glow(self, Vector2(corridor_w * TILE + 8, y * TILE + 8), [20, 14, 8], Palette.LIGHT_TORCH, 0.8)
+                var bounds: Vector2 = gen.get_width_bounds_at_y(y)
+                var left_edge: float = (bounds.x - 1) * TILE
+                var right_edge: float = bounds.y * TILE
+                draw_texture(Sprites.get_sprite("wall"), Vector2(left_edge, y * TILE))
+                draw_texture(Sprites.get_sprite("wall_mossy"), Vector2(right_edge, y * TILE))
+                if y % 4 == 0:
+                        draw_texture(Sprites.get_sprite("torch"), Vector2(left_edge, y * TILE))
+                        draw_texture(Sprites.get_sprite("torch"), Vector2(right_edge, y * TILE))
+                        DrawUtils.draw_radial_glow(self, Vector2(left_edge + 8, y * TILE + 8), [20, 14, 8], Palette.LIGHT_TORCH, 0.8)
+                        DrawUtils.draw_radial_glow(self, Vector2(right_edge + 8, y * TILE + 8), [20, 14, 8], Palette.LIGHT_TORCH, 0.8)
         # Props
         for prop in props:
                 if prop.pos.y > cam_top * TILE - 16 and prop.pos.y < cam_bot * TILE + 16:

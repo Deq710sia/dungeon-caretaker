@@ -48,11 +48,17 @@ const PHASE_BANK_MAX: float = 3.0
 var phase_bank: float = 0.0
 
 func _ready() -> void:
-	# Read the FULL dungeon generation — same layout as salvage (corridor
-	# length, narrow zones, noise seed for floor detail). This ensures the
-	# battle takes place in the same physical space the player will salvage.
+	# Read the dungeon generation — same layout as salvage's MAIN corridor
+	# (corridor length up to the fork, narrow zones, noise seed for floor
+	# detail). This ensures battle takes place in the same physical space
+	# the player will salvage. Deliberately NOT gen.corridor_h: that now
+	# includes the optional "deeper" push-your-luck section past the fork,
+	# which has its own narrow offset geometry battle doesn't render —
+	# using the full length would silently walk the party through what
+	# should be a narrow risky corridor at full width. Battle only needs
+	# the guaranteed-safe main corridor.
 	var gen: DungeonGen = GameState.get_dungeon_gen()
-	corridor_h = gen.corridor_h
+	corridor_h = gen.fork_y
 	narrow_zones = gen.narrow_zones
 	_noise = gen.get_noise()
 	cam = Camera2D.new()
