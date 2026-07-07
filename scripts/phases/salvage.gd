@@ -32,6 +32,9 @@ var narrow_zones: Array = []
 var corpses: Array = []
 var hazards: Array = []
 var exit_pos: Vector2
+var deeper_gate_pos: Vector2  # pixel coords of the one-way gate to deeper
+var deeper_exit_pos: Vector2  # pixel coords of the deeper exit (bottom)
+var committed_deeper: bool = false  # once you enter deeper, you can't go back
 var finished: bool = false
 var collected_count: int = 0
 var near_interactive: Variant = null
@@ -81,36 +84,33 @@ func _build_level() -> void:
         corpses.clear()
         hazards.clear()
         props.clear()
-        # Load hazards from the persistent dungeon generation (tile coords → pixel)
-        for h in gen.hazards:
+        # Load ALL hazards (main + deeper) from the persistent dungeon generation
+        for h in gen.get_all_hazards():
                 hazards.append({
                         "pos": Vector2(h.pos.x * TILE + TILE / 2.0, h.pos.y * TILE + TILE / 2.0),
                         "type": h.type,
                         "active": true,
                         "cooldown": 0.0,
+                        "is_deeper": h.get("is_deeper", false),
                 })
         # Corpses: actual fallen party gear + bonus corpses
         # Fallen party gear is placed at the death position (recorded in battle)
-        # so the player finds their gear where they actually died.
         var fallen_gear: Array = GameState.last_battle_result.get("fallen_gear", [])
         if not fallen_gear.is_empty():
                 for i in fallen_gear.size():
                         var fg: Dictionary = fallen_gear[i]
                         var w: Weapon = fg["weapon"]
-                        # Use death_tile if available (actual death position from battle)
-                        # Otherwise fall back to a spread layout.
                         var death_tile: Variant = fg.get("death_tile", null)
                         var cx: float
                         var cy: float
                         if death_tile != null:
                                 cx = death_tile.x * TILE + TILE / 2.0
                                 cy = death_tile.y * TILE + TILE / 2.0
-                                # Clamp to corridor bounds
                                 cx = clampf(cx, TILE, (corridor_w - 1) * TILE)
-                                cy = clampf(cy, TILE * 3, (corridor_h - 3) * TILE)
+                                cy = clampf(cy, TILE * 3, (gen.fork_y - 2) * TILE)
                         else:
                                 cx = (2 + (i * 5) % (corridor_w - 4)) * TILE + TILE / 2
-                                cy = (10 + i * 8) * TILE + TILE / 2
+                                cy = (4 + i * 6) * TILE + TILE / 2
                         corpses.append({
                                 "pos": Vector2(cx, cy),
                                 "gear_type": w.type,
@@ -120,16 +120,16 @@ func _build_level() -> void:
                                 "death_cause": fg.get("cause", "slain in battle"),
                                 "collected": false,
                                 "weapon": w,
+                                "is_deeper": false,
                         })
                 _add_bonus_corpses(fallen_gear.size())
         else:
-                # First run: use the simulated predecessor deaths if available
                 if GameState.has_meta("_first_party_sim"):
                         var sim: Array = GameState.get_meta("_first_party_sim")
                         for i in sim.size():
                                 var death: Dictionary = sim[i]
                                 var x := (2 + (i * 5) % (corridor_w - 4)) * TILE + TILE / 2
-                                var y := (10 + i * 8) * TILE + TILE / 2
+                                var y := (4 + i * 6) * TILE + TILE / 2
                                 corpses.append({
                                         "pos": Vector2(x, y),
                                         "gear_type": death.gear_type,
@@ -139,15 +139,18 @@ func _build_level() -> void:
                                         "death_cause": "slain by %s" % death.enemy,
                                         "collected": false,
                                         "weapon": null,
+                                        "is_deeper": false,
                                 })
                         _add_bonus_corpses(sim.size())
                 else:
                         _add_bonus_corpses(0)
-        # Main exit at the MIDPOINT of the corridor (push-your-luck: the player
-        # can leave here, or push deeper for more gear + more hazards).
-        # The deeper section (past the exit) has bonus corpses with better gear.
-        exit_pos = Vector2(corridor_w * TILE / 2, (corridor_h / 2) * TILE)
-        # Add deeper-section bonus corpses (past the exit, harder to reach)
+        # Main exit at the fork point (top of the fork)
+        exit_pos = Vector2(corridor_w * TILE / 2, gen.fork_y * TILE)
+        # Deeper gate (the one-way commitment point)
+        deeper_gate_pos = Vector2(corridor_w * TILE / 2, gen.fork_y * TILE)
+        # Deeper exit at the very bottom (the only way out of the deeper path)
+        deeper_exit_pos = Vector2(gen.deeper_exit_pos.x * TILE + TILE / 2.0, gen.deeper_exit_pos.y * TILE + TILE / 2.0)
+        # Add deeper-section corpses with better gear
         _add_deeper_corpses()
         # Decorative props
         for i in corridor_h / 8:
@@ -214,9 +217,9 @@ func _add_deeper_corpses() -> void:
         var all_types := ["sword", "helm", "staff", "robe"]
         all_types.shuffle()
         for i in deeper_count:
-                # Place in the deeper section (past the exit at corridor_h / 2)
-                var y_tile: int = (corridor_h / 2) + 4 + i * 5
-                var x_tile: int = 2 + (i * 5) % (corridor_w - 4)
+                # Place in the deeper corridor section (past fork_y, within deeper bounds)
+                var y_tile: int = gen.fork_y + 3 + i * 4
+                var x_tile: int = gen.deeper_offset + 1 + (i * 3) % maxi(1, gen.deeper_w - 2)
                 var type: String = all_types[i % all_types.size()]
                 var is_special: bool = randf() < DEEPER_GEAR_CHANCE
                 var gear_name: String = _gen_weapon_name(type)
@@ -339,9 +342,23 @@ func _physics_process(delta: float) -> void:
         for h in hazards:
                 h.cooldown = max(0, h.cooldown - delta)
         ghost_invuln = max(0, ghost_invuln - delta)
-        # Exit
-        if move.pos.distance_to(exit_pos) < 12:
-                _finish()
+        # Exit logic — depends on whether we've committed to the deeper path
+        if committed_deeper:
+                # In the deeper path: the ONLY way out is the deeper exit at the bottom
+                if move.pos.distance_to(deeper_exit_pos) < 12:
+                        _finish()
+        else:
+                # In the main corridor: the exit is at the fork point.
+                # If the ghost moves PAST the fork (into the deeper gate area),
+                # commit to the deeper path — can't go back.
+                if move.pos.distance_to(exit_pos) < 12:
+                        _finish()
+                elif move.pos.y > gen.fork_y * TILE + TILE:
+                        # Crossed the fork line into deeper territory — COMMIT
+                        committed_deeper = true
+                        hud_hint.text = "COMMITTED to the deeper path — no turning back!"
+                        SFX.play("bell")
+                        Juice.add_trauma(0.3)
         # QTE update
         if not active_qte.is_empty():
                 _update_qte(delta)
@@ -351,18 +368,18 @@ func _physics_process(delta: float) -> void:
         queue_redraw()
 
 func _clamp_to_corridor() -> void:
-        # Default full-width clamp
-        var left := float(TILE)
-        var right := float((corridor_w - 1) * TILE)
-        # Check if we're in a narrow zone — if so, clamp to the narrow width
+        # Use DungeonGen's width bounds (handles both main corridor narrow zones
+        # AND the deeper section's narrow geometry)
         var ghost_tile_y := int(move.pos.y / TILE)
-        for nz in narrow_zones:
-                if abs(ghost_tile_y - nz.y_center) < nz.y_half:
-                        left = nz.width_left * TILE
-                        right = nz.width_right * TILE
-                        break
+        var bounds: Vector2i = gen.get_width_bounds_at_y(ghost_tile_y)
+        var left: float = bounds.x * TILE
+        var right: float = bounds.y * TILE
         move.pos.x = clampf(move.pos.x, left, right)
-        move.pos.y = clampf(move.pos.y, 22, (corridor_h - 1) * TILE)
+        # Y clamping: if committed to deeper, can't go back above the fork
+        if committed_deeper:
+                move.pos.y = clampf(move.pos.y, (gen.fork_y + 1) * TILE, (corridor_h - 1) * TILE)
+        else:
+                move.pos.y = clampf(move.pos.y, 22, (corridor_h - 1) * TILE)
 
 func _check_hazard_touch() -> void:
         # Hazards activate on TOUCH, not just E press. If the ghost overlaps an
@@ -396,7 +413,10 @@ func _find_nearest_interactive() -> void:
                 if near_interactive.has("corpse_name"):
                         hud_hint.text = "[E] Salvage %s" % near_interactive.gear_name
         else:
-                hud_hint.text = "WASD:move E:interact SPACE:phase Find exit"
+                if committed_deeper:
+                        hud_hint.text = "WASD:move E:interact SPACE:phase Find deeper exit"
+                else:
+                        hud_hint.text = "WASD:move E:interact SPACE:phase Exit or go DEEPER"
 
 func _handle_interact() -> void:
         if near_interactive is Dictionary:
@@ -767,21 +787,33 @@ func _draw() -> void:
                                         GameFont.draw_string_centered(self, Vector2(cx, cy - 38), c.death_cause, 8, Palette.TEXT_DIM)
                                 elif is_deeper and c.get("is_special", false):
                                         GameFont.draw_string_centered(self, Vector2(cx, cy - 38), "DEEPER - special", 8, Palette.GLOW_PURP)
-        # Exit
+        # Exit / Fork point
         var ex := int(exit_pos.x)
         var ey := int(exit_pos.y)
-        draw_texture(Sprites.get_sprite("stairs"), Vector2(ex - 8, ey - 8))
-        DrawUtils.draw_radial_glow(self, exit_pos, [16, 10, 5], Palette.LIGHT_EXIT, 1.5)
-        var exit_pulse := 0.5 + 0.3 * sin(Time.get_ticks_msec() * 0.003)
-        GameFont.draw_string_centered(self, Vector2(ex, ey - 16), "EXIT", 8, Color(0.55, 0.95, 0.75, exit_pulse))
-        # Push-your-luck: show "DEEPER ↓" below the exit to indicate the
-        # optional deeper section with better gear
-        var deeper_count := 0
-        for c in corpses:
-                if c.get("is_deeper", false) and not c.collected:
-                        deeper_count += 1
-        if deeper_count > 0:
-                GameFont.draw_string_centered(self, Vector2(ex, ey + 10), "DEEPER ↓ (%d)" % deeper_count, 8, Palette.GLOW_PURP)
+        if not committed_deeper:
+                # Show the main exit (stairs) + the deeper gate below it
+                draw_texture(Sprites.get_sprite("stairs"), Vector2(ex - 8, ey - 8))
+                DrawUtils.draw_radial_glow(self, exit_pos, [16, 10, 5], Palette.LIGHT_EXIT, 1.5)
+                var exit_pulse := 0.5 + 0.3 * sin(Time.get_ticks_msec() * 0.003)
+                GameFont.draw_string_centered(self, Vector2(ex, ey - 16), "EXIT", 8, Color(0.55, 0.95, 0.75, exit_pulse))
+                # Deeper gate — a dark passage with warning text
+                var deeper_count := 0
+                for c in corpses:
+                        if c.get("is_deeper", false) and not c.collected:
+                                deeper_count += 1
+                if deeper_count > 0:
+                        # Draw the gate as a dark archway
+                        draw_rect(Rect2(ex - 12, ey + 8, 24, 16), Palette.VOID, true)
+                        draw_rect(Rect2(ex - 12, ey + 8, 24, 16), Palette.GLOW_PURP, false, 1)
+                        GameFont.draw_string_centered(self, Vector2(ex, ey + 20), "DEEPER ↓ (%d)" % deeper_count, 8, Palette.GLOW_PURP)
+                        GameFont.draw_string_centered(self, Vector2(ex, ey + 30), "NO RETURN", 8, Palette.TEXT_RED)
+        else:
+                # Committed to deeper — show the deeper exit at the bottom
+                var dx := int(deeper_exit_pos.x)
+                var dy := int(deeper_exit_pos.y)
+                draw_texture(Sprites.get_sprite("stairs"), Vector2(dx - 8, dy - 8))
+                DrawUtils.draw_radial_glow(self, deeper_exit_pos, [16, 10, 5], Palette.LIGHT_EXIT, 1.5)
+                GameFont.draw_string_centered(self, Vector2(dx, dy - 16), "EXIT", 8, Color(0.55, 0.95, 0.75, 0.8))
         # Ghost trail + ghost (shared draw method — underground variant)
         GhostMovement.draw_ghost(self, move, true)
         # QTE

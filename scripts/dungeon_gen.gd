@@ -2,59 +2,77 @@ class_name DungeonGen
 extends RefCounted
 ## DungeonGen — single source of truth for all dungeon generation.
 ## Handles: corridor length, width segments (wide/narrow zones), hazard
-## placement, noise seeds for floor detail, and first-party death simulation.
+## placement, noise seeds for floor detail, and BRANCHING PATHS.
+##
+## The dungeon has a fork point at `fork_y`. Above the fork is the main
+## corridor. At the fork, the player chooses:
+##   - Continue to the EXIT (safe path, main exit at fork_y)
+##   - Enter the DEEPER gate (risky path, one-way commitment)
+##
+## The deeper path is a separate corridor segment below the fork with:
+##   - Narrower width (6-8 tiles, not 18)
+##   - Denser hazards (2x the hazard density)
+##   - Better gear (special corpses with legendary/cursed weapons)
+##   - A separate exit at the bottom (the only way out once you commit)
 ##
 ## The generation persists for an entire stage — battle and salvage both
-## read from the same DungeonGen instance so the player runs through the
-## SAME physical space in both phases. A new generation is created when
-## the stage changes.
-##
-## Usage:
-##   var gen := DungeonGen.new(stage, fallen_count, salvage_expert_level)
-##   var corridor_h: int = gen.corridor_h
-##   var bounds: Vector2i = gen.get_width_bounds_at_y(tile_y)
-##   var noise_val: float = gen.get_floor_noise(x, y)
+## read from the same DungeonGen instance.
 
 var stage: int = 1
 var corridor_w: int = 18
 var corridor_h: int = 60
-var narrow_zones: Array = []  # [{y_center, y_half, width_left, width_right}]
-var hazards: Array = []       # [{pos (Vector2 in tile coords), type, active, cooldown}]
+var narrow_zones: Array = []
+var hazards: Array = []
 var noise_seed: int = 0
 var _noise: FastNoiseLite
+
+# --- Branching path data ---
+var fork_y: int = 30            # y-tile where the fork occurs (main exit is here)
+var deeper_h: int = 20          # length of the deeper corridor segment
+var deeper_w: int = 8           # width of the deeper corridor (narrow)
+var deeper_offset: int = 5      # x-offset of the deeper corridor (shifted right)
+var deeper_hazards: Array = []  # hazards in the deeper section (denser)
+var deeper_gate_pos: Vector2    # tile coords of the one-way gate to deeper
+var deeper_exit_pos: Vector2    # tile coords of the deeper exit (bottom)
 
 func _init(p_stage: int = 1, fallen_count: int = 0, salvage_expert: int = 0) -> void:
 	stage = p_stage
 	_generate(fallen_count, salvage_expert)
 
-## Main generation entry point. Called once per stage.
 func _generate(fallen_count: int, salvage_expert: int) -> void:
 	# --- Corridor length: clamped to weapon count + variance ---
-	# More weapons to salvage = longer corridor. Min 20, max 80.
 	var bonus_count: int = 1 + int(stage / 3) + salvage_expert
 	var weapon_count: int = fallen_count + bonus_count
 	if weapon_count < 2:
-		weapon_count = 2 + int(stage / 2)  # first-run fallback
-	corridor_h = clampi(20 + weapon_count * 6 + randi() % 8, 20, 80)
-	# --- Width segments: 2-3 narrow zones at random y-levels ---
-	# Wide zones use the full 18-tile width; narrow zones are 8-12 tiles.
-	# Connected by diagonal transitions (drawn by the phase).
+		weapon_count = 2 + int(stage / 2)
+	# Main corridor is shorter now (exit is at midpoint). The deeper
+	# section adds length below the fork.
+	var main_h: int = clampi(15 + weapon_count * 4 + randi() % 6, 15, 40)
+	deeper_h = clampi(10 + stage * 3 + randi() % 5, 10, 30)
+	corridor_h = main_h + deeper_h
+	fork_y = main_h
+	# --- Deeper path geometry ---
+	deeper_w = 6 + randi() % 3  # 6-8 tiles wide (very narrow)
+	deeper_offset = 3 + randi() % (corridor_w - deeper_w - 3)
+	deeper_gate_pos = Vector2(corridor_w / 2, fork_y)
+	deeper_exit_pos = Vector2(deeper_offset + deeper_w / 2, corridor_h - 2)
+	# --- Width segments: 2-3 narrow zones in the MAIN corridor ---
 	narrow_zones.clear()
 	var zone_count: int = 2 + randi() % 2
-	var zone_spacing: int = corridor_h / (zone_count + 1)
+	var zone_spacing: int = fork_y / (zone_count + 1)
 	for i in zone_count:
 		var y_center: int = zone_spacing * (i + 1) + randi() % maxi(1, zone_spacing / 2)
-		var narrow_w: int = 8 + randi() % 5  # 8-12 tiles wide
+		var narrow_w: int = 8 + randi() % 5
 		var narrow_left: int = (corridor_w - narrow_w) / 2 + randi() % 4 - 2
 		narrow_zones.append({
 			"y_center": y_center,
-			"y_half": 3 + randi() % 2,  # zone height (6-10 tiles)
+			"y_half": 3 + randi() % 2,
 			"width_left": narrow_left,
 			"width_right": narrow_left + narrow_w,
 		})
-	# --- Hazards: placed in/near narrow zones (harder to avoid) ---
+	# --- Main corridor hazards (moderate density) ---
 	hazards.clear()
-	var hazard_count: int = 4 + stage * 2
+	var hazard_count: int = 3 + stage
 	var htypes: Array[String] = ["pit", "fire", "spikes", "debris"]
 	for i in hazard_count:
 		var narrow_idx: int = i % narrow_zones.size() if not narrow_zones.is_empty() else -1
@@ -65,46 +83,64 @@ func _generate(fallen_count: int, salvage_expert: int) -> void:
 			y = nz.y_center + randi() % (nz.y_half * 2) - nz.y_half
 			x = nz.width_left + randi() % maxi(1, nz.width_right - nz.width_left)
 		else:
-			y = 6 + i * 4
-			x = 2 + randi() % 14
+			y = 4 + i * 4
+			x = 2 + randi() % (corridor_w - 4)
 		hazards.append({
-			"pos": Vector2(x, y),  # tile coords
+			"pos": Vector2(x, y),
 			"type": htypes[i % htypes.size()],
 			"active": true,
 			"cooldown": 0.0,
+			"is_deeper": false,
 		})
-	# --- Noise seed for floor detail ---
+	# --- Deeper hazards (DENSE — 2x density, all in narrow corridor) ---
+	deeper_hazards.clear()
+	var deeper_hazard_count: int = 4 + stage * 2
+	for i in deeper_hazard_count:
+		# Pack hazards tightly in the deeper corridor
+		var y: int = fork_y + 2 + (i * 2) % deeper_h
+		var x: int = deeper_offset + 1 + randi() % maxi(1, deeper_w - 2)
+		deeper_hazards.append({
+			"pos": Vector2(x, y),
+			"type": htypes[randi() % htypes.size()],
+			"active": true,
+			"cooldown": 0.0,
+			"is_deeper": true,
+		})
+	# --- Noise seed ---
 	noise_seed = randi()
 	_noise = FastNoiseLite.new()
 	_noise.seed = noise_seed
 	_noise.frequency = 0.3
 	_noise.noise_type = FastNoiseLite.TYPE_CELLULAR
 
-## Returns the left/right bounds (in tile coords) of the corridor at the
-## given y. Wide zones = full width (0, corridor_w). Narrow zones return
-## their (width_left, width_right). Used by both battle and salvage to
-## render the same physical space.
+## Returns the left/right bounds at the given y. Main corridor uses
+## narrow_zones. Deeper section (y > fork_y) uses the narrow deeper geometry.
 func get_width_bounds_at_y(tile_y: int) -> Vector2i:
+	# Deeper section: narrow corridor offset to one side
+	if tile_y > fork_y:
+		return Vector2i(deeper_offset, deeper_offset + deeper_w)
+	# Main corridor: check narrow zones
 	for nz in narrow_zones:
 		if abs(tile_y - nz.y_center) < nz.y_half:
 			return Vector2i(nz.width_left, nz.width_right)
 	return Vector2i(0, corridor_w)
 
-## Returns the corridor width (in tiles) at the given y.
 func get_width_at_y(tile_y: int) -> int:
 	var bounds := get_width_bounds_at_y(tile_y)
 	return bounds.y - bounds.x
 
-## Returns the noise value at the given tile coords. Used for floor detail
-## (moss/cracks/blood) — same seed for battle and salvage so details match.
 func get_floor_noise(x: int, y: int) -> float:
 	return _noise.get_noise_2d(x, y)
 
-## Returns the noise texture (for phases that need direct access).
 func get_noise() -> FastNoiseLite:
 	return _noise
 
-## Converts a tile-coord hazard position to pixel coords.
-func hazard_pixel_pos(hazard: Dictionary) -> Vector2:
-	var pos: Vector2 = hazard.pos
-	return Vector2(pos.x * 16 + 8, pos.y * 16 + 8)
+## Returns ALL hazards (main + deeper) for battle to use.
+func get_all_hazards() -> Array:
+	var all := hazards.duplicate(true)
+	all.append_array(deeper_hazards.duplicate(true))
+	return all
+
+## Returns true if the given tile y is in the deeper section.
+func is_deeper(tile_y: int) -> bool:
+	return tile_y > fork_y
