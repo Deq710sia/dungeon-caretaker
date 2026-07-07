@@ -323,6 +323,11 @@ func _physics_process(delta: float) -> void:
                 if Input.is_action_pressed("move_right"): input_dir.x += 1
                 if Input.is_action_pressed("move_up"):    input_dir.y -= 1
                 if Input.is_action_pressed("move_down"):  input_dir.y += 1
+                # Sidestep: tap a perpendicular direction for a micro-burst
+                if Input.is_action_just_pressed("move_left"):  move.try_sidestep(Vector2.LEFT)
+                if Input.is_action_just_pressed("move_right"): move.try_sidestep(Vector2.RIGHT)
+                if Input.is_action_just_pressed("move_up"):    move.try_sidestep(Vector2.UP)
+                if Input.is_action_just_pressed("move_down"):  move.try_sidestep(Vector2.DOWN)
         move.update(input_dir, delta)
         # Clamp to corridor bounds (respecting narrow zones)
         _clamp_to_corridor()
@@ -451,12 +456,17 @@ func _collect_corpse(c: Dictionary) -> void:
                 w.history.append("Salvaged from %s, %s." % [c.corpse_name, c.death_cause])
         w.history.append("Here lies %s, %s." % [c.corpse_name, c.death_cause])
         GameState.add_weapon(w)
-        move.squash = 1.3
-        Juice.add_trauma(0.2)
-        Juice.hit_stop(0.06)
-        Juice.spawn_particles(c.pos, 8, Palette.TEXT_GOLD, 30.0, 0.5)
+        # Micro-reward: satisfying pickup feedback
+        move.squash = 1.4  # bigger squash than before
+        Juice.add_trauma(0.25)
+        Juice.hit_stop(0.08)  # slightly longer slowmo
+        Juice.spawn_particles(c.pos, 12, Palette.TEXT_GOLD, 35.0, 0.6)  # more particles
+        # Weapon sprite flies up briefly then settles
+        Juice.spawn_particles(c.pos + Vector2(0, -20), 6, Palette.TEXT_BLUE, 20.0, 0.4, Vector2(0, -1))
         hud_hint.text = "Salvaged %s!" % c.gear_name
-        SFX.play("coin")
+        SFX.play("coin", 1.0, 0.0, 0.03)
+        # Weapon weight: carrying makes you slower
+        move.carry_count = 1
 
 func _take_hazard_damage(h: Dictionary) -> void:
         h.cooldown = 1.5

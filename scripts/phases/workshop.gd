@@ -159,6 +159,11 @@ func _process(delta: float) -> void:
         if Input.is_action_pressed("move_right"): input_dir.x += 1
         if Input.is_action_pressed("move_up"):    input_dir.y -= 1
         if Input.is_action_pressed("move_down"):  input_dir.y += 1
+        # Sidestep
+        if Input.is_action_just_pressed("move_left"):  move.try_sidestep(Vector2.LEFT)
+        if Input.is_action_just_pressed("move_right"): move.try_sidestep(Vector2.RIGHT)
+        if Input.is_action_just_pressed("move_up"):    move.try_sidestep(Vector2.UP)
+        if Input.is_action_just_pressed("move_down"):  move.try_sidestep(Vector2.DOWN)
         move.update(input_dir, delta)
         move.pos.x = clampf(move.pos.x, 12, ROOM_W - 12)
         move.pos.y = clampf(move.pos.y, HUD_H + 30, ROOM_H - 40)
@@ -222,7 +227,7 @@ func _handle_interact() -> void:
                         _pick_up_from_arsenal()
                 else:
                         GameState.add_weapon(carrying)
-                        carrying = null
+                        carrying = null; move.carry_count = 0
                 return
         if carrying != null:
                 if carrying.can_repair_at(near_station_key):
@@ -241,7 +246,7 @@ func _pick_up_from_arsenal() -> void:
                         break
         if picked == null:
                 picked = GameState.arsenal[0]
-        carrying = picked
+        carrying = picked; move.carry_count = 1
         GameState.arsenal.erase(picked)
         GameState.arsenal_changed.emit()
         Juice.spawn_particles(move.pos, 4, Palette.TEXT_GOLD, 20.0, 0.3)
@@ -333,7 +338,7 @@ func _bell_tolls() -> void:
         Juice.hit_stop(0.1)
         if carrying != null:
                 GameState.add_weapon(carrying)
-                carrying = null
+                carrying = null; move.carry_count = 0
         await get_tree().create_timer(0.3).timeout
         GameState.set_phase("upgrade")
 
@@ -475,4 +480,4 @@ func _hide_weapon_inspect() -> void:
 func _on_phase_exit() -> void:
         if carrying != null:
                 GameState.add_weapon(carrying)
-                carrying = null
+                carrying = null; move.carry_count = 0

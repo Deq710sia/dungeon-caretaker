@@ -16,12 +16,24 @@ const BASE_SPEED: float = 55.0
 const ACCEL: float = 220.0
 const DECEL_MULT: float = 0.3  # decel is 30% of accel (low = responsive direction changes)
 const PHASE_SPEED_MULT: float = 2.0  # speed multiplier while phasing
+const WEAPON_WEIGHT_MULT: float = 0.12  # each carried weapon reduces speed by 12%
+# Sidestep: a micro-burst available during phase cooldown. Tap a direction
+# while holding another = quick dodge in the tapped direction. Separate
+# cooldown from phase verb so it doesn't compete with the dash.
+const SIDESTEP_SPEED: float = 120.0  # burst speed (2x normal)
+const SIDESTEP_DURATION: float = 0.2  # how long the burst lasts
+const SIDESTEP_CD: float = 1.5  # cooldown between sidesteps
 
-## Effective speed — includes Fleet Shade upgrade (+15% per level).
-## Called per-frame so upgrades take effect immediately after purchase.
+## Effective speed — includes Fleet Shade upgrade (+15% per level) and
+## weapon weight penalty (-12% per carried weapon). Called per-frame so
+## upgrades and pickups take effect immediately.
 func get_speed() -> float:
 	var mult: float = 1.0 + float(GameState.meta_upgrades.get("fleet_shade", 0)) * 0.15
-	return BASE_SPEED * mult
+	var weight_penalty: float = carry_count * WEAPON_WEIGHT_MULT
+	return BASE_SPEED * mult * (1.0 - weight_penalty)
+
+## Number of weapons currently carried (set by the owning phase).
+var carry_count: int = 0
 
 # --- Phase verb constants ---
 const PHASE_DURATION: float = 1.5
@@ -43,6 +55,10 @@ var phase_cd: float = 0.0
 var phase_bank: float = 0.0  # banked time from early cancel — reduces NEXT cooldown
 var _footstep_timer: float = 0.0
 var _last_input_dir: Vector2 = Vector2.ZERO  # for momentum boost on cancel
+# Sidestep state — micro-burst during phase cooldown
+var _sidestep_timer: float = 0.0
+var _sidestep_cd: float = 0.0
+var _sidestep_dir: Vector2 = Vector2.ZERO
 
 ## Called every physics/idle tick by the owning phase.
 ## `input_dir` is the normalized direction from held keys (or Vector2.ZERO
@@ -56,12 +72,24 @@ func update(input_dir: Vector2, delta: float) -> void:
 		if phase_active == 0:
 			Juice.trail_phasing = false
 			SFX.play("phase_out", 1.0, -3.0)
+	# Sidestep timers
+	_sidestep_cd = max(0, _sidestep_cd - delta)
+	if _sidestep_timer > 0:
+		_sidestep_timer -= delta
+		# During sidestep: override velocity with burst direction
+		vel = _sidestep_dir * SIDESTEP_SPEED
+		pos += vel * delta
+		var ss_pct: float = vel.length() / get_speed()
+		bob += delta * (3.0 + ss_pct * 6.0)
+		squash = lerp(squash, 1.0, 1.0 - exp(-delta * 8.0))
+		Juice.trail_sample(pos)
+		return
 	# Velocity-driven bob: 3Hz idle → 9Hz top speed
 	var speed_pct: float = vel.length() / get_speed()
 	bob += delta * (3.0 + speed_pct * 6.0)
 	squash = lerp(squash, 1.0, 1.0 - exp(-delta * 8.0))
 	# Movement — full accel when input present (fast direction changes),
-	# 60% decel when no input (coasts slightly on release).
+	# 30% decel when no input.
 	var target_speed: float = get_speed() * (PHASE_SPEED_MULT if phase_active > 0 else 1.0)
 	if input_dir != Vector2.ZERO:
 		input_dir = input_dir.normalized()
@@ -78,6 +106,21 @@ func update(input_dir: Vector2, delta: float) -> void:
 		SFX.play("footstep", 0.85 + randf() * 0.25, -8.0, 0.04)
 	# Ghost trail
 	Juice.trail_sample(pos)
+
+## Try to sidestep — a short micro-burst in the given direction. Available
+## even during phase cooldown. Separate 1.5s cooldown from the phase verb
+## so the player always has SOMETHING to do while waiting for the dash.
+func try_sidestep(dir: Vector2) -> bool:
+	if _sidestep_cd > 0 or _sidestep_timer > 0:
+		return false
+	if dir == Vector2.ZERO:
+		return false
+	_sidestep_dir = dir.normalized()
+	_sidestep_timer = SIDESTEP_DURATION
+	_sidestep_cd = SIDESTEP_CD
+	Juice.spawn_particles(pos, 4, Palette.GLOW_BLUE, 25.0, 0.2)
+	SFX.play("blip", 1.5, -4.0, 0.02)
+	return true
 
 ## Try to activate or cancel the phase verb. Call this when the player
 ## presses the phase key. Returns true if the verb state changed.

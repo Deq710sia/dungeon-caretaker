@@ -108,6 +108,11 @@ func _process(delta: float) -> void:
 		if Input.is_action_pressed("move_right"): input_dir.x += 1
 		if Input.is_action_pressed("move_up"):    input_dir.y -= 1
 		if Input.is_action_pressed("move_down"):  input_dir.y += 1
+		# Sidestep
+		if Input.is_action_just_pressed("move_left"):  move.try_sidestep(Vector2.LEFT)
+		if Input.is_action_just_pressed("move_right"): move.try_sidestep(Vector2.RIGHT)
+		if Input.is_action_just_pressed("move_up"):    move.try_sidestep(Vector2.UP)
+		if Input.is_action_just_pressed("move_down"):  move.try_sidestep(Vector2.DOWN)
 	move.update(input_dir, delta)
 	move.pos.x = clampf(move.pos.x, 12, ROOM_W - 12)
 	move.pos.y = clampf(move.pos.y, HUD_H + 30, ROOM_H - 20)
@@ -222,7 +227,7 @@ func _handle_interact() -> void:
 				_pick_up_from_rack()
 			else:
 				GameState.add_weapon(carrying)
-				carrying = null
+				carrying = null; move.carry_count = 0
 		"bell":
 			_ring_bell()
 		"recruit":
@@ -240,7 +245,7 @@ func _pick_up_from_rack() -> void:
 		rack_page = 0
 		page_start = 0
 	var w: Weapon = GameState.arsenal[page_start]
-	carrying = w
+	carrying = w; move.carry_count = 1
 	GameState.arsenal.erase(w)
 	GameState.arsenal_changed.emit()
 	Juice.spawn_particles(WEAPON_RACK_POS, 6, Palette.TEXT_GOLD, 25.0, 0.3)
@@ -261,7 +266,7 @@ func _assign_weapon(adv_name: String) -> void:
 		Juice.spawn_particles(move.pos, 4, Palette.TEXT_RED, 20.0, 0.3)
 		return
 	w.deliver_to(adv, GameState.party)
-	carrying = null
+	carrying = null; move.carry_count = 0
 	# JUICE
 	Juice.add_trauma(0.2)
 	Juice.hit_stop(0.05)
@@ -410,4 +415,4 @@ func _draw_map_view() -> void:
 func _on_phase_exit() -> void:
 	if carrying != null:
 		GameState.add_weapon(carrying)
-		carrying = null
+		carrying = null; move.carry_count = 0
