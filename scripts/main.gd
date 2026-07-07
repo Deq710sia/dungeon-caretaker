@@ -66,6 +66,11 @@ func _instantiate_phase(new_phase: String) -> void:
 	current_phase_node = Node2D.new()
 	current_phase_node.set_script(script)
 	current_phase_node.name = "Phase_" + new_phase
+	# Explicitly PAUSABLE so the phase stops processing when the tree is
+	# paused (ESC). main.gd is ALWAYS (for ESC/_input), but phase nodes
+	# must stop — otherwise movement, timers, and combat keep running
+	# behind the pause overlay.
+	current_phase_node.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(current_phase_node)
 
 func _input(event: InputEvent) -> void:
