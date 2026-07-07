@@ -4,6 +4,73 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.19 — Music Production Polish (Stereo, Schroeder Reverb, Sub-bass, Chorus) (2026-07-07)
+
+### Problem: Still Sounded "Raw" After Softening
+**Diagnosis:** v0.18 softened the harsh timbres but the mix still sounded raw/unproduced because:
+1. **Mono output** — everything dead center, no width
+2. **Thin oscillators** — single voices, no chorus/detuning
+3. **Crude reverb** — single comb delay was metallic, not a real space
+4. **No sub-bass** — bass lacked low-frequency warmth
+5. **No stereo image** — no panning, no Haas effect
+
+### Fix: Real Production Techniques
+
+**1. Stereo output (interleaved L/R)**
+- Rendered to two separate L/R buffers, interleaved to stereo bytes
+- `w.stereo = true`, byte buffer doubled (n * 4)
+- Each layer now writes to L and R independently
+
+**2. Chords: 2 detuned voices per note, panned L/R**
+- Voice 1: -8 cents (slightly flat) → L channel
+- Voice 2: +8 cents (slightly sharp) → R channel
+- Creates natural chorus width (like a 12-string guitar or detuned synth patch)
+- ±8 cents = ±0.46% frequency shift
+
+**3. Arp: Haas effect for wide stereo image**
+- L channel: immediate
+- R channel: delayed 12ms (Haas delay)
+- Creates a wide, spacious arpeggio without sounding phasey
+- 12ms is the sweet spot — wide but not echoey
+
+**4. Bass: added sine sub-octave for warmth**
+- Saw bass (lowpassed @ 400Hz) + sine an octave below at 0.4 amplitude
+- Sub-bass fills out the low end that saw alone lacks
+- Bass stays mono (center) for solid low-end foundation
+
+**5. Schroeder reverb (4 parallel combs + 2 series allpass)**
+- Replaced single comb delay with classic Schroeder algorithm:
+  - 4 parallel comb filters at prime delays (29.7, 37.1, 41.1, 43.7 ms) with feedback 0.78-0.84
+  - 2 series allpass filters (5ms, 1.7ms) with feedback 0.7
+- L and R have slightly different decay (comb feedback varies) for stereo width
+- 25% wet mix into master
+- Transforms "metallic single-comb" → "real room space"
+
+**6. Drum panning for stereo image**
+- Kick: center (mono, solid foundation)
+- Clap: slightly wide (L 1.1, R 0.9)
+- Hats: panned right (L 0.7, R 1.0)
+- Cowbell: panned left (L 1.0, R 0.7)
+- Creates a natural drum kit spread
+
+**7. Lead: doubled with detune**
+- Two voices at ±0.3% detune with shared vibrato
+- Panned slightly L/R for width
+- Richer, less thin than single oscillator
+
+**8. Master: lowpass @ 6kHz + soft tape saturation**
+- One-pole lowpass @ 6kHz (40% wet) — warmer than v0.18's 8kHz rolloff
+- Soft tanh saturation (0.6 drive) — gentle tape warmth, not harsh clipping
+
+### Verification
+- Stereo output confirmed: L peak -8.28dB, R peak -8.31dB (different = width working)
+- L/R sample values differ (L: -9947 to 12637, R: -10436 to 12589) — real stereo content
+- Overall: peak -8.3dB, RMS -19.9dB (healthy, no clipping)
+- 30.0s loop, 16 bars, speder2 chord palette preserved
+- Preview at `/home/z/my-project/download/music_preview/main_theme_v6_produced.wav` (stereo, 2.6MB)
+
+---
+
 ## v0.18 — Music Timbre Softening (Real Filtering, No More Raw Squares/Saws/Noise) (2026-07-07)
 
 ### Problem: Individual Sounds Were Harsh Despite Good Composition
