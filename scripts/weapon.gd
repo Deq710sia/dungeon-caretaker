@@ -335,7 +335,8 @@ func take_durability_damage(amount: int, cause: String = "") -> void:
 
 ## Single source of truth for deriving wear_state from current durability_pct.
 ## Called after ANY durability change (damage OR repair) so the two can never
-## drift out of sync with each other.
+## drift out of sync with each other. Also calls recalculate_state() so the
+## flavor state stays in sync with the mechanical truth.
 func recalculate_wear(cause: String = "") -> void:
 	var pct := durability_pct()
 	var new_wear: int
@@ -357,6 +358,32 @@ func recalculate_wear(cause: String = "") -> void:
 		# the chronicle keeps the record of having shattered once.
 		is_broken = false
 		history.append("%s has been mended — no longer shattered, though it remembers." % display_name)
+	recalculate_state()
+
+## Derives the flavor `state` from the mechanical `wear_state` + `is_haunted()`.
+## This is the SINGLE source of truth for the flavor state — it must be called
+## whenever wear_state or unexorcised_deaths changes. Without this, the flavor
+## state drifts: a weapon repaired from SHATTERED to PRISTINE would still say
+## "Shattered" in its display name, and a weapon cleansed at the Altar would
+## still show blue (haunted) coloring.
+##
+## Priority (highest overrides lower):
+##   BROKEN wear → SHATTERED
+##   haunted     → HAUNTED (regardless of wear — dread persists through repair)
+##   PRISTINE    → PRISTINE
+##   weapons     → BLOODIED (narrative: weapons see blood)
+##   armor       → RUSTED (narrative: armor sits in damp dungeons)
+func recalculate_state() -> void:
+	if wear_state == WearState.BROKEN:
+		state = State.SHATTERED
+	elif is_haunted():
+		state = State.HAUNTED
+	elif wear_state == WearState.PRISTINE:
+		state = State.PRISTINE
+	elif type in ["sword", "staff"]:
+		state = State.BLOODIED
+	else:
+		state = State.RUSTED
 
 func break_weapon(cause: String = "") -> void:
 	is_broken = true
@@ -364,9 +391,7 @@ func break_weapon(cause: String = "") -> void:
 	durability = 0
 	var cause_text := cause if cause != "" else "catastrophic damage"
 	history.append("SHATTERED on Stage %d Wave %d from %s!" % [GameState.stage, GameState.wave, cause_text])
-	# Flavor only — does not gate anything.
-	if state != State.SHATTERED:
-		state = State.SHATTERED
+	recalculate_state()
 
 ## Graduated repair: how much of durability_max a single minigame pass
 ## restores, as a function of minigame quality (0-1) and the weapon's
@@ -408,6 +433,7 @@ func exorcise() -> void:
 	if unexorcised_deaths > 0:
 		history.append("Cleansed of %d unexorcised death(s) at the Altar." % unexorcised_deaths)
 		unexorcised_deaths = 0
+		recalculate_state()
 
 func record_kill(enemy_type: String) -> void:
 	kill_log.append(enemy_type)
@@ -445,22 +471,17 @@ func apply_combat_damage(owner_died: bool, enemy_type: String = "") -> void:
 			durability = max(0, durability - dmg)
 		if wear_state == WearState.BROKEN and not is_broken:
 			break_weapon(enemy_type if enemy_type != "" else "slain in battle")
-		# Flavor state from the death
-		match wear_state:
-			WearState.BROKEN: state = State.SHATTERED
-			_:
-				if unexorcised_deaths > 0:
-					state = State.HAUNTED
-				elif type in ["sword", "staff"]:
-					state = State.BLOODIED
-				else:
-					state = State.RUSTED
+		else:
+			recalculate_state()
 		var enemy_label := enemy_type if enemy_type != "" else "the enemy"
 		history.append("Worn during a death on Stage %d Wave %d — slain by %s. Now %s." % [GameState.stage, GameState.wave, enemy_label, state_name()])
 	else:
-		if state == State.PRISTINE:
-			state = State.BLOODIED
-			history.append("Damaged in combat on Stage %d Wave %d." % [GameState.stage, GameState.wave])
+		# Living weapon took combat damage — just mark as bloodied if pristine.
+		if wear_state == WearState.PRISTINE:
+			recalculate_state()
+			if state == State.PRISTINE:
+				state = State.BLOODIED
+				history.append("Damaged in combat on Stage %d Wave %d." % [GameState.stage, GameState.wave])
 
 ## A one-line flavor descriptor from the authoring fingerprints, so sharpness/
 ## balance/power/mystic actually surface somewhere instead of being an
