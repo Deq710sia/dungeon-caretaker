@@ -93,9 +93,6 @@ func _build_hud() -> void:
 	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(prompt_label)
 
-func _input(event: InputEvent) -> void:
-	move.handle_click(event)
-
 func _process(delta: float) -> void:
 	# Reset interact_pressed BEFORE any early returns — if hit_stop or
 	# other early-exit conditions fire, the interact guard would get
@@ -112,6 +109,7 @@ func _process(delta: float) -> void:
 		if Input.is_action_pressed("move_up"):    input_dir.y -= 1
 		if Input.is_action_pressed("move_down"):  input_dir.y += 1
 		# Sidestep
+	move.update_pulse(delta)
 	move.update(input_dir, delta)
 	move.pos.x = clampf(move.pos.x, 12, ROOM_W - 12)
 	move.pos.y = clampf(move.pos.y, HUD_H + 30, ROOM_H - 20)
@@ -368,7 +366,7 @@ func _draw() -> void:
 	if map_view_active:
 		_draw_map_view()
 	# Bottom hint
-	GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 6), "WASD:move E:interact SPACE:phase [[]/]:rack", 8, Palette.TEXT_DIM)
+	GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 6), "WASD:move E:interact SPACE:phase SHIFT:pulse [[]/]:rack", 8, Palette.TEXT_DIM)
 
 func _draw_map_view() -> void:
 	# Dim background

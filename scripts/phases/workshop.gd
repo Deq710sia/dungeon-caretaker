@@ -139,9 +139,6 @@ func _update_hud() -> void:
 func _on_shards_changed(new_count: int) -> void:
         hud_shards.text = "Shards: %d" % new_count
 
-func _input(event: InputEvent) -> void:
-        move.handle_click(event)
-
 func _process(delta: float) -> void:
         # Reset interact_pressed BEFORE any early returns
         if not Input.is_action_pressed("interact"):
@@ -163,6 +160,7 @@ func _process(delta: float) -> void:
         if Input.is_action_pressed("move_up"):    input_dir.y -= 1
         if Input.is_action_pressed("move_down"):  input_dir.y += 1
         # Sidestep
+        move.update_pulse(delta)
         move.update(input_dir, delta)
         move.pos.x = clampf(move.pos.x, 12, ROOM_W - 12)
         move.pos.y = clampf(move.pos.y, HUD_H + 30, ROOM_H - 40)
@@ -401,7 +399,7 @@ func _draw() -> void:
         # Particles
         Juice.draw_particles(self)
         # Hint
-        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 6), "WASD:move E:interact SPACE:phase TAB:inspect", 8, Palette.TEXT_DIM)
+        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 6), "WASD:move E:interact SPACE:phase SHIFT:pulse TAB:inspect", 8, Palette.TEXT_DIM)
 
 func _show_weapon_inspect(w: Weapon) -> void:
         if inspect_panel:

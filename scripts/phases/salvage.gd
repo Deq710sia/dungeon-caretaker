@@ -282,7 +282,7 @@ func _build_hud() -> void:
         hud_collected.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
         panel.add_child(hud_collected)
         hud_hint = Label.new()
-        hud_hint.text = "WASD:move E:interact SPACE:phase DblClick:pulse"
+        hud_hint.text = "WASD:move E:interact SPACE:phase SHIFT:hold pulse"
         hud_hint.add_theme_font_size_override("font_size", 8)
         hud_hint.add_theme_color_override("font_color", Palette.TEXT_DIM)
         hud_hint.position = Vector2(0, VIEW_H - 12)
@@ -338,6 +338,7 @@ func _physics_process(delta: float) -> void:
                 if Input.is_action_pressed("move_up"):    input_dir.y -= 1
                 if Input.is_action_pressed("move_down"):  input_dir.y += 1
                 # Sidestep: tap a perpendicular direction for a micro-burst
+        move.update_pulse(delta)
         move.update(input_dir, delta)
         # Clamp to corridor bounds (respecting narrow zones)
         _clamp_to_corridor()
@@ -461,9 +462,9 @@ func _find_nearest_interactive() -> void:
                         hud_hint.text = "[E] Salvage %s" % near_interactive.gear_name
         else:
                 if committed_deeper:
-                        hud_hint.text = "WASD:move E:interact SPACE:phase DblClick:pulse Find deeper exit"
+                        hud_hint.text = "WASD:move E:interact SPACE:phase SHIFT:hold pulse  Find deeper exit"
                 else:
-                        hud_hint.text = "WASD:move E:interact SPACE:phase DblClick:pulse Exit or go DEEPER"
+                        hud_hint.text = "WASD:move E:interact SPACE:phase SHIFT:hold pulse  Exit or go DEEPER"
 
 func _handle_interact() -> void:
         if near_interactive is Dictionary:
@@ -655,8 +656,6 @@ func _update_qte(delta: float) -> void:
                                 active_qte.marker_dir = 1.0
 
 func _input(event: InputEvent) -> void:
-        # Forward mouse clicks to GhostMovement for pulse detection
-        move.handle_click(event)
         if active_qte.is_empty():
                 return
         match active_qte.type:

@@ -4,6 +4,71 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.14 — Pulse v2 (Charge-and-Release) + Procedural Main Theme (2026-07-07)
+
+### Pulse Redesign: Double-Click → Hold-to-Charge
+**Problem:** The v0.10.4 double-click pulse was confusing and unclear. The boost was only 15% (1.15x), the sound was a high-pitched 880Hz square-wave blip (same as the UI tick), and there was no "hold" mechanic — players couldn't tell what was happening or how to use it.
+
+**Changed:** Replaced the double-click pulse with a **hold-to-charge** system bound to **SHIFT**:
+
+| Charge Level | Hold Time | Boost | Duration | Particles | Trauma |
+|-------------|-----------|-------|----------|-----------|--------|
+| Min | 0-0.2s | 1.4x | 0.3s | 4 | 0.05 |
+| Med | 0.2-0.5s | 1.7x | 0.4s | 7 | 0.10 |
+| Max | 0.5s+ | 2.2x | 0.6s | 12 | 0.20 |
+
+- **Cooldown:** 1.2s after release (prevents spam, rewards timing)
+- **Tradeoff:** Ghost slows to 70% speed WHILE charging (anticipation, not free)
+- **Visual feedback:** Charge ring around ghost fills clockwise; color shifts cyan → blue → purple as charge grows. On release, expanding flash ring + particle burst scales with charge level. Cooldown ring when on CD.
+- **Sound:** New `pulse_charge` (low triangle drone 110→165Hz, 1s build) and `pulse_release` (maj9 chord burst at A3 220Hz — lower-pitched than blip, with speder2 drop voicing + 9th shimmer). Release pitch rises with charge level.
+
+**Clearer game design:** The charge ring + color shift + slowdown while charging makes it obvious what's happening. The 3 distinct charge levels (with visual + audio scaling) make the mechanic readable. The SHIFT binding is the canonical "boost" key in FPS games.
+
+### Procedural Main Theme (Music Autoload)
+**Added:** A new `Music` autoload (`scripts/autoload/music.gd`) that generates a 12-second looped AudioStreamWAV at startup using speder2 chord-timbre techniques.
+
+**Chord progression:** Am - F - G - Em (i - VI - VII - v in A minor) — melancholy with tension, fits the ghost-bound-to-dungeon theme.
+
+**Structure:** 80 BPM, 4 beats per chord, 4 chords = 16 beats = 12 seconds. Three layers baked into one loop:
+1. **Pad:** Sustained chord with speder2 drop voicing (root in octave 2, chord tones in octaves 4-5) + min9/maj9 extension at -12dB. 50ms attack, 500ms release, 1.5Hz LFO amplitude modulation for "breathing" pad.
+2. **Bass:** Root note plucked (triangle wave) on beat 1 of each chord. 5ms attack, 0.6s exponential decay.
+3. **Arpeggio:** 8th notes cycling through chord tones (sine wave, very quiet at 0.07 amplitude). 3ms attack, 0.15s decay.
+
+**Speder2 techniques applied:**
+- Drop voicings: root in octave 2 (82-110Hz), chord tones spread across octaves 3-5
+- Amplitude scaling: 9th extension at 0.06 amplitude (vs root at 0.18-0.30)
+- Micro-pitch drift: ±0.12-0.14% detuning per voice (prevents static phase cancellation)
+- Slow attack: 50ms on pad chords (ambient, not plucked)
+
+**Wider procedural soundtrack techniques used:**
+- **Layered composition:** Pad/bass/arp baked into one stream (simpler than runtime mixing, fewer voices)
+- **Loop-forward mode:** `AudioStreamWAV.LOOP_FORWARD` with loop_begin=0, loop_end=sample_count
+- **Continuous playback:** Music starts at `_ready()` and loops forever at -14dB on the Music bus
+- **Chord progression choice:** i - VI - VII - v is a classic emotional progression (used in many indie roguelikes) — melancholy but not hopeless, with the v (Em) creating unresolved tension that makes the loop feel natural
+
+### Input Changes
+- **Added:** `pulse` input action bound to **Shift** (keycode 4194325)
+- **Removed:** Double-click pulse detection (`handle_click`, `_fire_pulse`, `_last_click_time`, `DOUBLE_CLICK_WINDOW`)
+
+### Phase Updates
+- All walkable phases (salvage, workshop, planning) now call `move.update_pulse(delta)` before `move.update(input_dir, delta)`
+- Removed `move.handle_click(event)` calls and empty `_input` functions
+- Updated hint texts: "DblClick:pulse" → "SHIFT:hold pulse" (salvage), "SHIFT:pulse" added to workshop + planning hints
+
+### Verification
+24 unit tests pass (temp TestRunner autoload, removed pre-commit):
+- Min/med/max charge each give correct boost (1.4x/1.7x/2.2x)
+- Cooldown blocks re-charging
+- Ghost slows to 70% while charging
+- Phase chain still works (FLOAT→PHASE→DIVE→COAST→PHASE, halved cd)
+- Music autoload plays 12.0s loop with LOOP_FORWARD mode
+
+All 17 SFX + main theme rendered to `/home/z/my-project/download/` for ear-test:
+- `sfx_preview/*.wav` — 15 original + 2 new (pulse_charge, pulse_release)
+- `music_preview/main_theme.wav` — 12.0s, 44.1kHz mono, ~1MB
+
+---
+
 ## v0.13 — SFX Distinction Overhaul (2026-07-07)
 
 ### Problem: Speder2 Chord-Timbre Made Everything Sound the Same

@@ -83,6 +83,10 @@ func _prerender_all() -> void:
 	# incorporeal), soft rising chime on exit (snapping back to corporeal).
 	_streams["phase_in"] = _render(_phase_in)
 	_streams["phase_out"] = _render(_phase_out)
+	# Pulse verb (v0.14): charge-and-release boost. Charge sound is a low
+	# triangle drone that rises in pitch; release is a maj9 chord burst.
+	_streams["pulse_charge"] = _render(_pulse_charge)
+	_streams["pulse_release"] = _render(_pulse_release)
 
 func _blip() -> PackedFloat32Array:
 	# UI pulse tick — SHORT square-wave blip with quick decay. Bright, snappy,
@@ -333,4 +337,46 @@ func _phase_out() -> PackedFloat32Array:
 			phases[j] += base_f * ratios[j] * (1.0 + drift) / SR
 			sample += sin(phases[j]) * amps[j]
 		o[i] = sample * e[i] * 0.25
+	return o
+
+func _pulse_charge() -> PackedFloat32Array:
+	# Charge drone — low triangle wave (A2 110Hz) + sub-bass sine (A1 55Hz).
+	# Builds in amplitude over the 1.0s charge duration. Pitch rises slightly
+	# (110 -> 165Hz) as charge builds, giving audible feedback that the charge
+	# is growing. Distinct from thud (impact) and death (drone) by being a
+	# RISING drone with no noise component — reads as "gathering energy".
+	var n := int(1.0 * SR); var o := PackedFloat32Array(); o.resize(n)
+	var ph_tri := 0.0
+	var ph_sub := 0.0
+	for i in n:
+		var t := float(i) / n  # 0.0 -> 1.0 over the charge duration
+		# Triangle drone rising A2 -> E3 (110 -> 165Hz)
+		ph_tri += (110.0 + 55.0 * t) / SR
+		var tri: float = 2.0 * abs(2.0 * fmod(ph_tri, 1.0) - 1.0) - 1.0
+		# Sub-bass sine at A1 (55Hz) for weight
+		ph_sub += 55.0 / SR
+		var sub: float = sin(ph_sub)
+		# Amplitude builds from 0 to full over the charge (slow attack)
+		var env: float = t * t  # quadratic ramp (slow start, fast end)
+		o[i] = (tri * 0.4 + sub * 0.25) * env * 0.3
+	return o
+
+func _pulse_release() -> PackedFloat32Array:
+	# Release burst — maj9 chord-timbre (speder2 warm). Lower-pitched than
+	# blip/chime: root at A3 (220Hz) so it reads as a "ghost surge" not a UI
+	# tick. Voicing: A3(220) + B3(247) + C#4(277) + E4(330) + B4(494, 9th up).
+	# Quick attack (3ms) for the burst transient, ~0.4s decay. The 9th up high
+	# adds the "shimmer" of released spectral energy.
+	var n := int(0.4 * SR); var e := _env(n, 0.003, 0.18); var o := PackedFloat32Array(); o.resize(n)
+	var freqs := [220.0, 247.0, 277.0, 330.0, 494.0]  # root, M2, M3, 5th, 9th(oct up)
+	var amps := [0.35, 0.18, 0.15, 0.12, 0.08]  # 9th quietest (speder2 amplitude scaling)
+	var phases: Array = [0.0, 0.0, 0.0, 0.0, 0.0]
+	for i in n:
+		var sample := 0.0
+		for j in freqs.size():
+			# Micro-pitch drift to prevent static phase
+			var drift: float = sin(float(i) / SR * 4.0 + j) * 0.0014
+			phases[j] += freqs[j] * (1.0 + drift) / SR
+			sample += sin(phases[j]) * amps[j]
+		o[i] = sample * e[i] * 0.28
 	return o

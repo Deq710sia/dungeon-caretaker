@@ -5,20 +5,26 @@ extends RefCounted
 ## generated through state transitions and timing, not granted by buttons.
 ##
 ## Movement states:
-##   FLOAT  — normal walking. Pulse-timing inputs gives small speed boost.
+##   FLOAT  — normal walking. Hold SHIFT to charge a pulse burst.
 ##   PHASE  — incorporeal dash (2x speed, costs shard, bypasses hazards).
 ##   DIVE   — momentum burst on phase cancel. Boost scales with remaining
 ##            phase energy. Cancel early = big burst. Cancel late = small.
-##   COAST  — carrying converted momentum. Low deceleration. Pulse-timing
-##            extends coast duration instead of just adding speed.
+##   COAST  — carrying converted momentum. Low deceleration. A pulse
+##            during coast extends its duration (ride the momentum longer).
 ##            Weapon weight is halved during coast (riding momentum, not
 ##            generating it).
 ##
+## Pulse verb (v0.14+): HOLD SHIFT to charge, RELEASE to burst.
+##   - Min charge (0-0.2s held):  1.4x boost, 0.3s duration
+##   - Med charge (0.2-0.5s):     1.7x boost, 0.4s duration
+##   - Max charge (0.5s+):        2.2x boost, 0.6s duration + screen shake
+##   - Cooldown: 1.2s after release (prevents spam, rewards timing)
+##   - Tradeoff: ghost slows to 70% speed WHILE charging
 ## The skill chain:
-##   1. Build speed (pulse-timing in FLOAT)
+##   1. Build speed (charge pulse in FLOAT)
 ##   2. Phase (2x speed, committed direction)
 ##   3. Cancel phase early (DIVE — big momentum burst)
-##   4. Pulse-time inputs during COAST to extend the momentum
+##   4. Pulse during COAST to extend the momentum
 ##   5. Phase again to restart the chain
 ##
 ## Each step is a skill check. Mistime the cancel = weak boost. Stop
@@ -36,10 +42,15 @@ const PHASE_SPEED_MULT: float = 2.0
 const WEAPON_WEIGHT_MULT: float = 0.12
 const COAST_WEIGHT_REDUCTION: float = 0.5  # weapon weight halved during coast
 
-# Pulse timing (momentum carrying) — works in FLOAT and COAST
-const PULSE_WINDOW: float = 0.35
-const PULSE_BOOST: float = 1.15       # FLOAT: 15% boost
-const COAST_PULSE_EXTEND: float = 0.2 # COAST: each pulse extends coast by 0.2s
+# Pulse verb (v0.14+): charge-and-release on SHIFT
+const PULSE_CHARGE_MAX: float = 1.0   # full charge takes 1.0s
+const PULSE_CD: float = 1.2           # cooldown after release
+const PULSE_CHARGE_SPEED_MULT: float = 0.7  # ghost slows to 70% while charging
+# Charge thresholds: [min_charge_time, boost_mult, burst_duration, particles, trauma]
+const PULSE_MIN: Array = [0.0, 1.4, 0.3, 4, 0.05]
+const PULSE_MED: Array = [0.2, 1.7, 0.4, 7, 0.10]
+const PULSE_MAX: Array = [0.5, 2.2, 0.6, 12, 0.20]
+const COAST_PULSE_EXTEND: float = 0.4 # COAST: pulse extends coast by 0.4s
 const PULSE_BOOST_DECAY: float = 2.5
 
 # Phase verb constants
@@ -77,53 +88,124 @@ var _footstep_timer: float = 0.0
 var _last_input_dir: Vector2 = Vector2.ZERO
 var _prev_input_dir: Vector2 = Vector2.ZERO
 var _no_input_timer: float = 0.0
-var _pulse_mult: float = 1.0
-var _pulse_flash: float = 0.0
+var _pulse_mult: float = 1.0       # active burst multiplier (decays to 1.0)
+var _pulse_flash: float = 0.0      # brief flash ring on release
+var _pulse_charging: bool = false  # true while SHIFT held
+var _pulse_charge_t: float = 0.0   # 0-1, how long SHIFT has been held (clamped to PULSE_CHARGE_MAX)
+var _pulse_charge_level: int = 0   # 0=idle, 1=min, 2=med, 3=max (for visual + sound)
+var _pulse_burst_t: float = 0.0    # remaining burst duration (0 = no burst)
+var _pulse_cd_t: float = 0.0       # cooldown remaining
 var _dive_mult: float = 1.0
 var _dive_timer: float = 0.0
 var _coast_timer: float = 0.0
 var _coast_input_hold: float = 0.0  # how long input has been held during coast
-# Double-click pulse detection
-var _last_click_time: float = 0.0
-const DOUBLE_CLICK_WINDOW: float = 0.3  # seconds between clicks to count as double
 
-## Called by the owning phase when a mouse click happens. If it's a double-
-## click AND the ghost is moving (WASD held), fire a pulse in the current
-## movement direction. This moves the pulse off WASD-tapping (which was
-## jarring and conflicted with normal movement) and onto a deliberate
-## input: hold a direction + double-click = pulse.
-func handle_click(event: InputEvent) -> void:
-	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
-		return
-	var now: float = Time.get_ticks_msec() / 1000.0
-	if now - _last_click_time < DOUBLE_CLICK_WINDOW:
-		# Double-click! Fire a pulse if we're moving.
-		_fire_pulse()
-	_last_click_time = now
+## Called every tick by the owning phase. Handles SHIFT charge/release,
+## burst decay, and cooldown. Should be called BEFORE update() so the
+## burst multiplier is applied to this tick's movement.
+func update_pulse(delta: float) -> void:
+	# Decay burst + cooldown timers
+	if _pulse_burst_t > 0:
+		_pulse_burst_t = max(0, _pulse_burst_t - delta)
+		if _pulse_burst_t == 0:
+			_pulse_mult = 1.0  # burst ended
+	if _pulse_cd_t > 0:
+		_pulse_cd_t = max(0, _pulse_cd_t - delta)
+	_pulse_flash = max(0, _pulse_flash - delta * 4.0)
+	# Decay pulse_mult toward 1.0 (smooth ramp-down after burst peak)
+	_pulse_mult = lerp(_pulse_mult, 1.0, 1.0 - exp(-delta * PULSE_BOOST_DECAY))
+	# Charge handling
+	if Input.is_action_pressed("pulse") and _pulse_cd_t == 0 and state != State.PHASE and state != State.DIVE:
+		if not _pulse_charging:
+			_pulse_charging = true
+			_pulse_charge_t = 0.0
+			SFX.play("pulse_charge", 1.0, -8.0, 0.0)
+		_pulse_charge_t = min(PULSE_CHARGE_MAX, _pulse_charge_t + delta)
+		# Update charge level for visual feedback
+		if _pulse_charge_t >= PULSE_MAX[0]:
+			_pulse_charge_level = 3
+		elif _pulse_charge_t >= PULSE_MED[0]:
+			_pulse_charge_level = 2
+		else:
+			_pulse_charge_level = 1
+	elif _pulse_charging:
+		# SHIFT released — fire the burst
+		_release_pulse()
+	elif not Input.is_action_pressed("pulse"):
+		_pulse_charging = false
+		_pulse_charge_t = 0.0
+		_pulse_charge_level = 0
 
-## Fire a pulse in the current velocity direction (or facing if no velocity).
-## Works in both FLOAT and COAST states.
-func _fire_pulse() -> void:
-	if vel.length() < 5.0 and _last_input_dir == Vector2.ZERO:
-		return  # need to be moving
+## Release the charged pulse. Boost scales with charge level.
+func _release_pulse() -> void:
+	_pulse_charging = false
+	var level: int = _pulse_charge_level
+	if level == 0:
+		level = 1  # minimum
+	var cfg: Array
+	match level:
+		3: cfg = PULSE_MAX
+		2: cfg = PULSE_MED
+		_: cfg = PULSE_MIN
+	var boost_mult: float = cfg[1]
+	var burst_dur: float = cfg[2]
+	var particles: int = cfg[3]
+	var trauma: float = cfg[4]
+	# Apply burst in current movement direction (or facing if no velocity)
 	var boost_dir: Vector2 = vel.normalized() if vel.length() > 1.0 else facing
-	vel = boost_dir * get_speed() * PULSE_BOOST
-	_pulse_mult = PULSE_BOOST
-	_pulse_flash = 0.6
-	Juice.spawn_particles(pos, 3, Palette.GLOW_BLUE, 15.0, 0.15)
-	SFX.play("blip", 1.0, -10.0, 0.01)
-	# In coast state, also extend duration
+	if boost_dir == Vector2.ZERO:
+		boost_dir = facing
+	vel = boost_dir * get_speed() * boost_mult
+	_pulse_mult = boost_mult
+	_pulse_burst_t = burst_dur
+	_pulse_flash = 0.8
+	_pulse_cd_t = PULSE_CD
+	_pulse_charge_t = 0.0
+	_pulse_charge_level = 0  # reset so HUD/draw doesn't show stale charge
+	# Visual + audio feedback scales with charge level
+	var pitch: float = 0.85 + 0.15 * level  # higher charge = higher pitch
+	SFX.play("pulse_release", pitch, -4.0, 0.02)
+	Juice.spawn_particles(pos, particles, Palette.GLOW_BLUE, 25.0 + 10.0 * level, 0.4)
+	Juice.add_trauma(trauma)
+	# In coast state, also extend duration (chain reward)
 	if state == State.COAST:
 		_coast_timer += COAST_PULSE_EXTEND
+	# Squash on release (compresses, stretches out as burst decays)
+	squash = 0.6
 
-## Effective speed — includes Fleet Shade upgrade and weapon weight.
-## During COAST, weapon weight is halved (riding momentum, not generating it).
+## Returns the current charge level 0-3 for HUD/draw (0 = not charging).
+func pulse_charge_level() -> int:
+	return _pulse_charge_level if _pulse_charging else 0
+
+## Returns charge progress 0-1 (for HUD charge ring fill).
+func pulse_charge_pct() -> float:
+	if not _pulse_charging:
+		return 0.0
+	return _pulse_charge_t / PULSE_CHARGE_MAX
+
+## Returns true if pulse is on cooldown (for HUD).
+func pulse_on_cooldown() -> bool:
+	return _pulse_cd_t > 0
+
+## Returns cooldown progress 0-1 (1 = ready).
+func pulse_cooldown_pct() -> float:
+	if _pulse_cd_t <= 0:
+		return 1.0
+	return 1.0 - (_pulse_cd_t / PULSE_CD)
+
+## Effective speed — includes Fleet Shade upgrade, weapon weight, and
+## pulse charge slowdown. During COAST, weapon weight is halved (riding
+## momentum, not generating it). While charging a pulse, speed is reduced
+## to PULSE_CHARGE_SPEED_MULT (tradeoff: charge = anticipation, not free).
 func get_speed() -> float:
 	var mult: float = 1.0 + float(GameState.meta_upgrades.get("fleet_shade", 0)) * 0.15
 	var weight_penalty: float = carry_count * WEAPON_WEIGHT_MULT
 	if state == State.COAST:
 		weight_penalty *= COAST_WEIGHT_REDUCTION
-	return BASE_SPEED * mult * (1.0 - weight_penalty)
+	var speed: float = BASE_SPEED * mult * (1.0 - weight_penalty)
+	if _pulse_charging:
+		speed *= PULSE_CHARGE_SPEED_MULT
+	return speed
 
 ## Returns true if currently phasing (for draw logic + hazard bypass).
 func is_phasing() -> bool:
@@ -171,12 +253,10 @@ func _update_float(input_dir: Vector2, delta: float) -> void:
 	var speed_pct: float = vel.length() / get_speed()
 	bob += delta * (3.0 + speed_pct * 6.0)
 	squash = lerp(squash, 1.0, 1.0 - exp(-delta * 8.0))
-	# Movement — pulse is now handled by handle_click() + _fire_pulse()
+	# Movement — pulse burst multiplier applied via _pulse_mult (set by update_pulse)
 	var target_speed: float = get_speed() * _pulse_mult
 	_apply_movement(input_dir, target_speed, ACCEL, ACCEL * DECEL_MULT, delta)
-	# Decay pulse mult + flash
-	_pulse_mult = lerp(_pulse_mult, 1.0, 1.0 - exp(-delta * PULSE_BOOST_DECAY))
-	_pulse_flash = max(0, _pulse_flash - delta * 4.0)
+	# Pulse mult + flash decay handled by update_pulse() (called by owning phase)
 
 # --- PHASE: incorporeal dash ---
 func _update_phase(input_dir: Vector2, delta: float) -> void:
@@ -261,9 +341,7 @@ func _update_coast(input_dir: Vector2, delta: float) -> void:
 	else:
 		vel = vel.move_toward(Vector2.ZERO, ACCEL * COAST_DECEL_MULT * delta)
 	pos += vel * delta
-	# Decay pulse mult + flash
-	_pulse_mult = lerp(_pulse_mult, 1.0, 1.0 - exp(-delta * PULSE_BOOST_DECAY))
-	_pulse_flash = max(0, _pulse_flash - delta * 4.0)
+	# Pulse mult + flash decay handled by update_pulse() (called by owning phase)
 	# Coast ends when: timer expires, speed drops too low, or steering input
 	# is held firmly. Steering = pushing a direction >45° off current vel
 	# for >0.25s. Holding the dive direction does NOT cancel (so the chain
@@ -376,6 +454,11 @@ func reset(p_pos: Vector2) -> void:
 	_no_input_timer = 0.0
 	_pulse_mult = 1.0
 	_pulse_flash = 0.0
+	_pulse_charging = false
+	_pulse_charge_t = 0.0
+	_pulse_charge_level = 0
+	_pulse_burst_t = 0.0
+	_pulse_cd_t = 0.0
 	_dive_mult = 1.0
 	_dive_timer = 0.0
 	_coast_timer = 0.0
@@ -408,11 +491,33 @@ static func draw_ghost(canvas: CanvasItem, mv: GhostMovement, is_underground: bo
 		# Coast: faint blue tint (riding spectral momentum)
 		ghost_mod = Color(0.7, 0.8, 1.0, 0.85)
 	canvas.draw_texture_rect(ghost_tex, Rect2(gx - sw / 2, gy - sh / 2 + bob_val, sw, sh), false, ghost_mod)
-	# Pulse flash — brief white-blue glow ring when a pulse fires
+	# Pulse charge ring — fills clockwise while SHIFT held, color shifts
+	# white -> cyan -> blue -> purple as charge level grows
+	if mv._pulse_charging:
+		var charge_pct: float = mv.pulse_charge_pct()
+		var level: int = mv._pulse_charge_level
+		var charge_color: Color
+		match level:
+			3: charge_color = Color(0.7, 0.5, 1.0, 0.9)  # purple (max)
+			2: charge_color = Color(0.5, 0.7, 1.0, 0.9)  # blue (med)
+			_: charge_color = Color(0.7, 0.9, 1.0, 0.9)  # cyan (min)
+		# Background ring (dim)
+		canvas.draw_arc(Vector2(gx, gy + bob_val), 14, 0, TAU, 24, Color(1, 1, 1, 0.15), 1)
+		# Charge fill (clockwise from top)
+		canvas.draw_arc(Vector2(gx, gy + bob_val), 14, -PI / 2, -PI / 2 + TAU * charge_pct, 24, charge_color, 2)
+		# Inner pulse dot (pulses while charging)
+		var pulse_dot: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.015)
+		canvas.draw_circle(Vector2(gx, gy + bob_val), 2, Color(charge_color.r, charge_color.g, charge_color.b, pulse_dot * 0.6))
+	# Pulse burst flash — expanding ring on release, fades quickly
 	if mv._pulse_flash > 0:
-		var flash_alpha: float = mv._pulse_flash * 0.6
-		canvas.draw_arc(Vector2(gx, gy + bob_val), 9, 0, TAU, 12, Color(0.8, 0.9, 1.0, flash_alpha), 2)
-		canvas.draw_arc(Vector2(gx, gy + bob_val), 14, 0, TAU, 12, Color(0.6, 0.8, 1.0, flash_alpha * 0.5), 1)
+		var flash_alpha: float = mv._pulse_flash * 0.7
+		var flash_radius: float = 9 + (1.0 - mv._pulse_flash) * 12
+		canvas.draw_arc(Vector2(gx, gy + bob_val), flash_radius, 0, TAU, 16, Color(0.8, 0.9, 1.0, flash_alpha), 2)
+		canvas.draw_arc(Vector2(gx, gy + bob_val), flash_radius + 5, 0, TAU, 16, Color(0.6, 0.8, 1.0, flash_alpha * 0.5), 1)
+	# Pulse cooldown ring (when on cooldown and not charging)
+	if mv._pulse_cd_t > 0 and not mv._pulse_charging:
+		var cd_pct: float = mv.pulse_cooldown_pct()
+		canvas.draw_arc(Vector2(gx, gy + bob_val), 14, -PI / 2, -PI / 2 + TAU * cd_pct, 16, Palette.TEXT_DIM, 1)
 	# Underground border ring (salvage only)
 	if is_underground and mv.state == State.PHASE:
 		canvas.draw_arc(Vector2(gx, gy + bob_val), 10, 0, TAU, 16, Color(0.1, 0.15, 0.3, 0.5), 2)
