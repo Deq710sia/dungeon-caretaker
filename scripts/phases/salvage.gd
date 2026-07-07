@@ -40,6 +40,8 @@ var interact_pressed: bool = false
 var active_qte: Dictionary = {}
 var props: Array = []
 var _noise: FastNoiseLite
+var _damage_flash: float = 0.0   # red overlay timer (set on damage, decays)
+var _spirit_flash: float = 0.0   # spirit HUD red flash timer
 
 var hud_stage: Label
 var hud_collected: Label
@@ -312,8 +314,19 @@ func _physics_process(delta: float) -> void:
                 extra_drain = tiles_past_fork * DEEPER_TIME_COST * delta
         salvage_timer -= (delta + extra_drain)
         hud_timer.text = "Time: %.0f" % max(0, salvage_timer)
+        # Timer turns red + pulses when low
+        if salvage_timer < 10:
+                hud_timer.add_theme_color_override("font_color", Palette.TEXT_RED)
+        else:
+                hud_timer.add_theme_color_override("font_color", Palette.TEXT_GOLD)
         if salvage_timer <= 0:
-                hud_hint.text = "Time's up — forced retreat!"
+                hud_hint.text = "⏰ TIME'S UP — forced to retreat!"
+                Juice.add_trauma(0.8)
+                Juice.hit_stop(0.2)
+                SFX.play("bell")
+                SFX.play("deny", 0.8, -4.0)
+                _damage_flash = 0.4
+                await get_tree().create_timer(0.8).timeout
                 _finish()
                 return
         # Input
@@ -348,6 +361,8 @@ func _physics_process(delta: float) -> void:
         for h in hazards:
                 h.cooldown = max(0, h.cooldown - delta)
         ghost_invuln = max(0, ghost_invuln - delta)
+        _damage_flash = max(0, _damage_flash - delta)
+        _spirit_flash = max(0, _spirit_flash - delta)
         # Exit logic — depends on whether we've committed to the deeper path
         if committed_deeper:
                 # In the deeper path: the ONLY way out is the deeper exit at the bottom
@@ -468,36 +483,58 @@ func _take_hazard_damage(h: Dictionary) -> void:
         h.cooldown = 1.5
         ghost_invuln = 1.0
         spirit -= 1
-        Juice.add_trauma(0.6)
-        Juice.hit_stop(0.1)
-        Juice.spawn_particles(move.pos, 10, Palette.TEXT_RED, 50.0, 0.4, Vector2(0, -1))
-        SFX.play("thud")
-        move.squash = 0.7
-        # Punishment 1: spirit drain (3 failures = forced retreat)
-        # Punishment 2: weapon durability damage to most recently salvaged weapon
-        # Punishment 3: lose the last salvaged corpse's weapon if spirit is critical (1 left)
+        # --- HEAVY feedback: screen flash, big shake, red particles, distinct SFX ---
+        Juice.add_trauma(0.8)  # was 0.6 — much harder screen shake
+        Juice.hit_stop(0.15)   # was 0.1 — longer freeze to register what happened
+        # Red particle burst + ring of red particles around the ghost
+        Juice.spawn_particles(move.pos, 16, Palette.TEXT_RED, 60.0, 0.5, Vector2(0, -1))
+        for i in 8:
+                var a := i * (TAU / 8.0)
+                Juice.spawn_particles(move.pos + Vector2(cos(a), sin(a)) * 12, 2, Palette.TEXT_RED, 30.0, 0.3)
+        # Distinct damage SFX — not just "thud", use "hit" + "shatter" layered
+        SFX.play("hit", 0.8, -2.0, 0.08)
+        SFX.play("shatter", 0.5, -8.0, 0.05)
+        # Screen flash: draw a red overlay for a few frames
+        _damage_flash = 0.3
+        move.squash = 0.5  # was 0.7 — more dramatic compression
+        # Damage type feedback
+        var damage_type: String = h.get("type", "hazard")
         if not GameState.arsenal.is_empty():
                 var w: Weapon = GameState.arsenal[-1]
-                var dmg: int = 20  # was 15 — more punishing
-                w.take_durability_damage(dmg, "hit by %s" % h.type)
-                hud_hint.text = "Spirit damaged! -1 | %s took %d damage!" % [w.display_name, dmg]
-                # Critical spirit: drop the last salvaged weapon (it scatters back into the dungeon)
+                var dmg: int = 20
+                w.take_durability_damage(dmg, "hit by %s" % damage_type)
+                # Clear, persistent damage text — stays visible longer
+                hud_hint.text = "▼ SPIRIT -1 | %s took %d damage!" % [w.display_name, dmg]
                 if spirit <= 1 and GameState.arsenal.size() > 1:
                         var dropped: Weapon = GameState.arsenal.pop_back()
                         dropped.take_durability_damage(30, "dropped during salvage panic")
                         GameState.arsenal_changed.emit()
-                        hud_hint.text = "PANIC! Dropped %s! Spirit critical!" % dropped.display_name
-                        Juice.spawn_particles(move.pos, 8, Palette.TEXT_GOLD, 40.0, 0.6)
+                        hud_hint.text = "⚠ PANIC! Dropped %s! 1 spirit left!" % dropped.display_name
+                        Juice.spawn_particles(move.pos, 12, Palette.TEXT_GOLD, 40.0, 0.6)
+                        SFX.play("deny", 0.8, -4.0)  # alarming deny sound for panic
         else:
-                hud_hint.text = "Spirit damaged! %d/%d remaining" % [spirit, spirit_max]
+                hud_hint.text = "▼ SPIRIT -1 | %d/%d remaining" % [spirit, spirit_max]
+        # Knockback — push away from hazard
         var away: Vector2 = (move.pos - h.pos).normalized()
-        move.pos += away * 16
-        move.vel = away * 30
+        move.pos += away * 20  # was 16 — stronger knockback
+        move.vel = away * 40   # was 30 — stronger
         if spirit <= 0:
-                hud_hint.text = "Your spirit fragments — forced to retreat!"
+                # --- DEATH: maximum feedback ---
+                hud_hint.text = "✖ SPIRIT SHATTERED — forced to retreat!"
+                Juice.add_trauma(1.0)  # max screen shake
+                Juice.hit_stop(0.3)    # long freeze
+                Juice.spawn_particles(move.pos, 24, Palette.TEXT_RED, 80.0, 1.0)
+                Juice.spawn_particles(move.pos, 12, Palette.GLOW_BLUE, 50.0, 0.8)
+                SFX.play("death", 0.8, -4.0)
+                SFX.play("shatter", 1.0, 0.0)
+                _damage_flash = 0.6  # longer red flash
+                # Delay before transition so the player sees what happened
+                await get_tree().create_timer(1.0).timeout
                 _finish()
         else:
                 hud_hp.text = "Spirit: " + "◆".repeat(spirit) + "·".repeat(spirit_max - spirit)
+                # Make the spirit diamonds flash red briefly
+                _spirit_flash = 0.5
 
 func _start_qte(hazard: Dictionary) -> void:
         # 4 QTE types — all tightened for real danger:
@@ -835,6 +872,13 @@ func _draw() -> void:
         var progress := clampf(move.pos.y / (corridor_h * TILE), 0, 1)
         draw_rect(Rect2(VIEW_W - 6, 24, 2, VIEW_H - 30), Palette.DARK, true)
         draw_rect(Rect2(VIEW_W - 6, 24 + int((VIEW_H - 30) * (1 - progress)), 2, int((VIEW_H - 30) * progress)), Palette.SLIME, true)
+        # --- Damage flash: red overlay that fades out ---
+        # Drawn on top of everything so it's impossible to miss
+        if _damage_flash > 0:
+                var flash_alpha: float = _damage_flash * 0.5  # max 0.15 alpha at peak
+                # Use the camera position to draw the overlay at screen coords
+                var screen_pos := cam.get_screen_center_position() - Vector2(VIEW_W / 2, VIEW_H / 2)
+                draw_rect(Rect2(int(screen_pos.x), int(screen_pos.y), VIEW_W, VIEW_H), Color(0.8, 0.1, 0.1, flash_alpha), true)
 
 func _draw_qte() -> void:
         var h: Dictionary = active_qte.hazard
