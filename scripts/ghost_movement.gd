@@ -78,10 +78,42 @@ var _last_input_dir: Vector2 = Vector2.ZERO
 var _prev_input_dir: Vector2 = Vector2.ZERO
 var _no_input_timer: float = 0.0
 var _pulse_mult: float = 1.0
-var _pulse_flash: float = 0.0  # visual flash when a pulse fires (decays to 0)
+var _pulse_flash: float = 0.0
 var _dive_mult: float = 1.0
 var _dive_timer: float = 0.0
 var _coast_timer: float = 0.0
+# Double-click pulse detection
+var _last_click_time: float = 0.0
+const DOUBLE_CLICK_WINDOW: float = 0.3  # seconds between clicks to count as double
+
+## Called by the owning phase when a mouse click happens. If it's a double-
+## click AND the ghost is moving (WASD held), fire a pulse in the current
+## movement direction. This moves the pulse off WASD-tapping (which was
+## jarring and conflicted with normal movement) and onto a deliberate
+## input: hold a direction + double-click = pulse.
+func handle_click(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT):
+		return
+	var now: float = Time.get_ticks_msec() / 1000.0
+	if now - _last_click_time < DOUBLE_CLICK_WINDOW:
+		# Double-click! Fire a pulse if we're moving.
+		_fire_pulse()
+	_last_click_time = now
+
+## Fire a pulse in the current velocity direction (or facing if no velocity).
+## Works in both FLOAT and COAST states.
+func _fire_pulse() -> void:
+	if vel.length() < 5.0 and _last_input_dir == Vector2.ZERO:
+		return  # need to be moving
+	var boost_dir: Vector2 = vel.normalized() if vel.length() > 1.0 else facing
+	vel = boost_dir * get_speed() * PULSE_BOOST
+	_pulse_mult = PULSE_BOOST
+	_pulse_flash = 1.0
+	Juice.spawn_particles(pos, 5, Palette.GLOW_BLUE, 25.0, 0.2)
+	SFX.play("blip", 1.3, -6.0, 0.02)
+	# In coast state, also extend duration
+	if state == State.COAST:
+		_coast_timer += COAST_PULSE_EXTEND
 
 ## Effective speed — includes Fleet Shade upgrade and weapon weight.
 ## During COAST, weapon weight is halved (riding momentum, not generating it).
@@ -131,18 +163,19 @@ func update(input_dir: Vector2, delta: float) -> void:
 		SFX.play("footstep", 0.85 + randf() * 0.25, -8.0, 0.04)
 	Juice.trail_sample(pos)
 
-# --- FLOAT: normal walking with pulse-timing boost ---
+# --- FLOAT: normal walking ---
 func _update_float(input_dir: Vector2, delta: float) -> void:
 	state = State.FLOAT
-	# Pulse detection
-	_detect_pulse(input_dir, delta)
 	# Bob + squash
 	var speed_pct: float = vel.length() / get_speed()
 	bob += delta * (3.0 + speed_pct * 6.0)
 	squash = lerp(squash, 1.0, 1.0 - exp(-delta * 8.0))
-	# Movement
+	# Movement — pulse is now handled by handle_click() + _fire_pulse()
 	var target_speed: float = get_speed() * _pulse_mult
 	_apply_movement(input_dir, target_speed, ACCEL, ACCEL * DECEL_MULT, delta)
+	# Decay pulse mult + flash
+	_pulse_mult = lerp(_pulse_mult, 1.0, 1.0 - exp(-delta * PULSE_BOOST_DECAY))
+	_pulse_flash = max(0, _pulse_flash - delta * 4.0)
 
 # --- PHASE: incorporeal dash ---
 func _update_phase(input_dir: Vector2, delta: float) -> void:
@@ -190,71 +223,26 @@ func _update_dive(input_dir: Vector2, delta: float) -> void:
 # --- COAST: carrying converted momentum ---
 func _update_coast(input_dir: Vector2, delta: float) -> void:
 	_coast_timer -= delta
-	# Pulse detection — in coast, pulses EXTEND duration instead of boosting speed
-	_detect_coast_pulse(input_dir, delta)
 	# Bob is smooth during coast (gliding)
 	var speed_pct: float = vel.length() / get_speed()
 	bob += delta * (4.0 + speed_pct * 5.0)
 	squash = lerp(squash, 1.0, 1.0 - exp(-delta * 6.0))
 	# Movement — very low deceleration (riding momentum)
-	var target_speed: float = get_speed()
+	var target_speed: float = get_speed() * _pulse_mult
 	if input_dir != Vector2.ZERO:
 		input_dir = input_dir.normalized()
 		facing = input_dir
 		_last_input_dir = input_dir
-		# Can steer during coast but can't exceed base speed
 		vel = vel.move_toward(input_dir * target_speed, ACCEL * 0.8 * delta)
 	else:
-		# No input — barely decelerate (coasting)
 		vel = vel.move_toward(Vector2.ZERO, ACCEL * COAST_DECEL_MULT * delta)
 	pos += vel * delta
+	# Decay pulse mult + flash (pulse extension handled by _fire_pulse)
+	_pulse_mult = lerp(_pulse_mult, 1.0, 1.0 - exp(-delta * PULSE_BOOST_DECAY))
+	_pulse_flash = max(0, _pulse_flash - delta * 4.0)
 	# Coast ends when: timer expires, speed drops too low, or phase starts
 	if _coast_timer <= 0 or vel.length() < COAST_MIN_SPEED:
 		state = State.FLOAT
-
-# --- Pulse detection for FLOAT state ---
-func _detect_pulse(input_dir: Vector2, delta: float) -> void:
-	var just_pressed: bool = (_prev_input_dir == Vector2.ZERO and input_dir != Vector2.ZERO)
-	if input_dir != Vector2.ZERO:
-		_no_input_timer = 0.0
-	else:
-		_no_input_timer += delta
-	if just_pressed and _no_input_timer < PULSE_WINDOW:
-		if vel.length() > 5.0:
-			_pulse_mult = PULSE_BOOST
-			# INSTANT velocity surge — don't just raise the target, actually
-			# boost the current velocity. This makes the pulse FEELABLE instead
-			# of just a number that changes the target by 8 px/s.
-			var boost_dir: Vector2 = vel.normalized() if vel.length() > 1.0 else facing
-			vel = boost_dir * get_speed() * PULSE_BOOST
-			# Visual + audio feedback so the player KNOWS the pulse fired
-			_pulse_flash = 1.0
-			Juice.spawn_particles(pos, 4, Palette.GLOW_BLUE, 20.0, 0.2)
-			SFX.play("blip", 1.3, -6.0, 0.02)
-	_pulse_mult = lerp(_pulse_mult, 1.0, 1.0 - exp(-delta * PULSE_BOOST_DECAY))
-	_pulse_flash = max(0, _pulse_flash - delta * 4.0)
-
-# --- Pulse detection for COAST state — extends duration ---
-func _detect_coast_pulse(input_dir: Vector2, delta: float) -> void:
-	var just_pressed: bool = (_prev_input_dir == Vector2.ZERO and input_dir != Vector2.ZERO)
-	if input_dir != Vector2.ZERO:
-		_no_input_timer = 0.0
-	else:
-		_no_input_timer += delta
-	if just_pressed and _no_input_timer < PULSE_WINDOW:
-		if vel.length() > 5.0:
-			# Extend coast duration + instant speed refresh
-			_coast_timer += COAST_PULSE_EXTEND
-			_pulse_mult = PULSE_BOOST
-			# Refresh velocity to boosted speed (keeps the coast alive)
-			var boost_dir: Vector2 = vel.normalized() if vel.length() > 1.0 else facing
-			vel = boost_dir * get_speed() * PULSE_BOOST
-			# Feedback
-			_pulse_flash = 1.0
-			Juice.spawn_particles(pos, 5, Palette.GLOW_BLUE, 25.0, 0.2)
-			SFX.play("blip", 1.5, -4.0, 0.02)
-	_pulse_mult = lerp(_pulse_mult, 1.0, 1.0 - exp(-delta * PULSE_BOOST_DECAY))
-	_pulse_flash = max(0, _pulse_flash - delta * 4.0)
 
 # --- Shared movement application ---
 func _apply_movement(input_dir: Vector2, target_speed: float, accel: float, decel: float, delta: float) -> void:

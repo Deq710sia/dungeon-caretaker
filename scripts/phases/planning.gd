@@ -93,6 +93,9 @@ func _build_hud() -> void:
 	prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(prompt_label)
 
+func _input(event: InputEvent) -> void:
+	move.handle_click(event)
+
 func _process(delta: float) -> void:
 	# Reset interact_pressed BEFORE any early returns — if hit_stop or
 	# other early-exit conditions fire, the interact guard would get

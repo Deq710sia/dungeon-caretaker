@@ -139,6 +139,9 @@ func _update_hud() -> void:
 func _on_shards_changed(new_count: int) -> void:
         hud_shards.text = "Shards: %d" % new_count
 
+func _input(event: InputEvent) -> void:
+        move.handle_click(event)
+
 func _process(delta: float) -> void:
         # Reset interact_pressed BEFORE any early returns
         if not Input.is_action_pressed("interact"):

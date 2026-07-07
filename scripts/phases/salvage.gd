@@ -20,6 +20,7 @@ var spirit: int = 3  # spirit integrity (replaces spirit — a ghost doesn't hav
 var spirit_max: int = 3
 var ghost_invuln: float = 0.0
 var camera_y: float = 0.0
+var camera_x: float = 0.0
 var cam: Camera2D
 var salvage_timer: float = SALVAGE_TIMER
 
@@ -281,7 +282,7 @@ func _build_hud() -> void:
         hud_collected.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
         panel.add_child(hud_collected)
         hud_hint = Label.new()
-        hud_hint.text = "WASD:move E:interact SPACE:phase Find exit"
+        hud_hint.text = "WASD:move E:interact SPACE:phase DblClick:pulse"
         hud_hint.add_theme_font_size_override("font_size", 8)
         hud_hint.add_theme_color_override("font_color", Palette.TEXT_DIM)
         hud_hint.position = Vector2(0, VIEW_H - 12)
@@ -340,12 +341,21 @@ func _physics_process(delta: float) -> void:
         move.update(input_dir, delta)
         # Clamp to corridor bounds (respecting narrow zones)
         _clamp_to_corridor()
-        # Camera follow with look-ahead
+        # Camera: smooth follow on BOTH axes with velocity-based look-ahead.
+        # Smoothing rate increases during DIVE/COAST so the camera keeps up with
+        # fast movement tech without lagging behind and making the player sick.
+        var cam_smooth: float = 6.0  # base smoothing
+        if move.state == GhostMovement.State.DIVE:
+                cam_smooth = 12.0  # snap to fast movement during dive
+        elif move.state == GhostMovement.State.COAST:
+                cam_smooth = 9.0  # slightly faster during coast
         var look_ahead := move.facing * 24.0
         var cam_target_y := move.pos.y + look_ahead.y
         var cam_target_x := move.pos.x + look_ahead.x * 0.3
-        camera_y = lerpf(camera_y, cam_target_y, 1.0 - exp(-delta * 6.0))
-        cam.position = Vector2(int(cam_target_x), int(camera_y))
+        camera_y = lerpf(camera_y, cam_target_y, 1.0 - exp(-delta * cam_smooth))
+        camera_x = lerpf(camera_x, cam_target_x, 1.0 - exp(-delta * cam_smooth))
+        # Snap to integers to prevent sub-pixel jitter, but only after smoothing
+        cam.position = Vector2(int(camera_x), int(camera_y))
         cam.offset = Juice.get_shake_offset()
         # Hazards on TOUCH — if ghost overlaps an active hazard, auto-trigger QTE
         _check_hazard_touch()
@@ -435,9 +445,9 @@ func _find_nearest_interactive() -> void:
                         hud_hint.text = "[E] Salvage %s" % near_interactive.gear_name
         else:
                 if committed_deeper:
-                        hud_hint.text = "WASD:move E:interact SPACE:phase Find deeper exit"
+                        hud_hint.text = "WASD:move E:interact SPACE:phase DblClick:pulse Find deeper exit"
                 else:
-                        hud_hint.text = "WASD:move E:interact SPACE:phase Exit or go DEEPER"
+                        hud_hint.text = "WASD:move E:interact SPACE:phase DblClick:pulse Exit or go DEEPER"
 
 func _handle_interact() -> void:
         if near_interactive is Dictionary:
@@ -628,6 +638,8 @@ func _update_qte(delta: float) -> void:
                                 active_qte.marker_dir = 1.0
 
 func _input(event: InputEvent) -> void:
+        # Forward mouse clicks to GhostMovement for pulse detection
+        move.handle_click(event)
         if active_qte.is_empty():
                 return
         match active_qte.type:
