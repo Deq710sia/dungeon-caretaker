@@ -341,22 +341,35 @@ func _physics_process(delta: float) -> void:
         move.update(input_dir, delta)
         # Clamp to corridor bounds (respecting narrow zones)
         _clamp_to_corridor()
-        # Camera: smooth follow on BOTH axes with velocity-based look-ahead.
-        # Smoothing rate increases during DIVE/COAST so the camera keeps up with
-        # fast movement tech without lagging behind and making the player sick.
-        var cam_smooth: float = 6.0  # base smoothing
+        # Camera: smooth follow with REDUCED look-ahead + speed-based shake
+        # for false sense of speed (racing game technique). Look-ahead is small
+        # so the camera stays close to the ghost. Speed-based micro-shake kicks
+        # in during DIVE/COAST to make fast movement FEEL fast without being
+        # nauseating.
+        var cam_smooth: float = 8.0
         if move.state == GhostMovement.State.DIVE:
-                cam_smooth = 12.0  # snap to fast movement during dive
+                cam_smooth = 14.0
         elif move.state == GhostMovement.State.COAST:
-                cam_smooth = 9.0  # slightly faster during coast
-        var look_ahead := move.facing * 24.0
+                cam_smooth = 11.0
+        # Minimal look-ahead (8px, was 24) — keeps camera on the ghost
+        var look_ahead := move.facing * 8.0
         var cam_target_y := move.pos.y + look_ahead.y
         var cam_target_x := move.pos.x + look_ahead.x * 0.3
         camera_y = lerpf(camera_y, cam_target_y, 1.0 - exp(-delta * cam_smooth))
         camera_x = lerpf(camera_x, cam_target_x, 1.0 - exp(-delta * cam_smooth))
-        # Snap to integers to prevent sub-pixel jitter, but only after smoothing
         cam.position = Vector2(int(camera_x), int(camera_y))
-        cam.offset = Juice.get_shake_offset()
+        # Speed-based micro-shake: adds tiny random offset at high speeds.
+        # This is the racing-game "false sense of speed" — the screen vibrates
+        # slightly when moving fast, making speed feel visceral without being
+        # disorienting. Scale: 0 at base speed, up to 1.5px at 2x speed.
+        var speed_shake: float = 0.0
+        var vel_pct: float = move.vel.length() / move.get_speed()
+        if vel_pct > 1.0:
+                speed_shake = (vel_pct - 1.0) * 1.5  # only shake above base speed
+        var shake_off := Juice.get_shake_offset()
+        shake_off.x += randf_range(-speed_shake, speed_shake)
+        shake_off.y += randf_range(-speed_shake, speed_shake)
+        cam.offset = shake_off
         # Hazards on TOUCH — if ghost overlaps an active hazard, auto-trigger QTE
         _check_hazard_touch()
         # Interactions (corpses still need E press)
@@ -376,13 +389,16 @@ func _physics_process(delta: float) -> void:
         # Exit logic — depends on whether we've committed to the deeper path
         if committed_deeper:
                 # In the deeper path: the ONLY way out is the deeper exit at the bottom
-                if move.pos.distance_to(deeper_exit_pos) < 12:
+                if move.pos.distance_to(deeper_exit_pos) < 8:
+                        # Visual feedback on exit touch
+                        Juice.spawn_particles(deeper_exit_pos, 8, Palette.TEXT_GREEN, 30.0, 0.4)
+                        SFX.play("chime")
                         _finish()
         else:
                 # In the main corridor: the exit is at the fork point.
-                # If the ghost moves PAST the fork (into the deeper gate area),
-                # commit to the deeper path — can't go back.
-                if move.pos.distance_to(exit_pos) < 12:
+                if move.pos.distance_to(exit_pos) < 8:
+                        Juice.spawn_particles(exit_pos, 8, Palette.TEXT_GREEN, 30.0, 0.4)
+                        SFX.play("chime")
                         _finish()
                 elif move.pos.y > gen.fork_y * TILE + TILE:
                         # Crossed the fork line into deeper territory — COMMIT
@@ -501,9 +517,9 @@ func _take_hazard_damage(h: Dictionary) -> void:
         for i in 8:
                 var a := i * (TAU / 8.0)
                 Juice.spawn_particles(move.pos + Vector2(cos(a), sin(a)) * 12, 2, Palette.TEXT_RED, 30.0, 0.3)
-        # Distinct damage SFX — not just "thud", use "hit" + "shatter" layered
-        SFX.play("hit", 0.8, -2.0, 0.08)
-        SFX.play("shatter", 0.5, -8.0, 0.05)
+        # Distinct damage SFX — low thud + descending tone (not the combat "hit")
+        SFX.play("thud", 0.9, -2.0, 0.06)
+        SFX.play("deny", 0.7, -6.0, 0.03)  # low deny = ominous, not grating
         # Screen flash: draw a red overlay for a few frames
         _damage_flash = 0.3
         move.squash = 0.5  # was 0.7 — more dramatic compression
@@ -535,8 +551,8 @@ func _take_hazard_damage(h: Dictionary) -> void:
                 Juice.hit_stop(0.3)    # long freeze
                 Juice.spawn_particles(move.pos, 24, Palette.TEXT_RED, 80.0, 1.0)
                 Juice.spawn_particles(move.pos, 12, Palette.GLOW_BLUE, 50.0, 0.8)
-                SFX.play("death", 0.8, -4.0)
-                SFX.play("shatter", 1.0, 0.0)
+                SFX.play("death", 0.7, -6.0)
+                SFX.play("deny", 0.9, -8.0)  # deep ominous tone for death
                 _damage_flash = 0.6  # longer red flash
                 # Delay before transition so the player sees what happened
                 await get_tree().create_timer(1.0).timeout
@@ -596,12 +612,13 @@ func _start_qte(hazard: Dictionary) -> void:
                                 "hazard": hazard,
                         }
                 "debris":
-                        # Reverse QTE — 2.5s (was 3.0) — less time to wait = more tension
+                        # Reverse QTE — 1.5s. Short enough to be tense, long enough
+                        # to require deliberate stillness.
                         active_qte = {
                                 "type": "reverse",
                                 "verb": "DON'T MOVE!",
-                                "timer": 2.5,
-                                "max_timer": 2.5,
+                                "timer": 1.5,
+                                "max_timer": 1.5,
                                 "hazard": hazard,
                         }
                 _:
@@ -699,9 +716,9 @@ func _finish() -> void:
         if finished:
                 return
         finished = true
-        Juice.add_trauma(0.4)
-        Juice.spawn_particles(exit_pos, 16, Palette.TEXT_GREEN, 50.0, 0.8)
-        await get_tree().create_timer(0.5).timeout
+        Juice.add_trauma(0.3)
+        Juice.spawn_particles(exit_pos, 12, Palette.TEXT_GREEN, 40.0, 0.5)
+        await get_tree().create_timer(0.2).timeout
         GameState.set_phase("workshop")
 
 func _update_phase_hud() -> void:

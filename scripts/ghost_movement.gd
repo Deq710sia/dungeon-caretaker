@@ -82,6 +82,7 @@ var _pulse_flash: float = 0.0
 var _dive_mult: float = 1.0
 var _dive_timer: float = 0.0
 var _coast_timer: float = 0.0
+var _coast_input_hold: float = 0.0  # how long input has been held during coast
 # Double-click pulse detection
 var _last_click_time: float = 0.0
 const DOUBLE_CLICK_WINDOW: float = 0.3  # seconds between clicks to count as double
@@ -108,9 +109,9 @@ func _fire_pulse() -> void:
 	var boost_dir: Vector2 = vel.normalized() if vel.length() > 1.0 else facing
 	vel = boost_dir * get_speed() * PULSE_BOOST
 	_pulse_mult = PULSE_BOOST
-	_pulse_flash = 1.0
-	Juice.spawn_particles(pos, 5, Palette.GLOW_BLUE, 25.0, 0.2)
-	SFX.play("blip", 1.3, -6.0, 0.02)
+	_pulse_flash = 0.6
+	Juice.spawn_particles(pos, 3, Palette.GLOW_BLUE, 15.0, 0.15)
+	SFX.play("blip", 1.0, -10.0, 0.01)
 	# In coast state, also extend duration
 	if state == State.COAST:
 		_coast_timer += COAST_PULSE_EXTEND
@@ -226,6 +227,12 @@ func _update_dive(input_dir: Vector2, delta: float) -> void:
 # --- COAST: carrying converted momentum ---
 func _update_coast(input_dir: Vector2, delta: float) -> void:
 	_coast_timer -= delta
+	# Track how long input has been held — if held >0.15s, exit coast
+	# (the player is deliberately steering, not just pulsing)
+	if input_dir != Vector2.ZERO:
+		_coast_input_hold += delta
+	else:
+		_coast_input_hold = 0.0
 	# Bob is smooth during coast (gliding)
 	var speed_pct: float = vel.length() / get_speed()
 	bob += delta * (4.0 + speed_pct * 5.0)
@@ -243,11 +250,13 @@ func _update_coast(input_dir: Vector2, delta: float) -> void:
 	else:
 		vel = vel.move_toward(Vector2.ZERO, ACCEL * COAST_DECEL_MULT * delta)
 	pos += vel * delta
-	# Decay pulse mult + flash (pulse extension handled by _fire_pulse)
+	# Decay pulse mult + flash
 	_pulse_mult = lerp(_pulse_mult, 1.0, 1.0 - exp(-delta * PULSE_BOOST_DECAY))
 	_pulse_flash = max(0, _pulse_flash - delta * 4.0)
-	# Coast ends when: timer expires, speed drops too low, or phase starts
-	if _coast_timer <= 0 or vel.length() < COAST_MIN_SPEED:
+	# Coast ends when: timer expires, speed drops too low, input held firmly,
+	# or phase starts. The "input held >0.15s" check lets the player cancel
+	# coast by just holding a direction — intuitive, no extra button.
+	if _coast_timer <= 0 or vel.length() < COAST_MIN_SPEED or _coast_input_hold > 0.15:
 		state = State.FLOAT
 
 # --- Shared movement application ---
@@ -359,6 +368,7 @@ func reset(p_pos: Vector2) -> void:
 	_dive_mult = 1.0
 	_dive_timer = 0.0
 	_coast_timer = 0.0
+	_coast_input_hold = 0.0
 
 ## Draws the ghost sprite with trail, phase visual, and cooldown ring.
 static func draw_ghost(canvas: CanvasItem, mv: GhostMovement, is_underground: bool = false) -> void:
