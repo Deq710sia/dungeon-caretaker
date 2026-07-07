@@ -4,6 +4,40 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.13 — SFX Distinction Overhaul (2026-07-07)
+
+### Problem: Speder2 Chord-Timbre Made Everything Sound the Same
+**Diagnosis:** The v0.11 speder2 chord-timbre SFX overhaul was a good idea (warm sines instead of harsh squares) but went too far — it converted EVERY SFX (including percussive impacts, UI ticks, error tones, mechanical sounds) into warm sine chords. Result: blip, chime, coin, bell, recruit, repair all became "sine chords in 440-1000Hz range" and shatter/deny/death all became "descending sine arpeggios". They literally sounded the same.
+
+### Fix: Distinct Waveform + Frequency Range Per Sound
+**Changed:** Kept speder2 chord-timbre for **musical/positive/spectral** sounds (chime, bell, coin, recruit, phase_in, phase_out) but gave **percussive/UI/mechanical** sounds (blip, thud, hit, shatter, deny, death, repair) their own distinctive waveforms AND frequency ranges so each is identifiable by ear:
+
+| Sound | Waveform | Freq Range | Duration | Character |
+|-------|----------|-----------|----------|-----------|
+| blip | **Square** | 880Hz | 0.08s | NES UI tick (was sine+5th chord) |
+| chime | Sine chord (maj9) | 880-1319Hz | 0.5s | Bright sustained chord (brightened from 440-659) |
+| thud | **Triangle** + noise | 80-50Hz | 0.18s | Sub-bass impact (was 110-82Hz, now lower) |
+| hit | **Saw** + noise | 220-110Hz | 0.14s | Buzzy mid impact (was sine+harmonic) |
+| shatter | Sine arp + **noise** | 2093-880Hz | 0.35s | Glassy break (noise restored, was pure arpeggio) |
+| coin | Sine glissando | 988→1319Hz | 0.12s | Quick pickup blip (was 4-note chord, now shorter bend) |
+| select | Sine | 1200Hz | 0.05s | Tiny tick (unchanged) |
+| deny | **Square** | 165→110Hz | 0.2s | Buzzy error (was pure sine — too gentle) |
+| bell | Sine + **inharmonic** partials | 523-2197Hz | 0.8s | Metallic ring (was harmonic chord — sounded like organ) |
+| death | **Triangle** + sub-bass + noise | 220-55Hz | 0.6s | Heavy dramatic (was sine arpeggio — too melodic) |
+| repair | **Saw taps + noise** (4x) | 880Hz | 0.32s | Mechanical hammer (was sine chord — sounded like recruit) |
+| recruit | Sine glissando | 523→784Hz | 0.4s | Friendly bend (was 2-step, now continuous) |
+| footstep | Sine + noise | 180-120Hz | 0.08s | Soft step (unchanged) |
+| phase_in | Sine chord (m6) | 880→220Hz | 0.25s | Spectral descent (unchanged — speder2 showcase) |
+| phase_out | Sine chord (mM7) | 330→660Hz | 0.20s | Spectral ascent (unchanged — speder2 showcase) |
+
+### Verification
+All 15 SFX rendered to `/home/z/my-project/download/sfx_preview/*.wav` for ear-test verification. Amplitudes are appropriately varied: death (-8dB, loudest) → thud (-8dB) → hit (-10dB) → footstep (-20dB, quietest). Each sound occupies a distinct register or uses a distinct waveform so they're identifiable by ear.
+
+### Principle
+Warm sine chords work for **musical** sounds (success cues, spectral effects, welcoming tones) where you want warmth and sustain. But **percussive/UI/mechanical** sounds need sharp transients, distinctive waveforms (square/saw/triangle), and noise components to read as "impact", "tick", "error", or "mechanical work". The speder2 approach removed those distinctions. This patch restores them while keeping the chord-timbre character where it belongs.
+
+---
+
 ## v0.12 — Snappy Reflect + Coast Cancel Fix (2026-07-07)
 
 ### Movement Feel: Hard Reflect Restored (v0.11 Blend Was Too Soft)

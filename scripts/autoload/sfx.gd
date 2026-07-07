@@ -85,29 +85,31 @@ func _prerender_all() -> void:
 	_streams["phase_out"] = _render(_phase_out)
 
 func _blip() -> PackedFloat32Array:
-	# UI blip — sine wave (not square) with a perfect 5th harmonic.
-	# The 5th adds warmth without dissonance. Notes: A5 (880Hz) + E6 (1319Hz).
-	var n := int(0.12 * SR); var e := _env(n, 0.005, 0.06); var o := PackedFloat32Array(); o.resize(n)
-	var ph1 := 0.0
-	var ph2 := 0.0
+	# UI pulse tick — SHORT square-wave blip with quick decay. Bright, snappy,
+	# distinct from sustained chord sounds (chime/bell/coin). Square wave gives
+	# it the classic NES UI tick character — instantly identifiable as "tick".
+	# Note: A5 (880Hz), 0.08s, no chord.
+	var n := int(0.08 * SR); var e := _env(n, 0.002, 0.04); var o := PackedFloat32Array(); o.resize(n)
+	var ph := 0.0
 	for i in n:
-		var f1: float = 880.0 - 300.0 * float(i) / n
-		ph1 += f1 / SR
-		ph2 += f1 * 1.498 / SR  # perfect 5th ratio
-		o[i] = (sin(ph1) * 0.6 + sin(ph2) * 0.25) * e[i] * 0.25
+		ph += 880.0 / SR
+		# Square wave — sharp, buzzy, reads as UI not musical
+		var sq: float = 1.0 if fmod(ph, 1.0) < 0.5 else -1.0
+		o[i] = sq * e[i] * 0.22
 	return o
 
 func _chime() -> PackedFloat32Array:
-	# Maj9 chord-timbre (warm, cushion-like). Open voicing: root + 9th + 3rd(oct up) + 5th(oct up).
-	# A4(440) + B4(494) + C#5(554) + E5(659). Sine layers with amplitude scaling.
+	# Maj9 chord-timbre (warm, cushion-like). BRIGHT voicing: root + 9th + 3rd(oct up) + 5th(oct up).
+	# A5(880) + B5(988) + C#6(1109) + E6(1319). Sine layers with amplitude scaling.
+	# Brighter than v0.11 (was 440-659, now 880-1319) so it sits in a distinct register
+	# from bell/coin/recruit.
 	var n := int(0.5 * SR); var e := _env(n, 0.01, 0.4); var o := PackedFloat32Array(); o.resize(n)
-	var freqs := [440.0, 494.0, 554.0, 659.0]
-	var amps := [0.35, 0.20, 0.15, 0.10]  # root loudest, extensions quieter
+	var freqs := [880.0, 988.0, 1109.0, 1319.0]
+	var amps := [0.35, 0.20, 0.15, 0.10]
 	var phases: Array = [0.0, 0.0, 0.0, 0.0]
 	for i in n:
 		var sample := 0.0
 		for j in freqs.size():
-			# Micro-pitch drift (±2 cents = ±0.12%) to prevent static phase
 			var drift: float = sin(float(i) / SR * 5.0 + j) * 0.0012
 			phases[j] += freqs[j] * (1.0 + drift) / SR
 			sample += sin(phases[j]) * amps[j]
@@ -115,36 +117,43 @@ func _chime() -> PackedFloat32Array:
 	return o
 
 func _thud() -> PackedFloat32Array:
-	# Soft low impact — triangle wave (not square) + minimal noise.
-	# Triangle waves are what NES used for soft percussion — warmer than
-	# square, less buzzy. Notes: A2 (110Hz) descending to E2 (82Hz).
+	# Heavy low impact — LOW triangle wave (80→50Hz) + noise burst at attack.
+	# Triangle wave for soft percussion (NES technique). Lowest frequency of all
+	# SFX — sits in its own sub-bass register, distinct from hit (mid) and
+	# shatter (high). 0.18s with sharp attack noise for the impact transient.
 	var n := int(0.18 * SR); var e := _env(n, 0.002, 0.06); var o := PackedFloat32Array(); o.resize(n)
 	var ph := 0.0
 	for i in n:
-		ph += (110.0 - 28.0*float(i)/n) / SR
-		# Triangle wave (softer than square): 2*abs(2*(ph-floor(ph+0.5)))-1
+		ph += (80.0 - 30.0*float(i)/n) / SR
 		var tri: float = 2.0 * abs(2.0 * fmod(ph, 1.0) - 1.0) - 1.0
-		o[i] = (tri * 0.7 + randf_range(-1,1) * 0.15) * e[i] * 0.5
+		# Noise only in first 30ms (attack transient) then decays
+		var noise_amt: float = 0.5 * exp(-float(i) / (0.03 * SR))
+		o[i] = (tri * 0.7 + randf_range(-1,1) * noise_amt) * e[i] * 0.55
 	return o
 
 func _hit() -> PackedFloat32Array:
-	# Soft impact — sine wave with second harmonic (not square+noise).
-	# Notes: A3 (220Hz) descending to A2 (110Hz). The harmonic at 2x
-	# adds warmth without harshness. Low noise just for texture.
+	# Sharp mid impact — SAW wave (not sine) + noise burst. Saw waves have
+	# a buzzy edge that reads as "hit" / "strike" — distinct from the warm
+	# sine chords and the soft triangle thud. Notes: A3 (220Hz) descending.
+	# Sharp attack (1ms) for the impact transient, noise decays fast.
 	var n := int(0.14 * SR); var e := _env(n, 0.001, 0.04); var o := PackedFloat32Array(); o.resize(n)
 	var ph := 0.0
 	for i in n:
 		var f := 220.0 - 110.0*float(i)/n
 		ph += f / SR
-		var t := float(i)/SR
-		o[i] = (sin(ph) * 0.5 + 0.3 * sin(ph * 2.0) + randf_range(-1,1) * 0.1) * e[i] * 0.4
+		# Sawtooth: 2*(ph - floor(ph+0.5)) — buzzy, reads as impact
+		var saw: float = 2.0 * (ph - floor(ph + 0.5))
+		# Noise transient — strongest at attack, decays in 25ms
+		var noise_amt: float = 0.5 * exp(-float(i) / (0.025 * SR))
+		o[i] = (saw * 0.5 + randf_range(-1,1) * noise_amt) * e[i] * 0.45
 	return o
 
 func _shatter() -> PackedFloat32Array:
-	# Crystal break — descending sine arpeggio (not noise burst).
-	# Notes: C7 (2093Hz) -> G6 (1568Hz) -> E6 (1319Hz) -> A5 (880Hz).
-	# Each note is a short sine with quick decay — reads as crystalline
-	# without the harsh white noise of the old version.
+	# Glass break — HIGH noise burst + descending sine arpeggio. The speder2
+	# version removed noise entirely (pure arpeggio) which made it sound like a
+	# melody, not a break. Restored noise for the glassy crunch, kept the
+	# crystalline arpeggio underneath for sparkle. Highest frequency of all
+	# SFX (2000→880Hz) — distinct register.
 	var n := int(0.35 * SR); var o := PackedFloat32Array(); o.resize(n)
 	var notes := [2093.0, 1568.0, 1319.0, 880.0]
 	var note_len := n / notes.size()
@@ -156,23 +165,24 @@ func _shatter() -> PackedFloat32Array:
 		var local_i := i - note_idx * note_len
 		var e_val: float = exp(-float(local_i) / float(note_len) * 4.0)
 		var t := float(i)/SR
-		o[i] = sin(TAU * f * t) * e_val * 0.25
+		# Noise burst — strongest at the start of each note, decays fast.
+		# Gives the "crunch" of glass breaking, not just a melody.
+		var noise_amt: float = 0.5 * exp(-float(local_i) / (0.02 * SR))
+		o[i] = (sin(TAU * f * t) * 0.25 + randf_range(-1,1) * noise_amt) * e_val * 0.45
 	return o
 
 func _coin() -> PackedFloat32Array:
-	# Maj9 chord-timbre (warm pickup). Two-stage: root+9th, then 3rd+5th up an octave.
-	# Notes: B4(494)+C#5(554) → D#5(622)+F#5(740). Open voicing, amplitude scaled.
-	var n := int(0.22 * SR); var e := _env(n, 0.003, 0.12); var o := PackedFloat32Array(); o.resize(n)
-	var split := n / 2
-	var phases: Array = [0.0, 0.0]
+	# Bright quick two-tone pickup — bouncy sine glissando. Distinct from
+	# chime (sustained chord) and bell (inharmonic sustained) by being SHORT
+	# (0.12s) and a quick two-tone bend (B5→E6, 988→1319Hz). Reads as a
+	# classic coin/pickup blip.
+	var n := int(0.12 * SR); var e := _env(n, 0.002, 0.06); var o := PackedFloat32Array(); o.resize(n)
+	var ph := 0.0
 	for i in n:
-		var freqs: Array = [494.0, 554.0] if i < split else [622.0, 740.0]
-		var amps: Array = [0.35, 0.15] if i < split else [0.30, 0.12]
-		var sample := 0.0
-		for j in 2:
-			phases[j] += freqs[j] / SR
-			sample += sin(phases[j]) * amps[j]
-		o[i] = sample * e[i] * 0.25
+		# Quick bend from 988 to 1319 in first 40ms, then hold
+		var f: float = 988.0 + (1319.0 - 988.0) * minf(1.0, float(i) / (0.04 * SR))
+		ph += f / SR
+		o[i] = sin(ph) * e[i] * 0.28
 	return o
 
 func _select() -> PackedFloat32Array:
@@ -182,54 +192,98 @@ func _select() -> PackedFloat32Array:
 	return o
 
 func _deny() -> PackedFloat32Array:
-	# Soft denial — sine wave (not square) descending from E3 (165Hz) to A2 (110Hz).
-	# Sine reads as a gentle "no" rather than a buzzy error tone.
+	# Error / blocked action — descending SQUARE wave (not sine). Square waves
+	# have a buzzy edge that reads as "wrong" / "no". The speder2 sine version
+	# was too gentle — sounded like a melody, not an error. Two quick descending
+	# notes (E3→A2, 165→110Hz) for a clear "denied" cadence.
 	var n := int(0.2 * SR); var e := _env(n, 0.005, 0.12); var o := PackedFloat32Array(); o.resize(n)
 	var ph := 0.0
+	var split := n / 2
 	for i in n:
-		ph += (165.0 - 55.0*float(i)/n) / SR
-		o[i] = sin(ph) * e[i] * 0.25
+		var f: float = 165.0 if i < split else 110.0
+		ph += f / SR
+		var sq: float = 1.0 if fmod(ph, 1.0) < 0.5 else -1.0
+		o[i] = sq * e[i] * 0.22
 	return o
 
 func _bell() -> PackedFloat32Array:
+	# Sustained bell — INHARMONIC partials (not integer ratios) for a true
+	# bell character. Speder2 used harmonic ratios which made it sound like a
+	# sustained organ chord. Real bells use inharmonic partials (1.0, 2.0, 2.4,
+	# 3.1, 4.2) which create the metallic ring. Notes: C5(523) + inharmonics.
 	var n := int(0.8 * SR); var e := _env(n, 0.01, 0.6); var o := PackedFloat32Array(); o.resize(n)
+	var freqs := [523.0, 1046.0, 1255.0, 1621.0, 2197.0]  # root + inharmonic partials
+	var amps := [0.4, 0.25, 0.18, 0.12, 0.08]  # higher partials quieter
+	var phases: Array = [0.0, 0.0, 0.0, 0.0, 0.0]
 	for i in n:
-		var t := float(i)/SR
-		var s := sin(TAU*523*t) + 0.5*sin(TAU*659*t) + 0.3*sin(TAU*784*t)
-		o[i] = s * e[i] * 0.25
+		var sample := 0.0
+		for j in freqs.size():
+			# Higher partials decay faster (bell character)
+			var partial_decay: float = exp(-float(i) / (0.3 * SR * (1.0 + j * 0.5)))
+			phases[j] += freqs[j] / SR
+			sample += sin(phases[j]) * amps[j] * partial_decay
+		o[i] = sample * e[i] * 0.2
 	return o
 
 func _death() -> PackedFloat32Array:
-	# Spirit death — descending sine arpeggio (not noise).
-	# Notes: A4 (440Hz) -> F4 (349Hz) -> D4 (294Hz) -> A3 (220Hz).
-	# Each note decays quickly — reads as a fading spirit, not a crash.
-	var n := int(0.5 * SR); var o := PackedFloat32Array(); o.resize(n)
-	var notes := [440.0, 349.0, 294.0, 220.0]
-	var note_len := n / notes.size()
+	# Party death — LOW descending drone + sub-bass + noise swell. Distinct
+	# from shatter (high arpeggio) by being LOW (220→55Hz) and DRAMATIC.
+	# Speder2 arpeggio was too melodic — death should feel heavy and final.
+	# Triangle wave for the drone (soft, ominous), sub-bass sine for weight,
+	# noise swell for the impact. 0.6s.
+	var n := int(0.6 * SR); var e := _env(n, 0.01, 0.4); var o := PackedFloat32Array(); o.resize(n)
+	var ph_tri := 0.0
+	var ph_sub := 0.0
 	for i in n:
-		var note_idx := i / note_len
-		if note_idx >= notes.size():
-			note_idx = notes.size() - 1
-		var f: float = notes[note_idx]
-		var local_i := i - note_idx * note_len
-		var e_val: float = exp(-float(local_i) / float(note_len) * 3.0)
-		var t := float(i)/SR
-		o[i] = sin(TAU * f * t) * e_val * 0.3
+		# Triangle drone descending A3→A1 (220→55Hz)
+		ph_tri += (220.0 - 165.0*float(i)/n) / SR
+		var tri: float = 2.0 * abs(2.0 * fmod(ph_tri, 1.0) - 1.0) - 1.0
+		# Sub-bass sine at half the drone freq (weight)
+		ph_sub += (110.0 - 82.0*float(i)/n) / SR
+		var sub: float = sin(ph_sub)
+		# Noise swell — builds in the first 100ms then decays
+		var noise_amt: float = 0.3 * exp(-float(i) / (0.15 * SR))
+		o[i] = (tri * 0.4 + sub * 0.3 + randf_range(-1,1) * noise_amt) * e[i] * 0.45
 	return o
 
 func _repair() -> PackedFloat32Array:
-	var n := int(0.3 * SR); var e := _env(n, 0.01, 0.2); var o := PackedFloat32Array(); o.resize(n)
+	# Mechanical hammering — 4 quick metallic taps, NOT a sustained chord.
+	# Speder2 made this a sine chord which sounded like recruit/bell. Repair
+	# should sound like hammer-on-anvil: sharp attack, mid-high metallic ring,
+	# repeated. Each tap: saw wave 880Hz + noise burst, 60ms, 4 taps at 80ms
+	# intervals. Reads as mechanical work, not music.
+	var n := int(0.32 * SR); var o := PackedFloat32Array(); o.resize(n)
+	var tap_interval := int(0.08 * SR)
+	var tap_len := int(0.06 * SR)
+	var tap_count := 4
 	for i in n:
-		var t := float(i)/SR
-		o[i] = (sin(TAU*660*t) + 0.5*sin(TAU*990*t)) * e[i] * 0.2
+		var tap_idx := i / tap_interval
+		if tap_idx >= tap_count:
+			break
+		var local_i := i - tap_idx * tap_interval
+		if local_i >= tap_len:
+			continue
+		# Sharp attack, fast decay
+		var e_val: float = exp(-float(local_i) / (0.02 * SR))
+		var ph: float = 880.0 * float(local_i) / SR
+		var saw: float = 2.0 * (ph - floor(ph + 0.5))
+		# Noise burst at the very start (hammer strike)
+		var noise_amt: float = 0.6 * exp(-float(local_i) / (0.005 * SR))
+		o[i] = (saw * 0.4 + randf_range(-1,1) * noise_amt) * e_val * 0.3
 	return o
 
 func _recruit() -> PackedFloat32Array:
+	# Welcoming two-tone sine glissando (C5→G5, 523→784Hz). Brighter and
+	# more bouncy than v0.11. Distinct from coin (988→1319) and chime (880+)
+	# by sitting in the 523-784 range with a slow bend. Reads as a friendly
+	# "welcome aboard" cue.
 	var n := int(0.4 * SR); var e := _env(n, 0.01, 0.3); var o := PackedFloat32Array(); o.resize(n)
+	var ph := 0.0
 	for i in n:
-		var t := float(i)/SR
-		var f := 523.0 if i < n / 2 else 784.0
-		o[i] = sin(TAU*f*t) * e[i] * 0.25
+		# Slow bend from 523 to 784 over the full duration
+		var f: float = 523.0 + (784.0 - 523.0) * (float(i) / n)
+		ph += f / SR
+		o[i] = sin(ph) * e[i] * 0.25
 	return o
 
 func _footstep() -> PackedFloat32Array:
