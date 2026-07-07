@@ -78,6 +78,7 @@ var _last_input_dir: Vector2 = Vector2.ZERO
 var _prev_input_dir: Vector2 = Vector2.ZERO
 var _no_input_timer: float = 0.0
 var _pulse_mult: float = 1.0
+var _pulse_flash: float = 0.0  # visual flash when a pulse fires (decays to 0)
 var _dive_mult: float = 1.0
 var _dive_timer: float = 0.0
 var _coast_timer: float = 0.0
@@ -221,7 +222,17 @@ func _detect_pulse(input_dir: Vector2, delta: float) -> void:
 	if just_pressed and _no_input_timer < PULSE_WINDOW:
 		if vel.length() > 5.0:
 			_pulse_mult = PULSE_BOOST
+			# INSTANT velocity surge — don't just raise the target, actually
+			# boost the current velocity. This makes the pulse FEELABLE instead
+			# of just a number that changes the target by 8 px/s.
+			var boost_dir: Vector2 = vel.normalized() if vel.length() > 1.0 else facing
+			vel = boost_dir * get_speed() * PULSE_BOOST
+			# Visual + audio feedback so the player KNOWS the pulse fired
+			_pulse_flash = 1.0
+			Juice.spawn_particles(pos, 4, Palette.GLOW_BLUE, 20.0, 0.2)
+			SFX.play("blip", 1.3, -6.0, 0.02)
 	_pulse_mult = lerp(_pulse_mult, 1.0, 1.0 - exp(-delta * PULSE_BOOST_DECAY))
+	_pulse_flash = max(0, _pulse_flash - delta * 4.0)
 
 # --- Pulse detection for COAST state — extends duration ---
 func _detect_coast_pulse(input_dir: Vector2, delta: float) -> void:
@@ -232,11 +243,18 @@ func _detect_coast_pulse(input_dir: Vector2, delta: float) -> void:
 		_no_input_timer += delta
 	if just_pressed and _no_input_timer < PULSE_WINDOW:
 		if vel.length() > 5.0:
-			# Extend coast duration instead of boosting speed
+			# Extend coast duration + instant speed refresh
 			_coast_timer += COAST_PULSE_EXTEND
-			_pulse_mult = PULSE_BOOST  # small speed boost too
-			Juice.spawn_particles(pos, 3, Palette.GLOW_BLUE, 15.0, 0.15)
+			_pulse_mult = PULSE_BOOST
+			# Refresh velocity to boosted speed (keeps the coast alive)
+			var boost_dir: Vector2 = vel.normalized() if vel.length() > 1.0 else facing
+			vel = boost_dir * get_speed() * PULSE_BOOST
+			# Feedback
+			_pulse_flash = 1.0
+			Juice.spawn_particles(pos, 5, Palette.GLOW_BLUE, 25.0, 0.2)
+			SFX.play("blip", 1.5, -4.0, 0.02)
 	_pulse_mult = lerp(_pulse_mult, 1.0, 1.0 - exp(-delta * PULSE_BOOST_DECAY))
+	_pulse_flash = max(0, _pulse_flash - delta * 4.0)
 
 # --- Shared movement application ---
 func _apply_movement(input_dir: Vector2, target_speed: float, accel: float, decel: float, delta: float) -> void:
@@ -328,6 +346,7 @@ func reset(p_pos: Vector2) -> void:
 	_prev_input_dir = Vector2.ZERO
 	_no_input_timer = 0.0
 	_pulse_mult = 1.0
+	_pulse_flash = 0.0
 	_dive_mult = 1.0
 	_dive_timer = 0.0
 	_coast_timer = 0.0
@@ -359,6 +378,11 @@ static func draw_ghost(canvas: CanvasItem, mv: GhostMovement, is_underground: bo
 		# Coast: faint blue tint (riding spectral momentum)
 		ghost_mod = Color(0.7, 0.8, 1.0, 0.85)
 	canvas.draw_texture_rect(ghost_tex, Rect2(gx - sw / 2, gy - sh / 2 + bob_val, sw, sh), false, ghost_mod)
+	# Pulse flash — brief white-blue glow ring when a pulse fires
+	if mv._pulse_flash > 0:
+		var flash_alpha: float = mv._pulse_flash * 0.6
+		canvas.draw_arc(Vector2(gx, gy + bob_val), 9, 0, TAU, 12, Color(0.8, 0.9, 1.0, flash_alpha), 2)
+		canvas.draw_arc(Vector2(gx, gy + bob_val), 14, 0, TAU, 12, Color(0.6, 0.8, 1.0, flash_alpha * 0.5), 1)
 	# Underground border ring (salvage only)
 	if is_underground and mv.state == State.PHASE:
 		canvas.draw_arc(Vector2(gx, gy + bob_val), 10, 0, TAU, 16, Color(0.1, 0.15, 0.3, 0.5), 2)
