@@ -210,7 +210,10 @@ func _update_dive(input_dir: Vector2, delta: float) -> void:
 		input_dir = input_dir.normalized()
 		facing = input_dir
 		_last_input_dir = input_dir
-		# During dive, steer toward input but maintain burst speed
+		# During dive, steer toward input but maintain burst speed.
+		# Reflect on direction change so the dive doesn't stall.
+		if vel.length() > 10.0 and vel.normalized().dot(input_dir) < 0.0:
+			vel = input_dir * vel.length() * 0.8
 		vel = vel.move_toward(input_dir * target_speed, ACCEL * 1.5 * delta)
 	else:
 		# No input — keep going in current direction (burst momentum)
@@ -233,6 +236,9 @@ func _update_coast(input_dir: Vector2, delta: float) -> void:
 		input_dir = input_dir.normalized()
 		facing = input_dir
 		_last_input_dir = input_dir
+		# Reflect on direction change so coast doesn't stall
+		if vel.length() > 10.0 and vel.normalized().dot(input_dir) < 0.0:
+			vel = input_dir * vel.length() * 0.75
 		vel = vel.move_toward(input_dir * target_speed, ACCEL * 0.8 * delta)
 	else:
 		vel = vel.move_toward(Vector2.ZERO, ACCEL * COAST_DECEL_MULT * delta)
@@ -250,6 +256,21 @@ func _apply_movement(input_dir: Vector2, target_speed: float, accel: float, dece
 		input_dir = input_dir.normalized()
 		facing = input_dir
 		_last_input_dir = input_dir
+		# Direction change check: if the new input is >90° from current
+		# velocity, don't gradually decelerate-to-zero-then-accelerate
+		# (that's the "slowdown on direction change" the player felt).
+		# Instead, REFLECT the velocity — keep the speed, flip the direction.
+		# This is how fast-paced games handle direction changes: you keep
+		# your momentum, you just redirect it. The accel then smooths the
+		# remaining difference.
+		if vel.length() > 10.0:
+			var vel_dir: Vector2 = vel.normalized()
+			var dot: float = vel_dir.dot(input_dir)
+			if dot < 0.0:
+				# Opposite direction — reflect velocity to new direction
+				# at current speed (minus a small penalty so it's not free)
+				var current_speed: float = vel.length()
+				vel = input_dir * current_speed * 0.85  # 85% speed retained on reverse
 		vel = vel.move_toward(input_dir * target_speed, accel * delta)
 	else:
 		vel = vel.move_toward(Vector2.ZERO, decel * delta)
