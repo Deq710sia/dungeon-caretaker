@@ -101,27 +101,48 @@ func _chime() -> PackedFloat32Array:
 	return o
 
 func _thud() -> PackedFloat32Array:
-	var n := int(0.18 * SR); var e := _env(n, 0.002, 0.05); var o := PackedFloat32Array(); o.resize(n)
+	# Soft low impact — triangle wave (not square) + minimal noise.
+	# Triangle waves are what NES used for soft percussion — warmer than
+	# square, less buzzy. Notes: A2 (110Hz) descending to E2 (82Hz).
+	var n := int(0.18 * SR); var e := _env(n, 0.002, 0.06); var o := PackedFloat32Array(); o.resize(n)
 	var ph := 0.0
 	for i in n:
-		ph += (120.0 - 60.0*float(i)/n) / SR
-		o[i] = (sin(ph)*0.7 + randf_range(-1,1)*0.4) * e[i] * 0.6
+		ph += (110.0 - 28.0*float(i)/n) / SR
+		# Triangle wave (softer than square): 2*abs(2*(ph-floor(ph+0.5)))-1
+		var tri: float = 2.0 * abs(2.0 * fmod(ph, 1.0) - 1.0) - 1.0
+		o[i] = (tri * 0.7 + randf_range(-1,1) * 0.15) * e[i] * 0.5
 	return o
 
 func _hit() -> PackedFloat32Array:
-	var n := int(0.14 * SR); var e := _env(n, 0.001, 0.03); var o := PackedFloat32Array(); o.resize(n)
+	# Soft impact — sine wave with second harmonic (not square+noise).
+	# Notes: A3 (220Hz) descending to A2 (110Hz). The harmonic at 2x
+	# adds warmth without harshness. Low noise just for texture.
+	var n := int(0.14 * SR); var e := _env(n, 0.001, 0.04); var o := PackedFloat32Array(); o.resize(n)
 	var ph := 0.0
 	for i in n:
-		ph += (440.0 - 220.0*float(i)/n) / SR
-		o[i] = ((1.0 if fmod(ph,1.0)<0.5 else -1.0)*0.5 + randf_range(-1,1)*0.5) * e[i] * 0.5
+		var f := 220.0 - 110.0*float(i)/n
+		ph += f / SR
+		var t := float(i)/SR
+		o[i] = (sin(ph) * 0.5 + 0.3 * sin(ph * 2.0) + randf_range(-1,1) * 0.1) * e[i] * 0.4
 	return o
 
 func _shatter() -> PackedFloat32Array:
-	var n := int(0.45 * SR); var e := _env(n, 0.002, 0.25); var o := PackedFloat32Array(); o.resize(n)
-	var ph := 0.0
+	# Crystal break — descending sine arpeggio (not noise burst).
+	# Notes: C7 (2093Hz) -> G6 (1568Hz) -> E6 (1319Hz) -> A5 (880Hz).
+	# Each note is a short sine with quick decay — reads as crystalline
+	# without the harsh white noise of the old version.
+	var n := int(0.35 * SR); var o := PackedFloat32Array(); o.resize(n)
+	var notes := [2093.0, 1568.0, 1319.0, 880.0]
+	var note_len := n / notes.size()
 	for i in n:
-		ph += (2000.0 - 1700.0*float(i)/n) / SR
-		o[i] = (sin(ph)*0.3 + randf_range(-1,1)*0.7) * e[i] * 0.5
+		var note_idx := i / note_len
+		if note_idx >= notes.size():
+			note_idx = notes.size() - 1
+		var f: float = notes[note_idx]
+		var local_i := i - note_idx * note_len
+		var e_val: float = exp(-float(local_i) / float(note_len) * 4.0)
+		var t := float(i)/SR
+		o[i] = sin(TAU * f * t) * e_val * 0.25
 	return o
 
 func _coin() -> PackedFloat32Array:
@@ -140,11 +161,13 @@ func _select() -> PackedFloat32Array:
 	return o
 
 func _deny() -> PackedFloat32Array:
-	var n := int(0.2 * SR); var e := _env(n, 0.005, 0.1); var o := PackedFloat32Array(); o.resize(n)
+	# Soft denial — sine wave (not square) descending from E3 (165Hz) to A2 (110Hz).
+	# Sine reads as a gentle "no" rather than a buzzy error tone.
+	var n := int(0.2 * SR); var e := _env(n, 0.005, 0.12); var o := PackedFloat32Array(); o.resize(n)
 	var ph := 0.0
 	for i in n:
-		ph += 140.0 / SR
-		o[i] = (1.0 if fmod(ph,1.0) < 0.5 else -1.0) * e[i] * 0.3
+		ph += (165.0 - 55.0*float(i)/n) / SR
+		o[i] = sin(ph) * e[i] * 0.25
 	return o
 
 func _bell() -> PackedFloat32Array:
@@ -156,11 +179,21 @@ func _bell() -> PackedFloat32Array:
 	return o
 
 func _death() -> PackedFloat32Array:
-	var n := int(0.6 * SR); var e := _env(n, 0.01, 0.4); var o := PackedFloat32Array(); o.resize(n)
-	var ph := 0.0
+	# Spirit death — descending sine arpeggio (not noise).
+	# Notes: A4 (440Hz) -> F4 (349Hz) -> D4 (294Hz) -> A3 (220Hz).
+	# Each note decays quickly — reads as a fading spirit, not a crash.
+	var n := int(0.5 * SR); var o := PackedFloat32Array(); o.resize(n)
+	var notes := [440.0, 349.0, 294.0, 220.0]
+	var note_len := n / notes.size()
 	for i in n:
-		ph += (400.0 - 350.0*float(i)/n) / SR
-		o[i] = (sin(ph)*0.5 + randf_range(-1,1)*0.3) * e[i] * 0.4
+		var note_idx := i / note_len
+		if note_idx >= notes.size():
+			note_idx = notes.size() - 1
+		var f: float = notes[note_idx]
+		var local_i := i - note_idx * note_len
+		var e_val: float = exp(-float(local_i) / float(note_len) * 3.0)
+		var t := float(i)/SR
+		o[i] = sin(TAU * f * t) * e_val * 0.3
 	return o
 
 func _repair() -> PackedFloat32Array:

@@ -4,6 +4,101 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.11 — Momentum Blend, Chain Fix, SFX Overhaul (2026-07-07)
+
+### Momentum Blend Replaces Hard Reflect
+**Changed:** Direction changes now use a progressive velocity blend (lerp) instead of the hard 85% reflect that felt too aggressive. The blend rate is `exp(-delta * 12.0) * 0.6` — fast but not instant. Keeps ~60% of speed through a reversal, then accel handles the rest. No harsh snap, no floaty drift. Applied to ALL 4 states (FLOAT, PHASE, DIVE, COAST — PHASE was previously missing direction-change handling entirely).
+
+### Chain System Fixed
+**Changed:** Phasing from COAST now halves the cooldown (PHASE_CD * 0.5). Previously, the cooldown blocked the chain after the first cycle — phase→dive→coast→phase was impossible because `_start_phase()` set the full 4s cooldown. Now coasting into phase = 2s cooldown, and banked time reduces it further. The chain is: phase → cancel → dive → coast → phase (half cd) → cancel → dive → coast → phase (half cd) → ... Each cycle costs a shard but the cooldown no longer blocks it.
+
+### SFX Overhaul — Softer, More Melodic
+**Changed:** Replaced all harsh square-wave + noise SFX with sine/triangle waves and harmonic overtones, following NES/GBA retro sound design principles:
+
+- **thud**: Square wave → triangle wave (110→82Hz). NES used triangle for soft percussion.
+- **hit**: Square + 50% noise → sine + 2nd harmonic (220→110Hz). Harmonic adds warmth.
+- **shatter**: High-freq sine + 70% noise → descending sine arpeggio (C7→G6→E6→A5). Crystalline, not piercing.
+- **deny**: Square wave at 140Hz → sine wave descending (165→110Hz). Gentle "no" not buzzy error.
+- **death**: Sine + 30% noise → descending sine arpeggio (A4→F4→D4→A3). Fading spirit, not crash.
+
+Key principle: square waves and white noise are inherently harsh. Sine waves are pure and warm. Triangle waves are soft (used for NES percussion). Harmonic overtones (2x, 3x frequency) add richness without harshness. Arpeggios create melodic interest that single sustained notes can't.
+
+---
+
+## v0.10.5 — Camera Feel, Coast Cancel, Reverse QTE, Pulse Subtlety, Exit Fix (2026-07-07)
+
+### Camera Feel
+**Changed:** Look-ahead reduced from 24px to 8px (camera was ahead of movement, making player feel slow). Added speed-based micro-shake — screen vibrates slightly above base speed for "false sense of speed" (racing game technique). Smoothing rates increased: FLOAT 6→8, COAST 9→11, DIVE 12→14.
+
+### Coast Cancelable
+**Changed:** Holding any direction for >0.15s exits coast back to FLOAT. No more awkward slidy feeling — just hold a direction to regain control. Quick taps still work for pulse-extends.
+
+### Reverse QTE Shortened
+**Changed:** 2.5s → 1.5s. Still tense, less tedious.
+
+### Damage/Death SFX Adjusted
+**Changed:** Replaced layered "hit"+"shatter" (grating) with "thud" + low "deny". Death uses "death" + deep "deny". (Further improved in v0.11.)
+
+### Pulse Feedback Made Subtle
+**Changed:** Particles 5→3, flash 1.0→0.6, SFX pitch 1.3→1.0, volume -6→-10dB. Still noticeable but not distracting.
+
+### Exit Trigger Fixed
+**Changed:** Radius 12→8px (less accidental triggering). Added green particles + chime SFX on exit touch. Transition delay 0.5s→0.2s (snappier).
+
+---
+
+## v0.10.4 — Direction Change Reflect + Pulse on Double-Click (2026-07-07)
+
+### Direction Change Reflect (later replaced by blend in v0.11)
+**Changed:** Velocity reflection on direction changes >90°. When pressing opposite direction, velocity instantly flipped at 75-85% of current speed. Eliminated the "slowdown on direction change" caused by move_toward having to decelerate to zero first.
+
+### Pulse Moved to Double-Click
+**Changed:** Pulse trigger moved from WASD-tap (jarring, conflicted with normal movement) to WASD + double left-click. handle_click() on GhostMovement detects double-clicks within 0.3s window.
+
+### Salvage Camera X-Axis Smoothing
+**Changed:** X axis now smoothed (was instant — caused jarring left/right snaps). Both axes use lerpf with exp smoothing. Smoothing scales with movement state.
+
+---
+
+## v0.10.3 — Pulse Instant Velocity Surge + Feedback (2026-07-07)
+
+### Pulse Was Invisible — Now Instant Surge
+**Changed:** Pulse only raised TARGET speed by 15% — unfeelable. Fixed: pulse now sets velocity DIRECTLY to boosted speed (instant surge). Added blue particle burst, "blip" SFX, white-blue glow ring around ghost.
+
+---
+
+## v0.10.2 — State-Based Movement System (Phantom Forces Inspired) (2026-07-07)
+
+### 4-State Momentum System
+**Changed:** Replaced flat movement with FLOAT → PHASE → DIVE → COAST state machine. DIVE = momentum burst on phase cancel (scales with remaining energy). COAST = low deceleration, pulse-extends duration. Weapon weight halved during coast.
+
+---
+
+## v0.10.1 — Momentum Carrying + Sidestep Removed (2026-07-07)
+
+### Sidestep Removed
+**Changed:** Sidestep was jarring — fired on every direction tap, conflicted with normal movement. Removed entirely.
+
+### Momentum Carrying Added
+**Changed:** Release a direction, re-press within 0.35s for 15% speed boost. (Later replaced by state-based system + double-click pulse.)
+
+---
+
+## v0.10 — Micro-Rewards: Weapon Weight, Sidestep, Pickup Feedback (2026-07-07)
+
+### Weapon Weight System
+**Changed:** Each carried weapon reduces speed by 12%. Tradeoff: grab everything (slow) or be selective (fast).
+
+### Sidestep (later removed)
+**Changed:** Tap direction key for 0.2s micro-burst at 2x speed. Separate 1.5s cooldown from phase verb. (Removed in v0.10.1 — too jarring.)
+
+### Salvage Pickup Micro-Reward
+**Changed:** Bigger squash, longer slowmo, more particles, upward blue burst. Sets carry_count = 1 for immediate weight penalty.
+
+---
+
+## v0.10 — Priority 2 Complete: Push-Your-Luck, Corpse Identity, 4th QTE (2026-07-07)
+
 ## v0.10 — Priority 2 Complete: Push-Your-Luck, Corpse Identity, 4th QTE (2026-07-07)
 
 ### Push-Your-Luck Salvage

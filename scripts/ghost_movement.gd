@@ -190,6 +190,10 @@ func _update_phase(input_dir: Vector2, delta: float) -> void:
 		input_dir = input_dir.normalized()
 		facing = input_dir
 		_last_input_dir = input_dir
+		# Momentum blend on direction change (same as FLOAT)
+		if vel.length() > 10.0 and vel.normalized().dot(input_dir) < 0.0:
+			var blend_rate: float = 1.0 - exp(-delta * 12.0)
+			vel = vel.lerp(input_dir * vel.length(), blend_rate * 0.5)
 		vel = vel.move_toward(input_dir * target_speed, ACCEL * delta)
 	else:
 		# During phase, keep moving in facing direction even without input
@@ -211,10 +215,10 @@ func _update_dive(input_dir: Vector2, delta: float) -> void:
 		input_dir = input_dir.normalized()
 		facing = input_dir
 		_last_input_dir = input_dir
-		# During dive, steer toward input but maintain burst speed.
-		# Reflect on direction change so the dive doesn't stall.
+		# Momentum blend on direction change (same as FLOAT)
 		if vel.length() > 10.0 and vel.normalized().dot(input_dir) < 0.0:
-			vel = input_dir * vel.length() * 0.8
+			var blend_rate: float = 1.0 - exp(-delta * 12.0)
+			vel = vel.lerp(input_dir * vel.length(), blend_rate * 0.5)
 		vel = vel.move_toward(input_dir * target_speed, ACCEL * 1.5 * delta)
 	else:
 		# No input — keep going in current direction (burst momentum)
@@ -243,9 +247,10 @@ func _update_coast(input_dir: Vector2, delta: float) -> void:
 		input_dir = input_dir.normalized()
 		facing = input_dir
 		_last_input_dir = input_dir
-		# Reflect on direction change so coast doesn't stall
+		# Momentum blend on direction change (same as FLOAT)
 		if vel.length() > 10.0 and vel.normalized().dot(input_dir) < 0.0:
-			vel = input_dir * vel.length() * 0.75
+			var blend_rate: float = 1.0 - exp(-delta * 12.0)
+			vel = vel.lerp(input_dir * vel.length(), blend_rate * 0.4)
 		vel = vel.move_toward(input_dir * target_speed, ACCEL * 0.8 * delta)
 	else:
 		vel = vel.move_toward(Vector2.ZERO, ACCEL * COAST_DECEL_MULT * delta)
@@ -260,26 +265,29 @@ func _update_coast(input_dir: Vector2, delta: float) -> void:
 		state = State.FLOAT
 
 # --- Shared movement application ---
+## Blend-based direction change: instead of hard reflect (which was too
+## aggressive) or pure move_toward (which stalls on reversal), this
+## progressively redirects velocity toward the new direction. The blend
+## rate scales with how opposite the new direction is — 90° changes are
+## gentle, 180° reversals are faster but not instant. This keeps the
+## movement responsive without the harsh snap or the floaty drift.
 func _apply_movement(input_dir: Vector2, target_speed: float, accel: float, decel: float, delta: float) -> void:
 	if input_dir != Vector2.ZERO:
 		input_dir = input_dir.normalized()
 		facing = input_dir
 		_last_input_dir = input_dir
-		# Direction change check: if the new input is >90° from current
-		# velocity, don't gradually decelerate-to-zero-then-accelerate
-		# (that's the "slowdown on direction change" the player felt).
-		# Instead, REFLECT the velocity — keep the speed, flip the direction.
-		# This is how fast-paced games handle direction changes: you keep
-		# your momentum, you just redirect it. The accel then smooths the
-		# remaining difference.
+		# Momentum blend: redirect velocity toward new direction at a rate
+		# proportional to how much it needs to change. The lerp factor is
+		# higher for big direction changes (>90°) so the ghost responds
+		# quickly, but it's a BLEND not a snap — no harsh reflect.
 		if vel.length() > 10.0:
-			var vel_dir: Vector2 = vel.normalized()
-			var dot: float = vel_dir.dot(input_dir)
+			var dot: float = vel.normalized().dot(input_dir)
 			if dot < 0.0:
-				# Opposite direction — reflect velocity to new direction
-				# at current speed (minus a small penalty so it's not free)
-				var current_speed: float = vel.length()
-				vel = input_dir * current_speed * 0.85  # 85% speed retained on reverse
+				# Opposite-ish direction: blend velocity toward new direction
+				# at 40% per frame (fast but not instant). Keeps ~60% of
+				# speed through the turn, then accel handles the rest.
+				var blend_rate: float = 1.0 - exp(-delta * 12.0)
+				vel = vel.lerp(input_dir * vel.length(), blend_rate * 0.6)
 		vel = vel.move_toward(input_dir * target_speed, accel * delta)
 	else:
 		vel = vel.move_toward(Vector2.ZERO, decel * delta)
@@ -316,31 +324,35 @@ func _enter_coast() -> void:
 func try_activate_phase() -> bool:
 	if state == State.PHASE:
 		# Manual cancel — convert remaining phase energy into a DIVE.
-		# The more time was left, the bigger the burst (zingus principle:
-		# you're converting stored energy into raw momentum).
 		var remaining_pct: float = phase_active / PHASE_DURATION
 		phase_bank = minf(PHASE_BANK_MAX, phase_bank + phase_active)
 		phase_active = 0.0
 		_enter_dive(remaining_pct)
 		return true
 	if state == State.COAST:
-		# Can phase out of coast — converts coast momentum into phase
-		# (keeps the chain going)
-		_start_phase()
+		# Can phase out of coast — the chain continues. Coast momentum
+		# converts into phase (the whole point of the chain system).
+		# Cooldown is HALVED when phasing from coast (reward for chaining).
+		_start_phase(true)
 		return true
 	if phase_cd > 0:
 		return false
 	if GameState.soul_shards < PHASE_COST:
 		SFX.play("deny")
 		return false
-	_start_phase()
+	_start_phase(false)
 	return true
 
-func _start_phase() -> void:
+func _start_phase(from_coast: bool = false) -> void:
 	GameState.soul_shards -= PHASE_COST
 	GameState.shards_changed.emit(GameState.soul_shards)
 	phase_active = PHASE_DURATION
-	phase_cd = max(0.0, PHASE_CD - phase_bank)
+	# Cooldown: full from FLOAT, halved from COAST (chain reward),
+	# further reduced by banked time.
+	var base_cd: float = PHASE_CD
+	if from_coast:
+		base_cd *= 0.5  # coasting into phase = half cooldown
+	phase_cd = max(0.0, base_cd - phase_bank)
 	phase_bank = 0.0
 	state = State.PHASE
 	Juice.trail_phasing = true
