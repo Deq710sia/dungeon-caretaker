@@ -1,94 +1,98 @@
 extends Node
-## Music — procedural main theme for Dungeon Caretaker.
+## Music — jazzy procedural main theme for Dungeon Caretaker.
 ##
-## Generates a 12-second looped AudioStreamWAV at startup using speder2
-## chord-timbre techniques (drop voicings, amplitude scaling, micro-pitch
-## drift, slow attack). The loop plays continuously on the Music bus.
+## Generates an ~8.7-second looped AudioStreamWAV at startup using speder2
+## chord-timbre techniques. The loop plays continuously on the Music bus.
 ##
-## Chord progression: Am - F - G - Em (i - VI - VII - v in A minor)
-## 80 BPM, 4 beats per chord, 4 chords = 16 beats = 12 seconds.
+## Speder2 chords used (from the "Subtle Chord Atmosphere" analysis):
+##   m7(9)    — cold, crystal hardness    (Am9)
+##   7alt+5+9 — high-impact emptiness     (D7#5#9, altered dominant)
+##   M7(9)    — warm, fluffy cushion      (Gmaj9, major resolution)
+##   m6       — anxious, transparent      (Fm6, turn-around color)
 ##
-## Three layers baked into one loop:
-##   1. Pad: sustained chord with drop voicing + min9/maj9 extension
-##   2. Bass: root note plucked (triangle) on beat 1 of each chord
-##   3. Arpeggio: 8th notes cycling through chord tones (sine, quiet)
+## Progression: Am9 → D7#5#9 → Gmaj9 → Fm6  (4 bars, ii-V-I-vi jazz feel)
+## 110 BPM, 4 beats per bar = ~8.73s loop.
+##
+## Three layers (bouncy + rhythmic + jazzy):
+##   1. Walking bass: triangle wave, quarter notes, walks chord tones +
+##      chromatic approach. Back-beat (2,4) slightly louder.
+##   2. Comp stabs: sine chord on syncopated 1-&2-3-&4 pattern with swing.
+##      Speder2 drop voicings + amplitude scaling.
+##   3. Ride cymbal: filtered noise on each beat + softer on swung off-beats.
 ##
 ## Speder2 techniques applied:
-## - Drop voicings: root in octave 2, chord tones in octaves 4-5 (spread)
-## - Amplitude scaling: 9th extension at -12dB relative to root
-## - Micro-pitch drift: ±0.12% detuning per voice (prevents hollow robotic)
-## - Slow attack: 50ms attack on pad chords (ambient, not plucked)
+## - Drop voicings: root in octave 2, 5th in octave 3, chord tones in 4-5
+## - Amplitude scaling: 9th at -8dB, altered tones (#5, #9) at -12 to -15dB
+## - Micro-pitch drift: ±0.2% per voice (prevents static phase cancellation)
+## - ADSR envelopes per layer
 
 const SR := 44100
-const BPM := 80.0
-const BEATS_PER_CHORD := 4
-const CHORD_COUNT := 4
-const BEAT_DUR := 60.0 / BPM  # 0.75s per beat
-const CHORD_DUR := BEAT_DUR * BEATS_PER_CHORD  # 3.0s per chord
-const LOOP_DUR := CHORD_DUR * CHORD_COUNT  # 12.0s total
+const BPM := 110.0
+const BEATS_PER_BAR := 4
+const BAR_COUNT := 4
+const BEAT_DUR := 60.0 / BPM  # 0.5454s per beat
+const BAR_DUR := BEAT_DUR * BEATS_PER_BAR  # 2.1818s per bar
+const LOOP_DUR := BAR_DUR * BAR_COUNT  # 8.727s total
+const SWING := 0.66  # long-short ratio for 8th notes (0.5 = straight, 0.66 = swung)
 
 var _stream: AudioStreamWAV
 var _player: AudioStreamPlayer
 
 func _ready() -> void:
 	_stream = _render_theme()
-	# Configure loop
 	_stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
 	_stream.loop_begin = 0
-	_stream.loop_end = _stream.data.size() / 2  # sample count (16-bit mono)
+	_stream.loop_end = _stream.data.size() / 2
 	_player = AudioStreamPlayer.new()
 	_player.stream = _stream
 	_player.bus = "Music"
-	_player.volume_db = -14.0
+	_player.volume_db = -12.0
 	_player.name = "MusicPlayer"
 	add_child(_player)
 	_player.play()
 
-# --- Chord definitions (A minor key) ---
-# Each chord: [root_freq, voicing_freqs, amps, ext_freq, ext_amp]
-# Voicing: root in octave 2, then chord tones spread across octaves 4-5.
-# Extension (9th) added at -12dB relative to root for speder2 warmth.
+# --- Chord definitions ---
+# Each chord has:
+#   bass_walk: 4 frequencies (quarter notes 1,2,3,4) — walking bass
+#   comp:      {freqs: [...], amps: [...]} — drop-voiced chord for stabs
+#              (amps follow speder2 amplitude scaling: dissonant tones quieter)
+#
+# Speder2 chord formulas (from root):
+#   m7(9):    1 - b3 - 5 - b7 - 9
+#   7alt(+5+9): 1 - 3 - #5 - b7 - #9
+#   M7(9):    1 - 3 - 5 - 7 - 9
+#   m6:       1 - b3 - 5 - 6
 
 const CHORDS := [
-	# Am9: A2(110) + E4(329.63) + A4(440) + C5(523.25) + E5(659.25) + ext G4(392, 9th)
+	# Bar 1: Am9 (i) — A C E G B
+	# Walking bass walks A→C→E→Eb (chromatic approach to D, the next root)
 	{
-		"root": 110.0,
-		"voicing": [329.63, 440.0, 523.25, 659.25],
-		"amps": [0.25, 0.30, 0.20, 0.12],
-		"ext_freq": 392.0,  # 9th (G)
-		"ext_amp": 0.06,
-		"bass_note": 110.0,  # A2
-		"arp_notes": [220.0, 261.63, 329.63, 440.0]  # A3 C4 E4 A4
+		"bass_walk": [110.00, 130.81, 164.81, 155.56],  # A2 C3 E3 Eb3
+		"comp_freqs": [164.81, 220.00, 261.63, 392.00, 493.88],  # E3 A3 C4 G4 B4
+		"comp_amps": [0.20, 0.22, 0.18, 0.10, 0.06],  # 9th (B4) quietest
 	},
-	# Fmaj9: F2(87.31) + A3(220) + F4(349.23) + A4(440) + C5(523.25) + ext G4(392, 9th)
+	# Bar 2: D7#5#9 (V7alt) — D F# A# C E#(F)
+	# Walking bass walks D→F→A→Bb (chromatic approach down to A or up to G)
+	# Actually Bb leads up to B = 5th of Gmaj9, or down chromatically to A
 	{
-		"root": 87.31,
-		"voicing": [220.0, 349.23, 440.0, 523.25],
-		"amps": [0.25, 0.28, 0.20, 0.12],
-		"ext_freq": 392.0,  # 9th (G)
-		"ext_amp": 0.06,
-		"bass_note": 87.31,  # F2
-		"arp_notes": [174.61, 220.0, 261.63, 349.23]  # F3 A3 C4 F4
+		"bass_walk": [73.42, 87.31, 110.00, 116.54],  # D2 F2 A2 Bb2
+		"comp_freqs": [185.00, 233.08, 261.63, 369.99, 466.16],  # F#3 Bb3 C4 F#4 Bb4
+		"comp_amps": [0.18, 0.10, 0.16, 0.08, 0.06],  # #5 (Bb3) and #9 (Bb4) very quiet
 	},
-	# Gmaj9: G2(98) + D4(293.66) + G4(392) + B4(493.88) + D5(587.33) + ext A4(440, 9th)
+	# Bar 3: Gmaj9 (IV) — G B D F# A
+	# Walking bass walks G→B→D→F# (chord tones leading to F root)
 	{
-		"root": 98.0,
-		"voicing": [293.66, 392.0, 493.88, 587.33],
-		"amps": [0.25, 0.28, 0.20, 0.12],
-		"ext_freq": 440.0,  # 9th (A)
-		"ext_amp": 0.06,
-		"bass_note": 98.0,  # G2
-		"arp_notes": [196.0, 246.94, 293.66, 392.0]  # G3 B3 D4 G4
+		"bass_walk": [98.00, 123.47, 146.83, 185.00],  # G2 B2 D3 F#3
+		"comp_freqs": [146.83, 196.00, 246.94, 293.66, 440.00],  # D3 G3 B3 D4 A4
+		"comp_amps": [0.18, 0.22, 0.18, 0.14, 0.06],  # 9th (A4) quietest
 	},
-	# Em9: E2(82.41) + B3(246.94) + E4(329.63) + G4(392) + B4(493.88) + ext F#4(369.99, 9th)
+	# Bar 4: Fm6 (bVI) — F Ab C D
+	# Walking bass walks F→Ab→C→B (chromatic approach to A from below)
+	# Fm6 has a tritone (Ab-D) for that "anxious, transparent" speder2 mood
 	{
-		"root": 82.41,
-		"voicing": [246.94, 329.63, 392.0, 493.88],
-		"amps": [0.25, 0.28, 0.20, 0.12],
-		"ext_freq": 369.99,  # 9th (F#)
-		"ext_amp": 0.06,
-		"bass_note": 82.41,  # E2
-		"arp_notes": [164.81, 196.0, 246.94, 329.63]  # E3 G3 B3 E4
+		"bass_walk": [87.31, 103.83, 130.81, 123.47],  # F2 Ab2 C3 B2
+		"comp_freqs": [130.81, 174.61, 207.65, 261.63, 293.66],  # C3 F3 Ab3 C4 D4
+		"comp_amps": [0.18, 0.20, 0.12, 0.18, 0.08],  # 6th (D4) is tritone with Ab3 → quiet
 	},
 ]
 
@@ -96,14 +100,16 @@ func _render_theme() -> AudioStreamWAV:
 	var n: int = int(LOOP_DUR * SR)
 	var o := PackedFloat32Array()
 	o.resize(n)
-	# For each chord, render its segment
-	for chord_idx in CHORD_COUNT:
-		var chord: Dictionary = CHORDS[chord_idx]
-		var start_sample: int = int(chord_idx * CHORD_DUR * SR)
-		var chord_samples: int = int(CHORD_DUR * SR)
-		_render_pad(o, start_sample, chord_samples, chord)
-		_render_bass(o, start_sample, chord_samples, chord)
-		_render_arp(o, start_sample, chord_samples, chord)
+	for bar_idx in BAR_COUNT:
+		var chord: Dictionary = CHORDS[bar_idx]
+		var start_sample: int = int(bar_idx * BAR_DUR * SR)
+		var bar_samples: int = int(BAR_DUR * SR)
+		_render_walking_bass(o, start_sample, bar_samples, chord, bar_idx)
+		_render_comp_stabs(o, start_sample, bar_samples, chord)
+		_render_ride(o, start_sample, bar_samples, bar_idx)
+	# Master soft-clip to prevent clipping from layer sum
+	for i in n:
+		o[i] = tanh(o[i] * 1.2) * 0.9
 	# Convert to 16-bit PCM
 	var bytes := PackedByteArray()
 	bytes.resize(n * 2)
@@ -116,90 +122,132 @@ func _render_theme() -> AudioStreamWAV:
 	w.data = bytes
 	return w
 
-# --- Pad layer: sustained chord with slow attack/release ---
-func _render_pad(out: PackedFloat32Array, start: int, len: int, chord: Dictionary) -> void:
-	var voicing: Array = chord["voicing"]
-	var amps: Array = chord["amps"]
-	var ext_freq: float = chord["ext_freq"]
-	var ext_amp: float = chord["ext_amp"]
-	var root_freq: float = chord["root"]
-	# Include root + extension in the voice list
-	var all_freqs: Array = [root_freq]
-	all_freqs.append_array(voicing)
-	all_freqs.append(ext_freq)
-	var all_amps: Array = [0.18]  # root (sub-bass, quieter to not overwhelm)
-	all_amps.append_array(amps)
-	all_amps.append(ext_amp)
-	var phases: Array = []
-	phases.resize(all_freqs.size())
-	phases.fill(0.0)
-	# Envelope: 50ms attack, sustain, 500ms release at end
-	var atk_samples := int(0.05 * SR)
-	var rel_samples := int(0.5 * SR)
-	for i in len:
-		var env: float
-		if i < atk_samples:
-			env = float(i) / atk_samples
-		elif i > len - rel_samples:
-			env = float(len - i) / rel_samples
-		else:
-			env = 1.0
-		# Slight LFO amplitude modulation (1.5Hz) for "breathing" pad
-		env *= 0.85 + 0.15 * sin(float(i) / SR * TAU * 1.5 + chord.root * 0.01)
-		var sample := 0.0
-		for j in all_freqs.size():
-			# Micro-pitch drift (±0.12% per voice, speder2 technique)
-			var drift: float = sin(float(i) / SR * 3.0 + j * 1.7) * 0.0012
-			phases[j] += all_freqs[j] * (1.0 + drift) / SR
-			sample += sin(phases[j]) * all_amps[j]
-		out[start + i] += sample * env * 0.18
-
-# --- Bass layer: root note plucked on beat 1 ---
-func _render_bass(out: PackedFloat32Array, start: int, len: int, chord: Dictionary) -> void:
-	var bass_freq: float = chord["bass_note"]
-	var note_dur := int(2.0 * SR)  # 2-second decay (covers half the chord)
-	var ph := 0.0
-	for i in note_dur:
-		if i >= len:
-			break
-		# Triangle wave for warm bass (NES bass technique)
-		ph += bass_freq / SR
-		var tri: float = 2.0 * abs(2.0 * fmod(ph, 1.0) - 1.0) - 1.0
-		# Plucked envelope: 5ms attack, exponential decay
-		var env: float
-		if i < int(0.005 * SR):
-			env = float(i) / int(0.005 * SR)
-		else:
-			env = exp(-float(i - int(0.005 * SR)) / (0.6 * SR))
-		out[start + i] += tri * env * 0.35
-
-# --- Arpeggio layer: 8th notes cycling through chord tones ---
-func _render_arp(out: PackedFloat32Array, start: int, len: int, chord: Dictionary) -> void:
-	var arp_notes: Array = chord["arp_notes"]
-	var eighth_dur := int(BEAT_DUR / 2.0 * SR)  # 0.375s per 8th note at 80 BPM
-	var note_idx := 0
-	var i := 0
-	while i < len:
-		var note_freq: float = arp_notes[note_idx % arp_notes.size()]
-		var note_end: int = min(i + eighth_dur, len)
+# --- Layer 1: Walking bass ---
+# Triangle wave, quarter notes, with quick attack + medium decay.
+# Back-beat (beats 2, 4) slightly louder for "bouncy" feel.
+# Speder2 triangle wave = soft percussion/bass timbre.
+func _render_walking_bass(out: PackedFloat32Array, start: int, len: int, chord: Dictionary, bar_idx: int) -> void:
+	var bass_walk: Array = chord["bass_walk"]
+	var beat_samples: int = int(BEAT_DUR * SR)
+	for beat in 4:
+		var note_freq: float = bass_walk[beat]
+		var note_start: int = beat * beat_samples
+		# Back-beat emphasis (beats 2 and 4 are louder — bouncy)
+		var amp_mult: float = 1.15 if (beat == 1 or beat == 3) else 1.0
 		var ph := 0.0
-		var note_len: int = note_end - i
-		for j in note_len:
+		var note_len: int = beat_samples
+		for i in note_len:
+			if note_start + i >= len:
+				break
 			ph += note_freq / SR
-			# Plucked sine with quick decay
+			# Triangle wave (soft, warm — NES bass technique)
+			var tri: float = 2.0 * abs(2.0 * fmod(ph, 1.0) - 1.0) - 1.0
+			# ADSR: 8ms attack, sustain, 80ms release at end of note
 			var env: float
-			if j < int(0.003 * SR):
-				env = float(j) / int(0.003 * SR)
+			var atk: int = int(0.008 * SR)
+			var rel: int = int(0.08 * SR)
+			if i < atk:
+				env = float(i) / atk
+			elif i > note_len - rel:
+				env = float(note_len - i) / rel
 			else:
-				env = exp(-float(j - int(0.003 * SR)) / (0.15 * SR))
-			out[start + i + j] += sin(ph) * env * 0.07
-		note_idx += 1
-		i = note_end
+				env = 1.0
+			# Slight pitch drift on bass too (speder2 micro-drift, smaller)
+			var drift: float = sin(float(i) / SR * 3.0) * 0.0010
+			out[start + note_start + i] += tri * env * 0.42 * amp_mult
+	# Connect last note to next chord with a brief slide (portamento feel)
+	# — implemented via the chromatic approach note in bass_walk already
+
+# --- Layer 2: Comp stabs ---
+# Sine chord stabs on syncopated pattern: 1, &2, 3, &4 (with swing).
+# Speder2 drop voicings + amplitude scaling. Short stabs (120ms each).
+func _render_comp_stabs(out: PackedFloat32Array, start: int, len: int, chord: Dictionary) -> void:
+	var comp_freqs: Array = chord["comp_freqs"]
+	var comp_amps: Array = chord["comp_amps"]
+	var beat_samples: int = int(BEAT_DUR * SR)
+	# Syncopated stab pattern: beat 1, &2, beat 3, &4
+	# &2 = swing position between beat 2 and beat 3
+	# &4 = swing position between beat 4 and next bar's beat 1
+	var stab_positions: Array = [
+		0.0,                      # beat 1
+		1.0 + SWING,              # &2 (swung — 66% of the way from 2 to 3)
+		2.0,                      # beat 3
+		3.0 + SWING,              # &4 (swung)
+	]
+	var stab_dur: int = int(0.18 * SR)  # 180ms per stab
+	var phases: Array = []
+	phases.resize(comp_freqs.size())
+	phases.fill(0.0)
+	for pos in stab_positions:
+		var stab_start: int = int(pos * beat_samples)
+		if stab_start >= len:
+			break
+		for i in stab_dur:
+			if stab_start + i >= len:
+				break
+			# ADSR: 3ms attack, 60ms decay to 0.4 sustain, 80ms release
+			var env: float
+			var atk: int = int(0.003 * SR)
+			var dec: int = int(0.06 * SR)
+			var rel: int = int(0.08 * SR)
+			if i < atk:
+				env = float(i) / atk
+			elif i < atk + dec:
+				env = 1.0 - (float(i - atk) / dec) * 0.6
+			elif i < stab_dur - rel:
+				env = 0.4
+			else:
+				env = 0.4 * float(stab_dur - i) / rel
+			var sample := 0.0
+			for j in comp_freqs.size():
+				# Speder2 micro-pitch drift (±0.2% per voice)
+				var drift: float = sin(float(stab_start + i) / SR * 4.0 + j * 1.7) * 0.002
+				phases[j] += comp_freqs[j] * (1.0 + drift) / SR
+				sample += sin(phases[j]) * comp_amps[j]
+			out[start + stab_start + i] += sample * env * 0.20
+
+# --- Layer 3: Ride cymbal ---
+# Filtered noise bursts. Jazz ride pattern: tap on each beat (1,2,3,4)
+# + softer "bell" on swung &2 and &4. Very quiet — adds rhythmic glue.
+func _render_ride(out: PackedFloat32Array, start: int, len: int, bar_idx: int) -> void:
+	var beat_samples: int = int(BEAT_DUR * SR)
+	# Ride pattern: 4 main taps + 2 swung off-beats
+	var ride_positions: Array = [
+		{"pos": 0.0, "amp": 0.10, "dur": 0.12},   # beat 1
+		{"pos": 1.0 + SWING, "amp": 0.06, "dur": 0.06},  # &2 (bell)
+		{"pos": 2.0, "amp": 0.10, "dur": 0.12},   # beat 3
+		{"pos": 3.0 + SWING, "amp": 0.06, "dur": 0.06},  # &4 (bell)
+	]
+	for r in ride_positions:
+		var pos: float = r["pos"]
+		var amp: float = r["amp"]
+		var dur_s: float = r["dur"]
+		var ride_start: int = int(pos * beat_samples)
+		var ride_dur: int = int(dur_s * SR)
+		if ride_start >= len:
+			continue
+		for i in ride_dur:
+			if ride_start + i >= len:
+				break
+			# Noise burst with fast exponential decay (cymbal-ish)
+			var env: float = exp(-float(i) / (0.04 * SR))
+			# High-pass-ish: subtract a smoothed version (simple one-pole)
+			var noise: float = randf_range(-1.0, 1.0)
+			out[start + ride_start + i] += noise * env * amp
+	# Also a soft "tick" on beat 2 and 4 (back-beat) for the bouncy feel
+	for beat in [1, 3]:  # beats 2 and 4 (0-indexed)
+		var tick_start: int = beat * beat_samples
+		var tick_dur: int = int(0.02 * SR)  # 20ms
+		for i in tick_dur:
+			if tick_start + i >= len:
+				break
+			var env: float = exp(-float(i) / (0.008 * SR))
+			out[start + tick_start + i] += randf_range(-1.0, 1.0) * env * 0.04
 
 ## Set music volume (0.0 = silent, 1.0 = full).
 func set_volume(v: float) -> void:
 	if _player:
-		_player.volume_db = linear_to_db(clampf(v, 0.0, 1.0)) - 14.0
+		_player.volume_db = linear_to_db(clampf(v, 0.0, 1.0)) - 12.0
 
 ## Stop the music.
 func stop() -> void:

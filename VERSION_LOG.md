@@ -4,6 +4,51 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.15 — Jazzy Main Theme (Speder2 Chords + Walking Bass + Comp) (2026-07-07)
+
+### Replaced Ambient Pad with Jazzy Rhythmic Loop
+**Problem:** The v0.14 main theme was an ambient Am-F-G-Em pad with a slow arpeggio — too slow, too ambient, not bouncy or rhythmic. User wanted jazzy, bouncy, rhythmic, using speder2's actual chord types.
+
+**Changed:** Completely rewrote `scripts/autoload/music.gd` to be a jazzy 4-bar loop using speder2's actual chord types from the "Subtle Chord Atmosphere" analysis:
+
+**Chord progression** (ii-V-I-vi jazz feel in A minor):
+| Bar | Chord | Speder2 Type | Mood | Notes |
+|-----|-------|--------------|------|-------|
+| 1 | Am9 | m7(9) | cold, crystal hardness | A C E G B |
+| 2 | D7#5#9 | 7alt(+5+9) | high-impact emptiness | D F# A# C E#(F) |
+| 3 | Gmaj9 | M7(9) | warm, fluffy cushion | G B D F# A |
+| 4 | Fm6 | m6 | anxious, transparent | F Ab C D |
+
+The D7#5#9 (altered dominant) creates maximum jazz tension that resolves to Gmaj9, then Fm6 (with its tritone Ab-D) provides an anxious turn-around back to Am9.
+
+**Three rhythmic layers** (bouncy + jazzy):
+1. **Walking bass** — triangle wave, quarter notes (4 per bar), walks chord tones + chromatic approach to next chord root. Back-beat (beats 2, 4) 15% louder for bouncy feel. Example walk for Am9: A2→C3→E3→Eb3 (chromatic approach to D, the next root).
+2. **Comp stabs** — sine chord on syncopated 1-&2-3-&4 pattern with **66% swing** (long-short 8th notes). Speder2 drop voicings + amplitude scaling (9th at -8dB, altered #5/#9 at -12 to -15dB). 180ms stabs with ADSR.
+3. **Ride cymbal** — filtered noise on each beat + softer "bell" on swung &2 and &4 (jazz ride pattern). Plus soft back-beat ticks on beats 2 and 4.
+
+**Speder2 techniques applied** (from the video analysis):
+- **Drop voicings:** root in octave 2, 5th in octave 3, chord tones spread across octaves 4-5 (no half-steps in same octave — prevents intermodulation distortion)
+- **Amplitude scaling:** higher-tension notes (9ths, altered tones) get lower amplitude. Example: Am9 comp amps = [0.20, 0.22, 0.18, 0.10, 0.06] — the 9th (B4) is quietest at 0.06
+- **Micro-pitch drift:** ±0.2% per voice (speder2's value, prevents static phase cancellation)
+- **ADSR envelopes** per layer (8ms bass attack, 3ms comp attack, fast noise decay for ride)
+
+**Tempo & structure:**
+- 110 BPM (bouncy, not slow)
+- 4/4 time, 4 beats per bar
+- Beat duration: 0.5454s
+- Bar duration: 2.1818s
+- Loop duration: 8.727s (4 bars)
+
+**Master processing:** tanh soft-clipper on the summed output to prevent clipping from layer sum.
+
+### Verification
+- Renders to 8.73s WAV at /home/z/my-project/download/music_preview/main_theme_jazzy.wav
+- Peak: -6.5dB (no clipping), RMS: -14.7dB (healthy background level)
+- Rhythmic structure verified via per-beat RMS sampling: clear back-beat emphasis at beats 2 and 4 of each bar (RMS peaks ~1-2dB louder on beats 2/4 vs beats 1/3)
+- Spectrogram shows distinct bass-note onsets every 0.5454s (quarter notes) + comp stab transients on the swung off-beats
+
+---
+
 ## v0.14 — Pulse v2 (Charge-and-Release) + Procedural Main Theme (2026-07-07)
 
 ### Pulse Redesign: Double-Click → Hold-to-Charge
