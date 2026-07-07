@@ -4,6 +4,82 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.16 — Jazzy Theme v3 (SNES-informed synthesis, fixed voicings, reverb, melody) (2026-07-07)
+
+### Problem: v0.15 Sounded Bad Despite Correct Harmony
+**Diagnosis (via research report):** The chord choices and 3-layer concept (walking bass + comp + ride) were musically correct jazz. The problem was entirely **timbre + envelopes + one voicing bug + no reverb**:
+1. Comp stabs were **pure sine waves** → soft organ, not piano/guitar comp
+2. Ride was **white noise with 40ms decay** → "tss tss", no metallic ping (a real ride rings 1-3s)
+3. Walking bass was a **triangle wave** → weak, flutey, no pluck transient
+4. **D7#5#9 voicing was wrong** — the #9 (F) was missing, 3rd and #5 were doubled
+5. **No reverb/echo** — SNES has hardware echo; jazz needs a room. Dry PCM sounds dead
+6. Walking bass **jumped octaves between bars** and was **pushed on beats 2&4** (should be even; hi-hat carries 2&4)
+7. Mix was **over-compressed** by `tanh(x*1.2)*0.9`
+8. **4 bars / 8.7s loop** was too short — gets grating fast
+
+### Fixes Applied (all from the research report)
+
+**1. Comp stabs: sine → SAW (additive harmonics) + noise attack + exp decay**
+- Each voice now sums fundamental + 2nd harmonic (1/2 amp) + 3rd harmonic (1/3 amp) → sawtooth-ish, much richer than pure sine
+- 3ms noise attack transient at the start (hammer/pick)
+- Exp decay (τ=80ms) with NO sustain phase — piano/guitar stabs die, they don't sustain
+
+**2. Ride: white noise 40ms → 6 inharmonic square oscillators + 0.5s decay**
+- 6 square oscillators at non-harmonic ratios (1.0, 1.34, 1.56, 1.78, 2.0, 2.4 × 2.2kHz base) — TR-808 cymbal technique. Non-harmonic = metallic
+- Bandpass noise layered for the wash
+- 1.5ms stick click at the very start
+- τ=0.5s decay (was 0.04s — 10x too short). Now rings ~1.5s like a real ride
+- Spang-a-lang pattern preserved (1, &2, 3, &4 with 66% swing)
+- Hi-hat chick on beats 2 & 4 (40ms, tight)
+
+**3. Walking bass: triangle → sine + harmonics + pluck + humanized**
+- Sine fundamental + 2nd harmonic at -12dB + 3rd at -18dB (woody body, not buzzy)
+- 2ms pluck transient (bright noise) at each note onset
+- Humanized timing: +6-10ms random delay per note (laid-back, never ahead)
+- Removed the beats 2&4 amp boost (bass should be even; hi-hat carries 2&4)
+- Fixed bass walks to stay in one octave (D2-D3) — no more octave jumps between bars
+
+**4. D7#5#9 voicing FIXED**
+- Before: `[F#3, Bb3, C4, F#4, Bb4]` = 3, #5, b7, 3, #5 — #9 (F) missing, 3rd and #5 doubled
+- After: `[F#3, C4, F4, A#4]` = 3, b7, #9, #5 — rootless, #9 voiced ABOVE the 3rd (correct jazz voicing)
+- Same audit applied to all chords: all now rootless (bass plays root), drop-2 voicings
+
+**5. Reverb: one-comb feedback delay (SNES-style)**
+- 90ms delay, 45% feedback, one-pole lowpass in feedback path (kills harshness)
+- 25% dry send, 35% wet into master
+- Transforms "dead dry" → "in a room"
+
+**6. Extended 4 bars → 8 bars (A + B sections)**
+- A section (bars 1-4): Am9 → D7#5#9 → Gmaj9 → Fm6 (ii-V-I-vi in G + bVI color)
+- B section (bars 5-8): Cmaj7 → Fmaj7 → Bm7b5 → E7#5#9 (turn-around back to Am9)
+- Loop is now 17.45s (was 8.7s) — much less repetitive
+
+**7. Varied comp rhythm per bar**
+- Each bar now uses a different subset of stab positions: `[1,&2,3,&4]`, `[1,3,&4]`, `[1,&2,3]`, `[&2,3,&4]` (Basie-style drop of beat 1)
+- No more mechanical same-rhythm-every-bar
+
+**8. Added melody motif layer (Toby Fox lesson)**
+- Recurring 4-note motif per bar, derived from chord's upper extensions
+- Placed on syncopated 1, &2, 3, &4 pattern
+- Sine + subtle 2nd harmonic + 5Hz vibrato for life
+- Motif transforms across chords (Toby Fox leitmotif technique)
+
+**9. Gentler master**
+- Replaced `tanh(x*1.2)*0.9` with `tanh(x*0.7)` — preserves dynamics, only saturates when needed
+- Master volume raised from -14dB to -10dB to compensate
+
+### Verification
+- Renders to 17.45s WAV at /home/z/my-project/download/music_preview/main_theme_v3.wav
+- Peak: -6.4dB (no clipping), RMS: -18.8dB (more dynamic range than v0.15's -14.7dB — reverb + gentler master preserved dynamics)
+- 8 distinct bars verified via per-bar RMS sampling
+- B section (bars 5-8) slightly louder than A section (Cmaj7/Fmaj7 are brighter chords)
+- Spectral content now balanced across bass/lowmid/highmid/high (v0.15 had huge 110Hz peak from over-loud bass)
+
+### Research basis
+All fixes based on `/home/z/my-project/download/MUSIC_RESEARCH_REPORT.md` — research into SNES SPC700/BRR specs, Toby Fox's FL Studio + soundfont process, jazz voicing theory (rootless ii-V-I, drop-2), walking bass construction (chord tones on 1&3, chromatic approach on 4), jazz ride spang-a-lang pattern, cymbal synthesis (TR-808 inharmonic oscillators), and why pure sine/triangle/noise layers sound bad.
+
+---
+
 ## v0.15 — Jazzy Main Theme (Speder2 Chords + Walking Bass + Comp) (2026-07-07)
 
 ### Replaced Ambient Pad with Jazzy Rhythmic Loop
