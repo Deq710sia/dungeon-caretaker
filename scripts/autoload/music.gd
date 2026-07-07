@@ -23,6 +23,19 @@ const BEAT_DUR := 60.0 / BPM
 const BAR_DUR := BEAT_DUR * BEATS_PER_BAR
 const LOOP_DUR := BAR_DUR * BAR_COUNT
 const HALF_BAR_DUR := BEAT_DUR * 2
+const SWING := 0.66  # 2:1 swing ratio (long-short) for hats + chord stabs
+
+# Chord stab patterns per bar (vary for rhythmic complexity)
+# Each pattern: list of beat positions (0=beat1, 1=&1, 2=beat2, 3=&2, etc. up to 7=&4)
+# Charleston = [0, 3] (beat1, &2), Reverse Charleston = [1, 4] (&1, beat3)
+const STAB_PATTERNS := [
+	[0, 3, 4, 7],  # 1, &2, 3, &4 (full syncopated)
+	[0, 4, 7],     # 1, 3, &4 (sparser)
+	[1, 4, 6],     # &1, 3, &4 (reverse Charleston)
+	[0, 3, 5],     # 1, &2, &3
+	[0, 4],        # 1, 3 (Freddie Green style)
+	[2, 4, 7],     # &1... beat2, 3, &4
+]
 
 var _stream: AudioStreamWAV
 var _player: AudioStreamPlayer
@@ -108,7 +121,7 @@ func _render_theme() -> AudioStreamWAV:
 	for chord_idx in CHORDS.size():
 		var chord: Dictionary = CHORDS[chord_idx]
 		var start: int = chord_idx * chord_samples
-		_render_bass(L, R, start, chord_samples, chord)
+		_render_bass(L, R, start, chord_samples, chord, chord_idx)
 		_render_chords(L, R, start, chord_samples, chord, chord_idx)
 		_render_arp(L, R, start, chord_samples, chord, chord_idx)
 		_render_lead(L, R, start, chord_samples, chord, chord_idx)
@@ -141,46 +154,83 @@ func _render_theme() -> AudioStreamWAV:
 	w.data = bytes
 	return w
 
-# --- Layer 1: Bass (saw + sub-octave sine, lowpassed, mono) ---
-func _render_bass(L: PackedFloat32Array, R: PackedFloat32Array, start: int, len: int, chord: Dictionary) -> void:
+# --- Layer 1: Walking bass (saw + sub, 4 quarter notes, chromatic approach) ---
+# Walks: beat1=root, beat2=3rd or 5th, beat3=5th, beat4=chromatic approach to next root
+# Sidechain: ducks 6dB when kick hits (kick on every beat)
+func _render_bass(L: PackedFloat32Array, R: PackedFloat32Array, start: int, len: int, chord: Dictionary, chord_idx: int) -> void:
 	var bass_freq: float = chord["bass"]
-	var sub_freq: float = bass_freq * 0.5  # sub-octave
-	var ph_saw := 0.0
-	var ph_sub := 0.0
-	var lp_state: float = 0.0
-	var alpha: float = 1.0 - exp(-2.0 * PI * 400.0 / SR)
-	for i in len:
-		if start + i >= L.size():
-			break
-		ph_saw += bass_freq / SR
-		ph_sub += sub_freq / SR
-		var saw: float = 2.0 * (ph_saw - floor(ph_saw + 0.5))
-		lp_state = lp_state + alpha * (saw - lp_state)
-		# Sub-octave sine for warmth (quiet)
-		var sub: float = sin(ph_sub) * 0.4
-		var bass_sample: float = lp_state + sub
-		# ADSR
-		var env: float
-		var atk: int = int(0.008 * SR)
-		var rel: int = int(0.05 * SR)
-		if i < atk:
-			env = float(i) / atk
-		elif i > len - rel:
-			env = float(len - i) / rel
-		else:
-			env = 1.0
-		# Mono bass (center) — both channels same
-		var v: float = bass_sample * env * 0.24
-		L[start + i] += v
-		R[start + i] += v
+	# Walking bass: derive 4 notes from root + chord_idx for variation
+	# beat1 = root, beat2 = 5th (1.5x), beat3 = root (octave up or same), beat4 = chromatic approach
+	var next_bass: float = bass_freq
+	if chord_idx + 1 < CHORDS.size():
+		next_bass = CHORDS[chord_idx + 1]["bass"]
+	# Chromatic approach: half-step above or below next root
+	var approach_freq: float = next_bass * pow(2.0, 1.0/12.0)  # up a half step
+	var walk_freqs: Array = [bass_freq, bass_freq * 1.5, bass_freq * pow(2.0, 5.0/12.0), approach_freq]
+	# If approach is too far, use the root again
+	if absf(log(approach_freq / next_bass)) > 0.1:
+		walk_freqs[3] = next_bass * pow(2.0, -1.0/12.0)  # down a half step instead
+	var beat_samples: int = int(BEAT_DUR * SR)
+	for beat in 4:
+		var note_freq: float = walk_freqs[beat]
+		var sub_freq: float = note_freq * 0.5
+		var note_start: int = beat * beat_samples
+		var ph_saw := 0.0
+		var ph_sub := 0.0
+		var lp_state: float = 0.0
+		var alpha: float = 1.0 - exp(-2.0 * PI * 400.0 / SR)
+		var note_len: int = beat_samples
+		for i in note_len:
+			if start + note_start + i >= L.size():
+				break
+			ph_saw += note_freq / SR
+			ph_sub += sub_freq / SR
+			var saw: float = 2.0 * (ph_saw - floor(ph_saw + 0.5))
+			lp_state = lp_state + alpha * (saw - lp_state)
+			var sub: float = sin(ph_sub) * 0.4
+			var bass_sample: float = lp_state + sub
+			# ADSR
+			var env: float
+			var atk: int = int(0.008 * SR)
+			var rel: int = int(0.04 * SR)
+			if i < atk:
+				env = float(i) / atk
+			elif i > note_len - rel:
+				env = float(note_len - i) / rel
+			else:
+				env = 1.0
+			# Sidechain: duck on kick (kick hits at start of each beat)
+			var sc_env: float = 1.0
+			if i < int(0.08 * SR):  # 80ms duck
+				sc_env = 0.5 + 0.5 * (float(i) / int(0.08 * SR))  # 0.5→1.0 over 80ms
+			var v: float = bass_sample * env * sc_env * 0.22
+			L[start + note_start + i] += v
+			R[start + note_start + i] += v
 
-# --- Layer 2: Chords (2 detuned voices per note, panned L/R, lowpassed) ---
+# --- Layer 2: Chords (syncopated stabs with swing, 2 detuned voices, panned L/R) ---
 func _render_chords(L: PackedFloat32Array, R: PackedFloat32Array, start: int, len: int, chord: Dictionary, chord_idx: int) -> void:
 	var comp_freqs: Array = chord["comp"]
 	var comp_amps: Array = chord["amps"]
-	var stab_positions: Array = [0.0, 1.0]
-	var stab_amps: Array = [1.0, 0.55]
-	var stab_dur: int = int(0.3 * SR)
+	# Pick a stab pattern based on chord_idx (varies per bar for rhythmic complexity)
+	var pattern_idx: int = chord_idx % STAB_PATTERNS.size()
+	var stab_pattern: Array = STAB_PATTERNS[pattern_idx]
+	# Convert pattern indices to beat positions with swing
+	# 8 positions per bar (16th grid): 0=1, 1=&1, 2=2, 3=&2, 4=3, 5=&3, 6=4, 7=&4
+	# Swing: odd positions (&x) land at 0.66 of the beat instead of 0.5
+	var stab_positions: Array = []
+	for pos in stab_pattern:
+		var beat_num: int = pos / 2  # which beat (0-3)
+		var is_off: bool = (pos % 2) == 1  # is this an & position
+		var beat_pos: float = float(beat_num)
+		if is_off:
+			beat_pos += SWING  # swung & position
+		else:
+			beat_pos += 0.0
+		stab_positions.append(beat_pos)
+	var stab_amps: Array = []  # will fill below
+	for i in stab_positions.size():
+		stab_amps.append(1.0 if i == 0 else 0.6)  # first stab louder
+	var stab_dur: int = int(0.25 * SR)  # shorter stabs for syncopation
 	# Two detuned voices (±8 cents = ±0.46% freq shift)
 	var detune: float = 0.0046
 	for s in stab_positions.size():
@@ -227,31 +277,41 @@ func _render_chords(L: PackedFloat32Array, R: PackedFloat32Array, start: int, le
 			L[stab_start + i] += (lp1 + noise_atk * 0.5) * env * 0.065
 			R[stab_start + i] += (lp2 + noise_atk * 0.5) * env * 0.065
 
-# --- Layer 3: Arpeggio (high-register sine, Haas effect for width) ---
+# --- Layer 3: Arpeggio (syncopated rhythm, Haas effect for width) ---
 func _render_arp(L: PackedFloat32Array, R: PackedFloat32Array, start: int, len: int, chord: Dictionary, chord_idx: int) -> void:
 	var arp_notes: Array = chord["arp"]
-	var eighth_dur: int = int(BEAT_DUR / 2.0 * SR)
 	var haas_delay: int = int(0.012 * SR)  # 12ms delay on R for Haas effect
+	# Vary the rhythm: alternating 8ths and syncopated pattern
+	# Pattern A: straight 8ths (1 & 2 & 3 & 4 &) = positions [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5]
+	# Pattern B: syncopated (1, &2, &3, 4, &4) = positions [0, 1.66, 2.66, 3, 3.66]
+	# Pattern C: 1, 2, &2, 3, &3, 4 = positions [0, 1, 1.66, 2, 2.66, 3]
+	var arp_patterns: Array = [
+		[0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5],  # straight 8ths
+		[0.0, 1.0 + SWING - 0.34, 2.0 + SWING - 0.34, 3.0, 3.0 + SWING],  # syncopated
+		[0.0, 1.0, 1.0 + SWING, 2.0, 2.0 + SWING, 3.0],  # mixed
+	]
+	var pattern: Array = arp_patterns[chord_idx % arp_patterns.size()]
 	var note_idx: int = chord_idx % arp_notes.size()
-	var i: int = 0
-	while i < len:
+	for pos_idx in pattern.size():
+		var pos: float = pattern[pos_idx]
+		var note_start: int = int(pos * BEAT_DUR * SR)
+		if note_start >= len:
+			break
 		var note_freq: float = arp_notes[note_idx % arp_notes.size()]
-		var note_start: int = i
 		var ph := 0.0
-		for j in eighth_dur:
+		var note_dur: int = int(0.3 * SR)
+		for j in note_dur:
 			if note_start + j >= len or start + note_start + j >= L.size():
 				break
 			ph += note_freq / SR
 			var fundamental: float = sin(ph)
 			var h2: float = sin(ph * 2.0) * 0.15
-			var env: float = exp(-float(j) / (0.1 * SR))
-			var v: float = (fundamental + h2) * env * 0.045
-			# L: immediate, R: delayed (Haas) for wide stereo image
+			var env: float = exp(-float(j) / (0.15 * SR))
+			var v: float = (fundamental + h2) * env * 0.04
 			L[start + note_start + j] += v
 			if note_start + j - haas_delay >= 0:
 				R[start + note_start + j - haas_delay] += v * 0.85
 		note_idx += 1
-		i = note_start + eighth_dur
 
 # --- Layer 4: Lead (saw + vibrato, doubled with detune, panned center) ---
 func _render_lead(L: PackedFloat32Array, R: PackedFloat32Array, start: int, len: int, chord: Dictionary, chord_idx: int) -> void:
@@ -289,23 +349,48 @@ func _render_lead(L: PackedFloat32Array, R: PackedFloat32Array, start: int, len:
 		L[start + lead_start + i] += s1 * env * 0.085
 		R[start + lead_start + i] += s2 * env * 0.085
 
-# --- Layer 5: Drums (stereo, kick center, clap/hat/cowbell panned) ---
+# --- Layer 5: Drums (complex pattern with shaker, ghost notes, breaks, swing) ---
 func _render_drums(L: PackedFloat32Array, R: PackedFloat32Array, n: int) -> void:
 	var beat_samples: int = int(BEAT_DUR * SR)
 	var total_beats: int = int(LOOP_DUR / BEAT_DUR)
-	for beat in total_beats:
-		var beat_start: int = beat * beat_samples
-		var beat_in_bar: int = beat % 4
-		# Kick: center (mono)
-		_render_kick(L, R, beat_start, n)
-		# Clap: beats 2,4 — pan slightly wide
-		if beat_in_bar == 1 or beat_in_bar == 3:
-			_render_clap(L, R, beat_start, n)
-		# Hats: off-beat — pan right
-		_render_hat(L, R, beat_start + beat_samples / 2, n)
-		# Cowbell: beats 3,4 — pan left
-		if beat_in_bar == 2 or beat_in_bar == 3:
-			_render_cowbell(L, R, beat_start, n)
+	var total_bars: int = total_beats / 4
+	for bar in total_bars:
+		var bar_start: int = bar * 4 * beat_samples
+		var is_break_bar: bool = (bar == 7)  # bar 8 (0-indexed 7) = section transition break
+		var is_turnaround: bool = (bar == 15)  # bar 16 = turnaround
+		for beat in 4:
+			var beat_start: int = bar_start + beat * beat_samples
+			# Kick: 4-on-the-floor, but drop beat 1 on turnaround bars for tension
+			var play_kick: bool = true
+			if is_turnaround and beat == 0:
+				play_kick = false
+			if is_break_bar and beat < 2:
+				play_kick = false  # break: drop first 2 kicks
+			if play_kick:
+				_render_kick(L, R, beat_start, n)
+			# Clap/snare: beats 2 and 4
+			if beat == 1 or beat == 3:
+				_render_clap(L, R, beat_start, n)
+				# Ghost note: soft snare on the & after beat 2 and 4
+				var ghost_pos: int = beat_start + int(beat_samples * SWING)
+				_render_ghost_snare(L, R, ghost_pos, n)
+			# Hats: off-beat 8ths with swing — pan right
+			var hat_pos: int = beat_start + int(beat_samples * SWING)
+			_render_hat(L, R, hat_pos, n)
+			# Extra hat on beat 4& for push into next bar
+			if beat == 3:
+				var push_hat: int = beat_start + int(beat_samples * 1.0 + beat_samples * SWING * 0.5)
+				if push_hat < n:
+					_render_hat(L, R, push_hat, n)
+			# Cowbell: beats 3 and 4 (kaiwai-kyoku signature)
+			if beat == 2 or beat == 3:
+				_render_cowbell(L, R, beat_start, n)
+		# Shaker: 16th notes throughout the bar (low velocity, acoustic texture)
+		if not is_break_bar:
+			_render_shaker(L, R, bar_start, n)
+		# Drum fill at break bar (bar 8): snare rolls on beats 3-4
+		if is_break_bar:
+			_render_drum_fill(L, R, bar_start + 2 * beat_samples, n)
 
 func _render_kick(L: PackedFloat32Array, R: PackedFloat32Array, start: int, n: int) -> void:
 	var kick_dur: int = int(0.14 * SR)
@@ -391,6 +476,92 @@ func _render_cowbell(L: PackedFloat32Array, R: PackedFloat32Array, start: int, n
 		# Pan left
 		L[start + i] += v * 1.0
 		R[start + i] += v * 0.7
+
+# --- Ghost snare: very soft noise burst for rhythmic texture ---
+func _render_ghost_snare(L: PackedFloat32Array, R: PackedFloat32Array, start: int, n: int) -> void:
+	var dur: int = int(0.04 * SR)
+	var lp_state: float = 0.0
+	var alpha: float = 1.0 - exp(-2.0 * PI * 2500.0 / SR)
+	for i in dur:
+		if start + i >= n:
+			break
+		var raw: float = randf_range(-1.0, 1.0)
+		lp_state = lp_state + alpha * (raw - lp_state)
+		var env: float = exp(-float(i) / (0.02 * SR))
+		var v: float = lp_state * env * 0.025  # very quiet
+		L[start + i] += v * 0.8
+		R[start + i] += v * 1.0
+
+# --- Shaker: 16th notes, low velocity, acoustic texture ---
+func _render_shaker(L: PackedFloat32Array, R: PackedFloat32Array, bar_start: int, n: int) -> void:
+	var sixteenth: int = int(BEAT_DUR / 4.0 * SR)
+	var shaker_dur: int = int(0.05 * SR)
+	for sixteenth_idx in 16:  # 16 16th notes per bar
+		var pos: int = bar_start + sixteenth_idx * sixteenth
+		if pos >= n:
+			break
+		# Swing the off-beat 16ths slightly
+		var swing_offset: int = 0
+		if sixteenth_idx % 2 == 1:  # off-beat 16th
+			swing_offset = int(sixteenth * (SWING - 0.5) * 0.5)
+		pos += swing_offset
+		# Vary velocity: stronger on beat 16th notes, weaker on offs
+		var vel: float = 0.018 if sixteenth_idx % 2 == 0 else 0.012
+		# Accent the "and" of 4 (16th idx 13) for push
+		if sixteenth_idx == 13:
+			vel = 0.025
+		var hp_state: float = 0.0
+		var hp_alpha: float = 1.0 - exp(-2.0 * PI * 6000.0 / SR)
+		var prev_raw: float = 0.0
+		for i in shaker_dur:
+			if pos + i >= n:
+				break
+			var raw: float = randf_range(-1.0, 1.0)
+			hp_state = raw - prev_raw + (1.0 - hp_alpha) * hp_state
+			prev_raw = raw
+			var env: float = exp(-float(i) / (0.02 * SR))
+			var v: float = hp_state * env * vel
+			L[pos + i] += v * 0.9
+			R[pos + i] += v * 0.8
+
+# --- Drum fill: snare roll for section transitions ---
+func _render_drum_fill(L: PackedFloat32Array, R: PackedFloat32Array, start: int, n: int) -> void:
+	# 2 beats of snare roll: 8th notes with increasing intensity
+	var eighth: int = int(BEAT_DUR / 2.0 * SR)
+	var roll_dur: int = int(0.08 * SR)  # 80ms per hit
+	for hit in 4:  # 4 hits over 2 beats (8th notes)
+		var pos: int = start + hit * eighth
+		if pos >= n:
+			break
+		var intensity: float = 0.05 + 0.03 * hit  # builds up
+		var lp_state: float = 0.0
+		var alpha: float = 1.0 - exp(-2.0 * PI * 3000.0 / SR)
+		for i in roll_dur:
+			if pos + i >= n:
+				break
+			var raw: float = randf_range(-1.0, 1.0)
+			lp_state = lp_state + alpha * (raw - lp_state)
+			var env: float = exp(-float(i) / (0.04 * SR))
+			var v: float = lp_state * env * intensity
+			L[pos + i] += v * 0.9
+			R[pos + i] += v * 1.0
+	# Final crash-like noise at the end of the fill
+	var crash_pos: int = start + 4 * eighth
+	if crash_pos < n:
+		var crash_dur: int = int(0.4 * SR)
+		var hp_state: float = 0.0
+		var hp_alpha: float = 1.0 - exp(-2.0 * PI * 5000.0 / SR)
+		var prev_raw: float = 0.0
+		for i in crash_dur:
+			if crash_pos + i >= n:
+				break
+			var raw: float = randf_range(-1.0, 1.0)
+			hp_state = raw - prev_raw + (1.0 - hp_alpha) * hp_state
+			prev_raw = raw
+			var env: float = exp(-float(i) / (0.3 * SR))
+			var v: float = hp_state * env * 0.04
+			L[crash_pos + i] += v
+			R[crash_pos + i] += v
 
 # --- Schroeder reverb (4 parallel combs + 2 series allpass, stereo) ---
 func _apply_reverb_stereo(L: PackedFloat32Array, R: PackedFloat32Array, n: int) -> void:

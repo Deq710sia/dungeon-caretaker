@@ -4,6 +4,66 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.20 — Rhythmic Complexity + Speder2 Feel (Walking Bass, Swing, Ghost Notes, Shaker, Breaks) (2026-07-07)
+
+### Problem: Drums Were Just 4-on-the-Floor + Hats + Cowbell (Too Simple)
+**Diagnosis:** v0.19 had good production polish but the rhythm was static — same drum pattern every bar, root-only bass, straight 8th arps. User said "this is just the drumline from sardine" (referencing the basic kaiwai-kyoku template).
+
+### Fix: Real Rhythmic Complexity via Layer Interaction
+
+**1. Walking bass (not just root)**
+- 4 quarter notes per chord: root → 5th → 6th → chromatic approach to next root
+- Sidechain ducking: bass drops to 50% volume on each kick hit (80ms recovery)
+- Chromatic approach note on beat 4 creates forward motion toward next chord
+
+**2. 2:1 swing on hats + chord stabs (speder2 ch_9.mp3 signature)**
+- SWING = 0.66 (long-short ratio)
+- Off-beat positions (&x) land at 0.66 of the beat instead of 0.5
+- Applied to: hats, chord stabs, shaker off-beats
+
+**3. Shaker/tambourine: 16th notes, low velocity, acoustic texture**
+- 16 hits per bar with varying velocity (beat 16ths louder, off-beats quieter)
+- Swing on off-beat 16ths
+- Accent on "& of 4" (16th idx 13) for push into next bar
+- Highpass-filtered noise @ 6kHz — acoustic shaker texture
+
+**4. Ghost notes on snare**
+- Soft noise hits on the & after beats 2 and 4 (between the claps)
+- Very quiet (0.025 amplitude) — adds rhythmic texture without being busy
+- Lowpass-filtered @ 2.5kHz
+
+**5. Varied kick pattern**
+- 4-on-the-floor as default
+- Drop beat 1 on turnaround bar (bar 16) for tension
+- Break bar (bar 8): drop first 2 kicks for section transition
+
+**6. Chord stab syncopation (6 different patterns cycled)**
+- Each chord uses a different stab pattern based on chord_idx
+- Patterns: full syncopated (1,&2,3,&4), sparse (1,3,&4), reverse Charleston (&1,3,&4), mixed (1,&2,&3), Freddie Green (1,3), Basie-style (&1,2,3,&4)
+- No more same-rhythm-every-bar
+
+**7. Drum fill at section transitions**
+- Bar 8 (section A→B): 4-hit snare roll building in intensity + crash-like noise burst
+- Creates a real transition, not just a hard cut
+
+**8. Arp rhythm variation (3 patterns cycled)**
+- Pattern A: straight 8ths
+- Pattern B: syncopated (1, &2, &3, 4, &4)
+- Pattern C: mixed (1, 2, &2, 3, &3, 4)
+- No more static 8th-note arps
+
+### Verification
+- 30.0s stereo loop, peak -7.5dB, RMS -18.1dB (healthy, no clipping)
+- Per-bar RMS variation confirms rhythmic complexity:
+  - Bar 1: -19.9dB (intro)
+  - Bar 2: -17.5dB (full pattern)
+  - Bar 8: -18.2dB (break — quieter, drums dropped)
+  - Bar 9: -17.4dB (post-fill return — loudest)
+  - Bar 16: -18.8dB (turnaround — kick dropped for tension)
+- Preview at `/home/z/my-project/download/music_preview/main_theme_v7_rhythmic.wav`
+
+---
+
 ## v0.19 — Music Production Polish (Stereo, Schroeder Reverb, Sub-bass, Chorus) (2026-07-07)
 
 ### Problem: Still Sounded "Raw" After Softening
