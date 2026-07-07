@@ -4,6 +4,112 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.17 — Movement Overhaul (Momentum System + Chain Degradation + Tap Pulse) + Speder2 Music (2026-07-07)
+
+### Movement: Complete Redesign Based on Game Design Analysis
+
+**9 user-reported issues, all fixed:**
+
+**1. Phase no longer pushes toward facing when no input**
+- Before: `vel.move_toward(facing * target_speed)` — you kept flying in the last-pressed direction
+- After: phase HOLDS current velocity when no input (no accel, no decel). Feels like "committed dash" not "stuck flying."
+
+**2. Reduced drift (momentum was too long)**
+- FLOAT decel: 0.3 → 0.5 (faster stop)
+- COAST decel: 0.08 → 0.25 (3.1s stop → 0.9s stop)
+- COAST_MIN_SPEED: 40 → 50 (coast ends sooner)
+- ACCEL: 220 → 300 (snappier response, less delay)
+
+**3. Momentum is now a compoundable VALUE, not just preserved velocity**
+- New `momentum` float (0.0 to 2.0) that:
+  - Builds when moving fast (speed_pct > 0.7): +0.5/s
+  - Decays when slow in FLOAT: -0.3/s
+  - Spent by DIVE: -0.3 per dive
+  - Added by PULSE: +0.4 (net +0.1 after 0.3 cost)
+  - Modifies speed: up to +50% at full momentum
+  - Preserved across states (compounds), resets when FLOAT for 0.5s
+- Phase gets +30% speed at full momentum
+- Dive gets +0.5 mult per momentum point (compoundable!)
+
+**4. Pulse is now a TAP (no charge, no cooldown, no slowdown)**
+- Before: HOLD SHIFT 0.2-0.5s to charge, 70% slowdown while charging, 1.2s cooldown
+- After: TAP SHIFT for instant 1.5x burst. No charge, no cooldown, no slowdown.
+- Costs 0.3 momentum (must have >= 0.3 to fire). Adds 0.4 momentum (net +0.1).
+- Manual edge detection (`_pulse_was_pressed`) instead of `Input.is_action_just_pressed` (more reliable)
+- No more cognitive conflict between holding SHIFT and hitting SPACE
+
+**5. Chain degradation prevents spam**
+- New `chain_count` increments on each phase
+- Each chain step: dive boost reduced 10% (min 50% of normal)
+- Chain resets when FLOAT for 0.5s, OR when pulse fires
+- Without pulse, chain degrades: dive1=2.32, dive2=2.04 (verified)
+
+**6. Chaining has clear value (momentum compounds)**
+- Chaining preserves momentum (doesn't reset across PHASE→DIVE→COAST)
+- Each chain step at full momentum gives bigger dive bursts
+- Pulse resets chain degradation (creative continuation)
+
+**7. Chain limit via degradation + pulse reset**
+- Max chain effectiveness at chain_count=0 (full boost)
+- Degrades to 50% by chain_count=5
+- Pulse is the "refresh" — resets chain_count to 0
+
+**8. Delay feeling eliminated**
+- Removed charge anticipation (0.2-0.5s delay)
+- Removed 70% slowdown while charging
+- Faster ACCEL (220→300) for snappier response
+- Faster squash recovery (8→12, 10→15)
+- Phase holds velocity (no pushing toward facing = no feeling of being dragged)
+
+**9. Cooldown/bank interaction fixed**
+- Before: `cooldown_pct()` divided by `PHASE_CD` (4.0) even when actual cd was 2.0 (halved) → ring filled too slowly
+- After: stores `_last_phase_cd` on phase start, uses that for accurate percentage
+- Verified: cooldown_pct returns 0.0 right after a coast-phase (cd=0.5, last_cd=0.5)
+
+### New Visual Feedback
+- **Momentum ring**: fills clockwise around ghost, color shifts blue→gold as momentum grows
+- **Chain dots**: small dots above ghost (1 per chain step, max 5), color shifts gold→red as chain grows
+- Removed: charge ring (no more charge), charge color shift, cooldown ring for pulse (no cooldown)
+
+### Music: Speder2-Style Game-Electronica (NOT Jazz, NOT Lo-Fi)
+
+**Research:** Speder2 is a Japanese game-electronica composer (NOT lo-fi). Their sound = modal color-chord rotation over a house beat with chiptune textures. Full research at `/home/z/my-project/download/MUSIC_RESEARCH_REPORT.md`.
+
+**Complete rewrite with speder2 techniques:**
+
+**Chord progression** (2-beat rate, modal color rotation — NOT functional ii-V-I):
+- Section A (Gm): Cm6 - BbM7(9) - Cm6 - G7#5#9 - Cm7(9) - BbM7(9) - Cm7(9) - Dm7(9)/Daug7
+- Section B (Fm→Bb→Gm): DbM7(9) - DbmM7 - Cm7(11) - Faug7 - Bbm7(9) - Bbm7(11) - EbM7(9) - Dm7b5 - G7#5#9 - Cm6 - BbM7(9) - Cm7(9) - G7#5#9 - Cm6 - BbM7(9) - Cm6
+
+**Speder2 chord palette used:** m7(9), M7(9), m6, mM7, aug7, 7alt(+5+9), m7b5, m7(11) — all from the "微妙なコードの雰囲気" video.
+
+**8 layers** (speder2 production techniques):
+1. **Kick**: four-on-the-floor, sine drop 80→40Hz (808-style)
+2. **Clap**: noise burst on 2&4, bandpass ~2kHz
+3. **Hats**: off-beat 8th notes, short noise
+4. **Cowbell**: beats 3&4 (kaiwai-kyoku signature), square ~840Hz+540Hz
+5. **Bass**: sustained saw, root notes, 2-beat chord rate, lowpass
+6. **Chords**: saw stabs (additive harmonics), rootless drop voicings, 2-beat rate
+7. **Arpeggio**: high-register sine counter-line, 8th notes, fills melodic gaps
+8. **Lead**: sparse synth lead (saw + vibrato), enters off-beat, stepwise motion
+
+**Specs:** 128 BPM, 4/4, 16 bars, 30s loop. Reverb (one-comb feedback delay). Gentle master (tanh*0.7).
+
+**Verified:** 30.0s loop, peak -7.5dB, RMS -19.9dB. Preview at `/home/z/my-project/download/music_preview/main_theme_v4_speder2.wav`.
+
+### Verification
+- 8 movement unit tests pass (temp TestRunner, removed pre-commit):
+  - Phase holds velocity when no input
+  - Momentum builds with speed (0.94 after 2s running)
+  - Momentum spent on dive (0.94 → 0.67)
+  - Pulse is instant tap (mult=1.48)
+  - Pulse resets chain count
+  - Chain degrades dive boost (dive1=2.32, dive2=2.04)
+  - Cooldown percentage uses actual cd (not PHASE_CD constant)
+  - Phase chain still works (FLOAT→PHASE→DIVE→COAST→PHASE)
+
+---
+
 ## v0.16 — Jazzy Theme v3 (SNES-informed synthesis, fixed voicings, reverb, melody) (2026-07-07)
 
 ### Problem: v0.15 Sounded Bad Despite Correct Harmony

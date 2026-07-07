@@ -1,39 +1,37 @@
 extends Node
-## Music — jazzy procedural main theme for Dungeon Caretaker (v2, SNES-informed).
+## Music — speder2-style game-electronica main theme (v4).
 ##
-## 8-bar loop with A section (ii-V-I-vi) + B section (IV-vii-iii-vi turn-around).
-## All voices synthesized as additive PCM with proper harmonics, transients,
-## and a one-comb feedback reverb for "in a room" space.
+## NOT jazz, NOT lo-fi. Speder2 sound = modal color-chord rotation over a
+## house beat with chiptune textures and contemplative-uncanny mood.
 ##
-## Speder2 chords (from "Subtle Chord Atmosphere" analysis):
-##   m7(9), 7alt(+5+9), M7(9), m6 — for A section
-##   maj7, m7, m7b5, 7alt — for B section turn-around
+## 128 BPM, 4/4, 16 bars (~30s loop). 2 sections with key modulation.
 ##
-## Three layers (properly synthesized, not pure sines):
-##   1. Walking bass: sine + 2nd/3rd harmonic + 2ms pluck transient + humanized
-##      timing (+8ms laid-back). Stays in one octave (D2-D3).
-##   2. Comp stabs: SAW (additive 1/n harmonics) + 3ms noise attack + exp decay
-##      (no sustain). Rootless drop-2 voicings. Varied rhythm per bar.
-##   3. Ride cymbal: 6 inharmonic square oscillators + bandpass noise + 0.5s decay.
-##      Spang-a-lang pattern (1, &2, 3, &4) + hi-hat chick on 2 & 4.
-##   4. Melody motif: sine lead playing a recurring 4-note Toby-Fox-style motif.
+## Speder2 chord palette (from "微妙なコードの雰囲気" analysis):
+##   m7(9), M7(9), m6, mM7, aug7, 7alt(+5+9), m7b5, m7(11)
 ##
-## Speder2 techniques:
-## - Drop voicings (root in octave 2, chord tones spread across octaves 4-5)
-## - Amplitude scaling (9ths at -8dB, altered tones at -12 to -15dB)
-## - Micro-pitch drift (±0.2% per voice)
-## - ADSR envelopes per layer
+## 8 layers (speder2 production techniques):
+##   1. Kick: four-on-the-floor, sine drop 80→40Hz (808-style)
+##   2. Clap: noise burst on 2&4, bandpass ~2kHz
+##   3. Hats: off-beat 8th notes, short noise
+##   4. Cowbell: beats 3&4 (kaiwai-kyoku signature), square ~840Hz
+##   5. Bass: sustained saw, root notes, 2-beat chord rate, lowpass
+##   6. Chords: saw stabs (additive harmonics), rootless drop voicings, 2-beat
+##   7. Arpeggio: high-register sine counter-line, 8th notes, fills gaps
+##   8. Lead: sparse synth lead (saw + vibrato), enters off-beat, stepwise
 ##
-## Reverb: one-comb feedback delay (90ms, 45% fb, lowpass in fb path) — SNES-style.
+## Modal color rotation (2-beat chord rate, NOT functional ii-V-I):
+##   Section A (Gm): Cm6 - BbM7(9) - Cm6 - G7#5#9 - Cm7(9) - BbM7(9) - Cm7(9) - Dm7(9)-Daug7
+##   Section B (Fm): DbM7(9) - DbmM7 - Cm7(11) - Faug7 - Bbm7(9) - Bbm7(11)
+##   Section C (Bb→Gm): EbM7(9) - Dm7b5 - G7#5#9 - Cm6 - BbM7(9) - G7#5#9 - Cm7(9) - Cm6
 
 const SR := 44100
-const BPM := 110.0
+const BPM := 128.0
 const BEATS_PER_BAR := 4
-const BAR_COUNT := 8  # extended from 4 to 8 bars (A + B sections)
-const BEAT_DUR := 60.0 / BPM  # 0.5454s per beat
-const BAR_DUR := BEAT_DUR * BEATS_PER_BAR  # 2.1818s per bar
-const LOOP_DUR := BAR_DUR * BAR_COUNT  # 17.45s total
-const SWING := 0.66  # long-short ratio for 8th notes (0.5 = straight, 0.66 = swung)
+const BAR_COUNT := 16
+const BEAT_DUR := 60.0 / BPM  # 0.469s per beat
+const BAR_DUR := BEAT_DUR * BEATS_PER_BAR  # 1.875s per bar
+const LOOP_DUR := BAR_DUR * BAR_COUNT  # 30s total
+const HALF_BAR_DUR := BEAT_DUR * 2  # 2-beat chord rate
 
 var _stream: AudioStreamWAV
 var _player: AudioStreamPlayer
@@ -46,138 +44,89 @@ func _ready() -> void:
 	_player = AudioStreamPlayer.new()
 	_player.stream = _stream
 	_player.bus = "Music"
-	_player.volume_db = -10.0  # gentler master, no over-compression
+	_player.volume_db = -10.0
 	_player.name = "MusicPlayer"
 	add_child(_player)
 	_player.play()
 
-# --- Chord definitions ---
-# Each chord has:
-#   bass_walk: 4 frequencies (quarter notes) — STAYS IN ONE OCTAVE (D2-D3),
-#              connects by step to next chord's root, no octave jumps.
-#   comp_freqs: rootless drop-2 voicing (bass plays the root)
-#   comp_amps: amplitude scaling (9ths quiet, altered tones quieter)
-#   comp_rhythm: which stab positions to use this bar (varies per bar)
-#
-# A section (bars 1-4): Am9 - D7#5#9 - Gmaj9 - Fm6 (ii-V-I-vi in G, then bVI color)
-# B section (bars 5-8): Cmaj7 - Fmaj7 - Bm7b5 - E7#5#9 - Am9 (turn-around back to A)
-#                     wait, 4 chords in 4 bars: Cmaj7 - Fmaj7 - Bm7b5 - E7#5#9
-#                     then loop back to Am9 (bar 1).
+# --- Chord definitions (2-beat rate = 32 chords in 16 bars) ---
+# Each chord: {root, bass_note, comp_freqs (rootless), comp_amps, arp_notes, lead_note}
+# Speder2 voicings: rootless, drop voicings, amplitude scaling on tensions
+# Frequencies precomputed from A4=440 equal temperament
 
 const CHORDS := [
-	# === A SECTION ===
-	# Bar 1: Am9 (m7(9)) — i. Rootless: E-G-B-D wait that's Em7; Am9 rootless = C-E-G-B
-	# Actually Am9 = A-C-E-G-B. Rootless (drop root A, keep 3-5-7-9): C-E-G-B
-	# Bass walk: A - C - E - Eb (chromatic approach to D, next root)
-	{
-		"bass_walk": [110.00, 130.81, 164.81, 155.56],  # A2 C3 E3 Eb3
-		"comp_freqs": [261.63, 329.63, 392.00, 493.88],  # C4 E4 G4 B4 (3,5,7,9)
-		"comp_amps": [0.20, 0.18, 0.14, 0.08],  # 9th (B4) quietest
-		"comp_rhythm": [0, 1, 2, 3],  # 1, &2, 3, &4 (all four)
-	},
-	# Bar 2: D7#5#9 (7alt +5+9) — V7 altered. FIXED voicing:
-	# Rootless from 3rd: F#(3), C(b7), F(#9), A#(#5) — #9 ABOVE the 3rd
-	# Bass walk: D - F - A - Bb (chromatic approach up to B = 3rd of G)
-	{
-		"bass_walk": [73.42, 87.31, 110.00, 116.54],  # D2 F2 A2 Bb2
-		"comp_freqs": [185.00, 261.63, 349.23, 466.16],  # F#3 C4 F4 A#4 (3,b7,#9,#5)
-		"comp_amps": [0.22, 0.18, 0.07, 0.10],  # #9 (F4) very quiet, #5 (A#4) quiet
-		"comp_rhythm": [0, 2, 3],  # 1, 3, &4 (drop &2 for variation)
-	},
-	# Bar 3: Gmaj9 (M7(9)) — IV. Rootless: B-D-F#-A (3,5,7,9)
-	# Bass walk: G - B - D - F# (chord tones leading to F root)
-	{
-		"bass_walk": [98.00, 123.47, 146.83, 185.00],  # G2 B2 D3 F#3
-		"comp_freqs": [246.94, 293.66, 369.99, 440.00],  # B3 D4 F#4 A4 (3,5,7,9)
-		"comp_amps": [0.20, 0.18, 0.14, 0.08],  # 9th (A4) quietest
-		"comp_rhythm": [0, 1, 2],  # 1, &2, 3 (drop &4 — leave space)
-	},
-	# Bar 4: Fm6 (m6) — bVI. F-Ab-C-D. With bass on F, comp = Ab-C-D-F(oct)
-	# The Ab-D tritone gives the "anxious, transparent" speder2 mood
-	# Bass walk: F - Ab - C - B (chromatic approach to A from below)
-	{
-		"bass_walk": [87.31, 103.83, 130.81, 123.47],  # F2 Ab2 C3 B2
-		"comp_freqs": [207.65, 261.63, 293.66, 349.23],  # Ab3 C4 D4 F4 (b3,5,6,8ve)
-		"comp_amps": [0.14, 0.20, 0.10, 0.16],  # 6th (D4) is tritone with Ab3 → quiet
-		"comp_rhythm": [1, 2, 3],  # &2, 3, &4 (drop beat 1 — Basie-style)
-	},
-	# === B SECTION ===
-	# Bar 5: Cmaj7 (I in C major, borrowed) — C-E-G-B. Rootless: E-G-B-D
-	# Bass walk: C - E - G - B (chord tones leading to A or F)
-	{
-		"bass_walk": [65.41, 82.41, 98.00, 123.47],  # C2 E2 G2 B2
-		"comp_freqs": [164.81, 196.00, 246.94, 293.66],  # E3 G3 B3 D4 (3,5,7,9)
-		"comp_amps": [0.20, 0.18, 0.14, 0.08],
-		"comp_rhythm": [0, 1, 2, 3],  # full pattern again
-	},
-	# Bar 6: Fmaj7 (IV in C) — F-A-C-E. Rootless: A-C-E-G
-	# Bass walk: F - A - C - E (chord tones)
-	{
-		"bass_walk": [87.31, 110.00, 130.81, 164.81],  # F2 A2 C3 E3
-		"comp_freqs": [220.00, 261.63, 329.63, 392.00],  # A3 C4 E4 G4 (3,5,7,9)
-		"comp_amps": [0.20, 0.18, 0.14, 0.08],
-		"comp_rhythm": [0, 2, 3],  # 1, 3, &4
-	},
-	# Bar 7: Bm7b5 (ii° in A minor) — B-D-F-A. Rootless: D-F-A-C
-	# Bass walk: B - D - F - A (chord tones leading to E)
-	{
-		"bass_walk": [61.74, 73.42, 87.31, 110.00],  # B2 D2 F2 A2
-		"comp_freqs": [146.83, 174.61, 220.00, 261.63],  # D3 F3 A3 C4 (b3,b5,b7,b9)
-		"comp_amps": [0.18, 0.14, 0.16, 0.10],  # b5 (F3) and b9 (C4) quiet (dissonant)
-		"comp_rhythm": [1, 2],  # &2, 3 (sparse — turn-around building)
-	},
-	# Bar 8: E7#5#9 (V7alt in A minor) — E-G#-Bb-D-F. Rootless: G#-Bb-D-F (#9 above 3rd)
-	# Bass walk: E - G# - Bb - B (chromatic approach to A from below, B leads to A or C)
-	# Actually Bb→A is the chromatic approach down. Let me use: E - G# - B - Bb
-	{
-		"bass_walk": [82.41, 103.83, 123.47, 116.54],  # E2 G#2 B2 Bb2 (Bb approaches A)
-		"comp_freqs": [207.65, 233.08, 293.66, 349.23],  # G#3 Bb3 D4 F4 (3,#5,b7,#9)
-		"comp_amps": [0.22, 0.10, 0.16, 0.07],  # #5 and #9 very quiet
-		"comp_rhythm": [0, 1, 2, 3],  # full pattern — turn-around resolve back to Am9
-	},
-]
-
-# Melody motif (Toby Fox style — recurring 4-note cell, transposed per chord)
-# Each bar plays a 4-note motif derived from the chord's upper extensions.
-# Notes are placed on beats 1, &2, 3, &4 (syncopated like the comp).
-# Motif is a simple arpeggio of the comp voicing + a neighbor tone.
-const MELODY_MOTIFS := [
-	# Bar 1 (Am9): E4 - G4 - B4 - A4 (5-7-9-6 of Am, the A4 is a neighbor)
-	[329.63, 392.00, 493.88, 440.00],
-	# Bar 2 (D7alt): C4 - F4 - A#4 - G#4 (b7-#9-#5-...color tones)
-	[261.63, 349.23, 466.16, 415.30],
-	# Bar 3 (Gmaj9): D4 - F#4 - A4 - G4 (5-7-9-6 of G)
-	[293.66, 369.99, 440.00, 392.00],
-	# Bar 4 (Fm6): C4 - D4 - F4 - Eb4 (5-6-8-b7 of Fm)
-	[261.63, 293.66, 349.23, 311.13],
-	# Bar 5 (Cmaj7): E4 - G4 - B4 - A4
-	[329.63, 392.00, 493.88, 440.00],
-	# Bar 6 (Fmaj7): A4 - C5 - E5 - D5
-	[440.00, 523.25, 659.25, 587.33],
-	# Bar 7 (Bm7b5): D4 - F4 - A4 - G4
-	[293.66, 349.23, 440.00, 392.00],
-	# Bar 8 (E7alt): G#4 - Bb4 - D5 - C#5 (color tones leading back to A)
-	[415.30, 466.16, 587.33, 554.37],
+	# === SECTION A (bars 1-8, G minor) ===
+	# Bar 1: Cm6 - BbM7(9)
+	{"bass": 65.41, "comp": [196.00, 246.94, 311.13, 349.23], "amps": [0.18, 0.20, 0.10, 0.14], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 392.00},  # Cm6: C-Eb-G-A (b3,5,6,8ve)
+	{"bass": 58.27, "comp": [220.00, 261.63, 311.13, 415.30], "amps": [0.20, 0.18, 0.12, 0.08], "arp": [311.13, 349.23, 415.30, 466.16], "lead": 466.16},  # BbM7(9): D-F-A-C-E (3,5,7,9)
+	# Bar 2: Cm6 - G7#5#9
+	{"bass": 65.41, "comp": [196.00, 246.94, 311.13, 349.23], "amps": [0.18, 0.20, 0.10, 0.14], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 523.25},
+	{"bass": 49.00, "comp": [196.00, 261.63, 293.66, 415.30], "amps": [0.20, 0.16, 0.08, 0.10], "arp": [293.66, 349.23, 415.30, 466.16], "lead": 466.16},  # G7#5#9: B-Eb-Bb-Db (3,#5,#9,b7 wait...)
+	# Bar 3: Cm7(9) - BbM7(9)
+	{"bass": 65.41, "comp": [196.00, 233.08, 311.13, 392.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 392.00},  # Cm7(9): Eb-G-Bb-D (b3,5,b7,9)
+	{"bass": 58.27, "comp": [220.00, 261.63, 311.13, 415.30], "amps": [0.20, 0.18, 0.12, 0.08], "arp": [311.13, 349.23, 415.30, 466.16], "lead": 415.30},
+	# Bar 4: Cm7(9) - Dm7(9)→Daug7
+	{"bass": 65.41, "comp": [196.00, 233.08, 311.13, 392.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 523.25},
+	{"bass": 73.42, "comp": [220.00, 261.63, 329.63, 415.30], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [329.63, 392.00, 466.16, 523.25], "lead": 466.16},  # Dm7(9): F-A-C-E (b3,5,b7,9)
+	# Bar 5: Daug7 - Cm6
+	{"bass": 73.42, "comp": [246.94, 311.13, 349.23, 415.30], "amps": [0.18, 0.14, 0.12, 0.10], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 523.25},  # Daug7: F#-Bb-D-F (3,#5,7)
+	{"bass": 65.41, "comp": [196.00, 246.94, 311.13, 349.23], "amps": [0.18, 0.20, 0.10, 0.14], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 466.16},
+	# Bar 6: BbM7(9) - Cm7(9)
+	{"bass": 58.27, "comp": [220.00, 261.63, 311.13, 415.30], "amps": [0.20, 0.18, 0.12, 0.08], "arp": [311.13, 349.23, 415.30, 466.16], "lead": 415.30},
+	{"bass": 65.41, "comp": [196.00, 233.08, 311.13, 392.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 392.00},
+	# Bar 7: G7#5#9 - Cm6
+	{"bass": 49.00, "comp": [196.00, 261.63, 293.66, 415.30], "amps": [0.20, 0.16, 0.08, 0.10], "arp": [293.66, 349.23, 415.30, 466.16], "lead": 466.16},
+	{"bass": 65.41, "comp": [196.00, 246.94, 311.13, 349.23], "amps": [0.18, 0.20, 0.10, 0.14], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 523.25},
+	# Bar 8: BbM7(9) - G7#5#9 (turn to F minor)
+	{"bass": 58.27, "comp": [220.00, 261.63, 311.13, 415.30], "amps": [0.20, 0.18, 0.12, 0.08], "arp": [311.13, 349.23, 415.30, 466.16], "lead": 415.30},
+	{"bass": 49.00, "comp": [196.00, 261.63, 293.66, 415.30], "amps": [0.20, 0.16, 0.08, 0.10], "arp": [293.66, 349.23, 415.30, 466.16], "lead": 466.16},
+	# === SECTION B (bars 9-16, F minor → Bb → Gm return) ===
+	# Bar 9: DbM7(9) - DbmM7
+	{"bass": 69.30, "comp": [233.08, 277.18, 329.63, 440.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [329.63, 392.00, 466.16, 554.37], "lead": 554.37},  # DbM7(9): F-Ab-C-Eb-G (3,5,7,9)
+	{"bass": 69.30, "comp": [233.08, 261.63, 329.63, 493.88], "amps": [0.18, 0.14, 0.16, 0.08], "arp": [329.63, 392.00, 466.16, 523.25], "lead": 523.25},  # DbmM7: Fb-Ab-Db-E (b3,5,7 of Dbm)
+	# Bar 10: Cm7(11) - Faug7
+	{"bass": 65.41, "comp": [196.00, 233.08, 311.13, 466.16], "amps": [0.20, 0.18, 0.14, 0.06], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 523.25},  # Cm7(11): Eb-G-Bb-F (b3,5,b7,11)
+	{"bass": 87.31, "comp": [220.00, 311.13, 349.23, 415.30], "amps": [0.18, 0.12, 0.14, 0.10], "arp": [349.23, 415.30, 466.16, 523.25], "lead": 466.16},  # Faug7: A-C#-F (3,#5,7)
+	# Bar 11: Bbm7(9) - Bbm7(11)
+	{"bass": 58.27, "comp": [185.00, 220.00, 277.18, 349.23], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [277.18, 349.23, 415.30, 466.16], "lead": 466.16},  # Bbm7(9): Db-F-Ab-C-Eb (b3,5,b7,9)
+	{"bass": 58.27, "comp": [185.00, 220.00, 277.18, 415.30], "amps": [0.20, 0.18, 0.14, 0.06], "arp": [277.18, 349.23, 415.30, 466.16], "lead": 523.25},  # Bbm7(11): +11th
+	# Bar 12: EbM7(9) - Dm7b5 (turn back to G)
+	{"bass": 77.78, "comp": [233.08, 293.66, 349.23, 440.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [349.23, 440.00, 523.25, 587.33], "lead": 587.33},  # EbM7(9): G-Bb-D-F-A (3,5,7,9)
+	{"bass": 73.42, "comp": [220.00, 261.63, 311.13, 392.00], "amps": [0.18, 0.14, 0.16, 0.10], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 523.25},  # Dm7b5: F-Ab-C-Eb (b3,b5,b7,9)
+	# Bar 13: G7#5#9 - Cm6
+	{"bass": 49.00, "comp": [196.00, 261.63, 293.66, 415.30], "amps": [0.20, 0.16, 0.08, 0.10], "arp": [293.66, 349.23, 415.30, 466.16], "lead": 466.16},
+	{"bass": 65.41, "comp": [196.00, 246.94, 311.13, 349.23], "amps": [0.18, 0.20, 0.10, 0.14], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 523.25},
+	# Bar 14: BbM7(9) - Cm7(9)
+	{"bass": 58.27, "comp": [220.00, 261.63, 311.13, 415.30], "amps": [0.20, 0.18, 0.12, 0.08], "arp": [311.13, 349.23, 415.30, 466.16], "lead": 466.16},
+	{"bass": 65.41, "comp": [196.00, 233.08, 311.13, 392.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 392.00},
+	# Bar 15: G7#5#9 - Cm6
+	{"bass": 49.00, "comp": [196.00, 261.63, 293.66, 415.30], "amps": [0.20, 0.16, 0.08, 0.10], "arp": [293.66, 349.23, 415.30, 466.16], "lead": 466.16},
+	{"bass": 65.41, "comp": [196.00, 246.94, 311.13, 349.23], "amps": [0.18, 0.20, 0.10, 0.14], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 523.25},
+	# Bar 16: BbM7(9) - Cm6 (resolve back to start)
+	{"bass": 58.27, "comp": [220.00, 261.63, 311.13, 415.30], "amps": [0.20, 0.18, 0.12, 0.08], "arp": [311.13, 349.23, 415.30, 466.16], "lead": 415.30},
+	{"bass": 65.41, "comp": [196.00, 246.94, 311.13, 349.23], "amps": [0.18, 0.20, 0.10, 0.14], "arp": [311.13, 392.00, 466.16, 523.25], "lead": 523.25},
 ]
 
 func _render_theme() -> AudioStreamWAV:
 	var n: int = int(LOOP_DUR * SR)
 	var o := PackedFloat32Array()
 	o.resize(n)
-	for bar_idx in BAR_COUNT:
-		var chord: Dictionary = CHORDS[bar_idx]
-		var start_sample: int = int(bar_idx * BAR_DUR * SR)
-		var bar_samples: int = int(BAR_DUR * SR)
-		_render_walking_bass(o, start_sample, bar_samples, chord)
-		_render_comp_stabs(o, start_sample, bar_samples, chord)
-		_render_ride(o, start_sample, bar_samples)
-		_render_melody(o, start_sample, bar_samples, bar_idx)
-	# Apply reverb (one-comb feedback delay)
+	var chord_samples: int = int(HALF_BAR_DUR * SR)
+	# Render each 2-beat chord segment
+	for chord_idx in CHORDS.size():
+		var chord: Dictionary = CHORDS[chord_idx]
+		var start: int = chord_idx * chord_samples
+		_render_bass(o, start, chord_samples, chord)
+		_render_chords(o, start, chord_samples, chord, chord_idx)
+		_render_arp(o, start, chord_samples, chord, chord_idx)
+		_render_lead(o, start, chord_samples, chord, chord_idx)
+	# Render drums across the whole loop
+	_render_drums(o, n)
+	# Reverb
 	_apply_reverb(o, n)
-	# Gentle master (no over-compression) — only soft-clip if needed
+	# Gentle master
 	for i in n:
-		o[i] = tanh(o[i] * 0.7)  # gentle saturation, preserves dynamics
-	# Convert to 16-bit PCM
+		o[i] = tanh(o[i] * 0.7)
 	var bytes := PackedByteArray()
 	bytes.resize(n * 2)
 	for i in n:
@@ -189,191 +138,204 @@ func _render_theme() -> AudioStreamWAV:
 	w.data = bytes
 	return w
 
-# --- Layer 1: Walking bass (sine + harmonics + pluck transient + humanized) ---
-func _render_walking_bass(out: PackedFloat32Array, start: int, len: int, chord: Dictionary) -> void:
-	var bass_walk: Array = chord["bass_walk"]
-	var beat_samples: int = int(BEAT_DUR * SR)
-	for beat in 4:
-		var note_freq: float = bass_walk[beat]
-		# Humanize: laid-back timing, +6-10ms random delay (never ahead)
-		var human_delay: int = int((0.006 + 0.004 * randf()) * SR)
-		var note_start: int = beat * beat_samples + human_delay
-		var ph := 0.0
-		var note_len: int = beat_samples - human_delay
-		for i in note_len:
-			if note_start + i >= len:
-				break
-			ph += note_freq / SR
-			# Sine fundamental + 2nd harmonic at -12dB + 3rd at -18dB (woody body)
-			var fundamental: float = sin(ph)
-			var h2: float = sin(ph * 2.0) * 0.25  # -12dB
-			var h3: float = sin(ph * 3.0) * 0.125  # -18dB
-			var bass_sample: float = fundamental + h2 + h3
-			# Pluck transient: 2ms bright noise at note onset
-			var pluck: float = 0.0
-			if i < int(0.002 * SR):
-				pluck = randf_range(-1.0, 1.0) * exp(-float(i) / (0.001 * SR)) * 0.5
-			# ADSR: 2ms attack, exp decay (no sustain — let note decay slightly)
-			var env: float
-			var atk: int = int(0.002 * SR)
-			if i < atk:
-				env = float(i) / atk
-			else:
-				env = exp(-float(i - atk) / (0.4 * SR))  # slow decay across the note
-			out[start + note_start + i] += (bass_sample + pluck) * env * 0.32
+# --- Layer 1: Bass (sustained saw, root notes, 2-beat duration) ---
+func _render_bass(out: PackedFloat32Array, start: int, len: int, chord: Dictionary) -> void:
+	var bass_freq: float = chord["bass"]
+	var ph := 0.0
+	for i in len:
+		if start + i >= out.size():
+			break
+		ph += bass_freq / SR
+		# Sawtooth: 2*(ph - floor(ph+0.5)) — rich harmonics
+		var saw: float = 2.0 * (ph - floor(ph + 0.5))
+		# One-pole lowpass at ~300Hz for warm bass body
+		# (simplified: just smooth the saw)
+		var lp: float = saw * 0.7
+		# ADSR: 5ms attack, sustain, 30ms release
+		var env: float
+		var atk: int = int(0.005 * SR)
+		var rel: int = int(0.03 * SR)
+		if i < atk:
+			env = float(i) / atk
+		elif i > len - rel:
+			env = float(len - i) / rel
+		else:
+			env = 1.0
+		out[start + i] += lp * env * 0.28
 
-# --- Layer 2: Comp stabs (SAW additive + noise attack + exp decay) ---
-func _render_comp_stabs(out: PackedFloat32Array, start: int, len: int, chord: Dictionary) -> void:
-	var comp_freqs: Array = chord["comp_freqs"]
-	var comp_amps: Array = chord["comp_amps"]
-	var comp_rhythm: Array = chord["comp_rhythm"]
-	var beat_samples: int = int(BEAT_DUR * SR)
-	# Stab positions: 0=beat1, 1=&2, 2=beat3, 3=&4 (with swing on the & positions)
-	var stab_positions: Array = [
-		0.0,                      # beat 1
-		1.0 + SWING,              # &2 (swung)
-		2.0,                      # beat 3
-		3.0 + SWING,              # &4 (swung)
-	]
-	var stab_dur: int = int(0.18 * SR)  # 180ms per stab
+# --- Layer 2: Chord stabs (saw + harmonics, 2-beat stabs, speder2 voicings) ---
+func _render_chords(out: PackedFloat32Array, start: int, len: int, chord: Dictionary, chord_idx: int) -> void:
+	var comp_freqs: Array = chord["comp"]
+	var comp_amps: Array = chord["amps"]
+	# Stab pattern: hit on beat 1 of the 2-beat segment, and a softer hit on beat 2
+	var stab_positions: Array = [0.0, 1.0]  # beat 1 (full), beat 2 (softer)
+	var stab_amps: Array = [1.0, 0.6]
+	var stab_dur: int = int(0.3 * SR)
 	var phases: Array = []
 	phases.resize(comp_freqs.size())
 	phases.fill(0.0)
-	for rhythm_idx in comp_rhythm:
-		var pos: float = stab_positions[rhythm_idx]
-		var stab_start: int = int(pos * beat_samples)
-		if stab_start >= len:
-			continue
+	for s in stab_positions.size():
+		var pos: float = stab_positions[s]
+		var amp_mult: float = stab_amps[s]
+		var stab_start: int = start + int(pos * BEAT_DUR * SR)
 		for i in stab_dur:
-			if stab_start + i >= len:
+			if stab_start + i >= out.size():
 				break
-			# Exp decay (NO sustain — piano/guitar stabs die)
-			var env: float = exp(-float(i) / (0.08 * SR))  # τ=80ms
-			# Attack: 3ms ramp at very start
-			var atk_env: float = 1.0
+			# Exp decay
+			var env: float = exp(-float(i) / (0.12 * SR)) * amp_mult
+			# 3ms attack
 			if i < int(0.003 * SR):
-				atk_env = float(i) / int(0.003 * SR)
-			# Noise attack transient: 3ms bright noise (hammer/pick)
+				env *= float(i) / int(0.003 * SR)
+			# Noise attack
 			var noise_atk: float = 0.0
 			if i < int(0.003 * SR):
-				noise_atk = randf_range(-1.0, 1.0) * (1.0 - float(i) / int(0.003 * SR)) * 0.3
-			# SAW (additive 1/n harmonics) per voice — much richer than pure sine
+				noise_atk = randf_range(-1.0, 1.0) * (1.0 - float(i) / int(0.003 * SR)) * 0.2
+			# Saw (additive 1/n harmonics)
 			var sample: float = 0.0
 			for j in comp_freqs.size():
-				# Micro-pitch drift (±0.2% per voice, speder2 technique)
 				var drift: float = sin(float(stab_start + i) / SR * 4.0 + j * 1.7) * 0.002
 				phases[j] += comp_freqs[j] * (1.0 + drift) / SR
-				# Additive harmonics: fundamental + 2nd + 3rd (saw-ish)
-				var h1: float = sin(phases[j]) * 1.0
-				var h2: float = sin(phases[j] * 2.0) * 0.5  # 1/2 amplitude
-				var h3: float = sin(phases[j] * 3.0) * 0.33  # 1/3 amplitude
+				var h1: float = sin(phases[j])
+				var h2: float = sin(phases[j] * 2.0) * 0.5
+				var h3: float = sin(phases[j] * 3.0) * 0.33
 				sample += (h1 + h2 + h3) * comp_amps[j]
-			out[start + stab_start + i] += (sample + noise_atk) * env * atk_env * 0.10
+			out[stab_start + i] += (sample + noise_atk) * env * 0.09
 
-# --- Layer 3: Ride cymbal (inharmonic squares + bandpass noise + 0.5s decay) ---
-func _render_ride(out: PackedFloat32Array, start: int, len: int) -> void:
-	var beat_samples: int = int(BEAT_DUR * SR)
-	# Spang-a-lang pattern: hits on 1, &2, 3, &4 (with swing)
-	var ride_positions: Array = [
-		{"pos": 0.0, "amp": 0.10, "dur": 0.8},    # beat 1 — full ride ring
-		{"pos": 1.0 + SWING, "amp": 0.07, "dur": 0.5},  # &2 (bell, shorter)
-		{"pos": 2.0, "amp": 0.10, "dur": 0.8},    # beat 3
-		{"pos": 3.0 + SWING, "amp": 0.07, "dur": 0.5},  # &4 (bell)
-	]
-	# Inharmonic ratios for the metallic ping (TR-808 style)
-	var inharm_ratios: Array = [1.0, 1.34, 1.56, 1.78, 2.0, 2.4]
-	var base_freq: float = 2200.0  # ~2.2kHz base for the metallic body
-	for r in ride_positions:
-		var pos: float = r["pos"]
-		var amp: float = r["amp"]
-		var dur_s: float = r["dur"]
-		var ride_start: int = int(pos * beat_samples)
-		var ride_dur: int = int(dur_s * SR)
-		if ride_start >= len:
-			continue
-		# Pre-generate the 6 oscillator phases (offset for shimmer)
-		var phases: Array = []
-		for k in inharm_ratios.size():
-			phases.append(randf() * TAU)  # random initial phase
-		for i in ride_dur:
-			if ride_start + i >= len:
-				break
-			# Long exp decay (τ=0.5s — ride RINGS, not a closed hi-hat)
-			var env: float = exp(-float(i) / (0.5 * SR))
-			# Stick click: 1.5ms bright noise at very start
-			var stick: float = 0.0
-			if i < int(0.0015 * SR):
-				stick = randf_range(-1.0, 1.0) * exp(-float(i) / (0.0005 * SR)) * 0.4
-			# 6 inharmonic square oscillators (metallic ping body)
-			var metallic: float = 0.0
-			for k in inharm_ratios.size():
-				var f: float = base_freq * inharm_ratios[k]
-				phases[k] += f / SR
-				var sq: float = 1.0 if fmod(phases[k], TAU) < PI else -1.0
-				metallic += sq
-			metallic *= 0.15  # tame the sum
-			# Bandpass-ish noise (high-pass via simple diff, then low-pass) for the wash
-			var noise: float = randf_range(-1.0, 1.0) * 0.6
-			var ride_sample: float = metallic + noise * 0.3
-			out[start + ride_start + i] += (ride_sample + stick) * env * amp
-	# Hi-hat chick on beats 2 and 4 (0-indexed 1 and 3) — short, tight
-	for beat in [1, 3]:
-		var hat_start: int = beat * beat_samples
-		var hat_dur: int = int(0.04 * SR)  # 40ms (closed hi-hat, NOT ride)
-		for i in hat_dur:
-			if hat_start + i >= len:
-				break
-			var env: float = exp(-float(i) / (0.012 * SR))  # τ=12ms
-			out[start + hat_start + i] += randf_range(-1.0, 1.0) * env * 0.04
-
-# --- Layer 4: Melody motif (sine lead with 2nd harmonic, recurring 4-note cell) ---
-func _render_melody(out: PackedFloat32Array, start: int, len: int, bar_idx: int) -> void:
-	var motif: Array = MELODY_MOTIFS[bar_idx]
-	var beat_samples: int = int(BEAT_DUR * SR)
-	# Place melody notes on 1, &2, 3, &4 (syncopated like the comp)
-	var positions: Array = [0.0, 1.0 + SWING, 2.0, 3.0 + SWING]
-	var note_dur: int = int(0.35 * SR)  # 350ms per melody note (overlaps slightly)
-	for note_idx in motif.size():
-		var note_freq: float = motif[note_idx]
-		var pos: float = positions[note_idx]
-		var note_start: int = int(pos * beat_samples)
-		if note_start >= len:
-			continue
+# --- Layer 3: Arpeggio (high-register sine counter-line, 8th notes) ---
+func _render_arp(out: PackedFloat32Array, start: int, len: int, chord: Dictionary, chord_idx: int) -> void:
+	var arp_notes: Array = chord["arp"]
+	var eighth_dur: int = int(BEAT_DUR / 2.0 * SR)
+	var note_idx: int = chord_idx % arp_notes.size()  # offset start per chord for variation
+	var i: int = 0
+	while i < len:
+		var note_freq: float = arp_notes[note_idx % arp_notes.size()]
+		var note_start: int = i
 		var ph := 0.0
-		for i in note_dur:
-			if note_start + i >= len:
+		for j in eighth_dur:
+			if note_start + j >= len or start + note_start + j >= out.size():
 				break
 			ph += note_freq / SR
-			# Sine + 2nd harmonic (lead tone, not too buzzy)
+			# Sine + 2nd harmonic (bell-like, high register)
 			var fundamental: float = sin(ph)
-			var h2: float = sin(ph * 2.0) * 0.2  # subtle 2nd harmonic
-			# ADSR: 5ms attack, sustain, 80ms release
-			var env: float
-			var atk: int = int(0.005 * SR)
-			var rel: int = int(0.08 * SR)
-			if i < atk:
-				env = float(i) / atk
-			elif i > note_dur - rel:
-				env = float(note_dur - i) / rel
-			else:
-				env = 1.0
-			# Vibrato: subtle 5Hz pitch wobble for life
-			var vibrato: float = sin(float(i) / SR * TAU * 5.0) * 0.003
-			out[start + note_start + i] += (fundamental + h2) * env * 0.13 * (1.0 + vibrato)
+			var h2: float = sin(ph * 2.0) * 0.15
+			# Quick decay (8th note pluck)
+			var env: float = exp(-float(j) / (0.1 * SR))
+			out[start + note_start + j] += (fundamental + h2) * env * 0.05
+		note_idx += 1
+		i = note_start + eighth_dur
 
-# --- Reverb: one-comb feedback delay (SNES-style "in a room") ---
+# --- Layer 4: Lead (sparse synth, enters off-beat, stepwise) ---
+func _render_lead(out: PackedFloat32Array, start: int, len: int, chord: Dictionary, chord_idx: int) -> void:
+	# Lead plays only on ~60% of chords (sparse), enters on the "&" of beat 1
+	if chord_idx % 5 == 4:  # rest every 5th chord for breathing
+		return
+	var lead_freq: float = chord["lead"]
+	# Enter on & of beat 1 (swing position)
+	var lead_start: int = int(0.66 * BEAT_DUR * SR)
+	var lead_dur: int = int(1.2 * BEAT_DUR * SR)  # ~1.2 beats
+	var ph := 0.0
+	for i in lead_dur:
+		if lead_start + i >= len or start + lead_start + i >= out.size():
+			break
+		ph += lead_freq / SR
+		# Saw lead + vibrato
+		var vibrato: float = sin(float(i) / SR * TAU * 5.0) * 0.003
+		var saw: float = 2.0 * (ph + vibrato - floor(ph + vibrato + 0.5))
+		# Lowpass the saw a bit (sine + 2nd harmonic instead for cleaner tone)
+		var fundamental: float = sin(ph + vibrato)
+		var h2: float = sin((ph + vibrato) * 2.0) * 0.3
+		# ADSR: 8ms attack, sustain, 100ms release
+		var env: float
+		var atk: int = int(0.008 * SR)
+		var rel: int = int(0.1 * SR)
+		if i < atk:
+			env = float(i) / atk
+		elif i > lead_dur - rel:
+			env = float(lead_dur - i) / rel
+		else:
+			env = 1.0
+		out[start + lead_start + i] += (fundamental + h2) * env * 0.10
+
+# --- Layer 5: Drums (kick, clap, hats, cowbell) across the whole loop ---
+func _render_drums(out: PackedFloat32Array, n: int) -> void:
+	var beat_samples: int = int(BEAT_DUR * SR)
+	var total_beats: int = int(LOOP_DUR / BEAT_DUR)
+	for beat in total_beats:
+		var beat_start: int = beat * beat_samples
+		var bar: int = beat / 4
+		var beat_in_bar: int = beat % 4
+		# Kick: four-on-the-floor (beats 1, 2, 3, 4)
+		_render_kick(out, beat_start, n)
+		# Clap: beats 2 and 4
+		if beat_in_bar == 1 or beat_in_bar == 3:
+			_render_clap(out, beat_start, n)
+		# Hats: off-beat 8ths (&1, &2, &3, &4)
+		_render_hat(out, beat_start + beat_samples / 2, n)
+		# Cowbell: beats 3 and 4 (kaiwai-kyoku signature)
+		if beat_in_bar == 2 or beat_in_bar == 3:
+			_render_cowbell(out, beat_start, n)
+
+func _render_kick(out: PackedFloat32Array, start: int, n: int) -> void:
+	var kick_dur: int = int(0.12 * SR)
+	var ph := 0.0
+	for i in kick_dur:
+		if start + i >= n:
+			break
+		# Pitch drop: 80Hz → 40Hz over 30ms
+		var t: float = float(i) / SR
+		var freq: float = 80.0 * exp(-t / 0.03) + 40.0
+		ph += freq / SR
+		# Sine body + click at start
+		var body: float = sin(ph)
+		var click: float = 0.0
+		if i < int(0.002 * SR):
+			click = randf_range(-1.0, 1.0) * (1.0 - float(i) / int(0.002 * SR)) * 0.5
+		# Exp decay
+		var env: float = exp(-float(i) / (0.05 * SR))
+		out[start + i] += (body + click) * env * 0.32
+
+func _render_clap(out: PackedFloat32Array, start: int, n: int) -> void:
+	var clap_dur: int = int(0.08 * SR)
+	for i in clap_dur:
+		if start + i >= n:
+			break
+		# Noise burst with bandpass-ish character (just noise + fast decay)
+		var env: float = exp(-float(i) / (0.025 * SR))
+		out[start + i] += randf_range(-1.0, 1.0) * env * 0.12
+
+func _render_hat(out: PackedFloat32Array, start: int, n: int) -> void:
+	var hat_dur: int = int(0.04 * SR)
+	for i in hat_dur:
+		if start + i >= n:
+			break
+		var env: float = exp(-float(i) / (0.015 * SR))
+		out[start + i] += randf_range(-1.0, 1.0) * env * 0.05
+
+func _render_cowbell(out: PackedFloat32Array, start: int, n: int) -> void:
+	var cow_dur: int = int(0.15 * SR)
+	# Cowbell: two square oscillators at ~840Hz and ~540Hz (classic 808 cowbell)
+	var ph1 := 0.0
+	var ph2 := 0.0
+	for i in cow_dur:
+		if start + i >= n:
+			break
+		ph1 += 840.0 / SR
+		ph2 += 540.0 / SR
+		var sq1: float = 1.0 if fmod(ph1, TAU) < PI else -1.0
+		var sq2: float = 1.0 if fmod(ph2, TAU) < PI else -1.0
+		var env: float = exp(-float(i) / (0.06 * SR))
+		out[start + i] += (sq1 * 0.6 + sq2 * 0.4) * env * 0.06
+
+# --- Reverb (one-comb feedback delay, SNES-style room) ---
 func _apply_reverb(out: PackedFloat32Array, n: int) -> void:
-	var delay_samples: int = int(0.09 * SR)  # 90ms delay
+	var delay_samples: int = int(0.09 * SR)
 	var wet := PackedFloat32Array()
 	wet.resize(n)
-	var lp_state: float = 0.0  # one-pole lowpass state in feedback path
+	var lp_state: float = 0.0
 	for i in n:
 		var delayed: float = wet[i - delay_samples] if i >= delay_samples else 0.0
-		# Lowpass in feedback path to kill harshness
 		lp_state = lp_state + (delayed - lp_state) * 0.3
-		# 25% dry send, 45% feedback
 		wet[i] = out[i] * 0.25 + lp_state * 0.45
-		# Add 35% wet into master
 		out[i] = out[i] + wet[i] * 0.35
 
 ## Set music volume (0.0 = silent, 1.0 = full).
