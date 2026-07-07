@@ -190,10 +190,10 @@ func _update_phase(input_dir: Vector2, delta: float) -> void:
 		input_dir = input_dir.normalized()
 		facing = input_dir
 		_last_input_dir = input_dir
-		# Momentum blend on direction change (same as FLOAT)
+		# Direction reflect — keep speed, flip direction. Phase is fast and
+		# committed; reflect lets you curve through a turn without stalling.
 		if vel.length() > 10.0 and vel.normalized().dot(input_dir) < 0.0:
-			var blend_rate: float = 1.0 - exp(-delta * 12.0)
-			vel = vel.lerp(input_dir * vel.length(), blend_rate * 0.5)
+			vel = input_dir * vel.length() * 0.85
 		vel = vel.move_toward(input_dir * target_speed, ACCEL * delta)
 	else:
 		# During phase, keep moving in facing direction even without input
@@ -215,10 +215,10 @@ func _update_dive(input_dir: Vector2, delta: float) -> void:
 		input_dir = input_dir.normalized()
 		facing = input_dir
 		_last_input_dir = input_dir
-		# Momentum blend on direction change (same as FLOAT)
+		# Direction reflect — dive is a burst, you can curve it but it
+		# keeps the burst momentum. 0.80 retain (slight loss on redirect).
 		if vel.length() > 10.0 and vel.normalized().dot(input_dir) < 0.0:
-			var blend_rate: float = 1.0 - exp(-delta * 12.0)
-			vel = vel.lerp(input_dir * vel.length(), blend_rate * 0.5)
+			vel = input_dir * vel.length() * 0.80
 		vel = vel.move_toward(input_dir * target_speed, ACCEL * 1.5 * delta)
 	else:
 		# No input — keep going in current direction (burst momentum)
@@ -231,10 +231,16 @@ func _update_dive(input_dir: Vector2, delta: float) -> void:
 # --- COAST: carrying converted momentum ---
 func _update_coast(input_dir: Vector2, delta: float) -> void:
 	_coast_timer -= delta
-	# Track how long input has been held — if held >0.15s, exit coast
-	# (the player is deliberately steering, not just pulsing)
+	# Track input hold for coast cancel — but ONLY count input that steers
+	# away from current velocity (>45° off). Holding the dive direction
+	# keeps you in coast (so you can chain phase); pushing a different
+	# direction for >0.25s cancels coast (player wants to regain control).
 	if input_dir != Vector2.ZERO:
-		_coast_input_hold += delta
+		var vel_dir: Vector2 = vel.normalized() if vel.length() > 1.0 else facing
+		if input_dir.normalized().dot(vel_dir) < 0.7:  # >45° off current direction
+			_coast_input_hold += delta
+		else:
+			_coast_input_hold = 0.0
 	else:
 		_coast_input_hold = 0.0
 	# Bob is smooth during coast (gliding)
@@ -247,10 +253,10 @@ func _update_coast(input_dir: Vector2, delta: float) -> void:
 		input_dir = input_dir.normalized()
 		facing = input_dir
 		_last_input_dir = input_dir
-		# Momentum blend on direction change (same as FLOAT)
+		# Direction reflect — keep speed, flip direction. Coast is lighter
+		# (0.70 retain) so steering out of coast feels deliberate.
 		if vel.length() > 10.0 and vel.normalized().dot(input_dir) < 0.0:
-			var blend_rate: float = 1.0 - exp(-delta * 12.0)
-			vel = vel.lerp(input_dir * vel.length(), blend_rate * 0.4)
+			vel = input_dir * vel.length() * 0.70
 		vel = vel.move_toward(input_dir * target_speed, ACCEL * 0.8 * delta)
 	else:
 		vel = vel.move_toward(Vector2.ZERO, ACCEL * COAST_DECEL_MULT * delta)
@@ -258,36 +264,29 @@ func _update_coast(input_dir: Vector2, delta: float) -> void:
 	# Decay pulse mult + flash
 	_pulse_mult = lerp(_pulse_mult, 1.0, 1.0 - exp(-delta * PULSE_BOOST_DECAY))
 	_pulse_flash = max(0, _pulse_flash - delta * 4.0)
-	# Coast ends when: timer expires, speed drops too low, input held firmly,
-	# or phase starts. The "input held >0.15s" check lets the player cancel
-	# coast by just holding a direction — intuitive, no extra button.
-	if _coast_timer <= 0 or vel.length() < COAST_MIN_SPEED or _coast_input_hold > 0.15:
+	# Coast ends when: timer expires, speed drops too low, or steering input
+	# is held firmly. Steering = pushing a direction >45° off current vel
+	# for >0.25s. Holding the dive direction does NOT cancel (so the chain
+	# phase→dive→coast→phase stays possible).
+	if _coast_timer <= 0 or vel.length() < COAST_MIN_SPEED or _coast_input_hold > 0.25:
 		state = State.FLOAT
 
 # --- Shared movement application ---
-## Blend-based direction change: instead of hard reflect (which was too
-## aggressive) or pure move_toward (which stalls on reversal), this
-## progressively redirects velocity toward the new direction. The blend
-## rate scales with how opposite the new direction is — 90° changes are
-## gentle, 180° reversals are faster but not instant. This keeps the
-## movement responsive without the harsh snap or the floaty drift.
+## Direction reflect on reversals: when the new input is >90° from current
+## velocity, snap velocity to the new direction at 85% of current speed.
+## This eliminates the "slowdown on direction change" that move_toward
+## causes (it has to decelerate to zero before accelerating the other way).
+## 85% retain = you keep most of your momentum, just redirected. The 15%
+## loss prevents reversal-spam from being free. For partial turns (<90°),
+## move_toward handles it smoothly — no reflect needed.
 func _apply_movement(input_dir: Vector2, target_speed: float, accel: float, decel: float, delta: float) -> void:
 	if input_dir != Vector2.ZERO:
 		input_dir = input_dir.normalized()
 		facing = input_dir
 		_last_input_dir = input_dir
-		# Momentum blend: redirect velocity toward new direction at a rate
-		# proportional to how much it needs to change. The lerp factor is
-		# higher for big direction changes (>90°) so the ghost responds
-		# quickly, but it's a BLEND not a snap — no harsh reflect.
-		if vel.length() > 10.0:
-			var dot: float = vel.normalized().dot(input_dir)
-			if dot < 0.0:
-				# Opposite-ish direction: blend velocity toward new direction
-				# at 40% per frame (fast but not instant). Keeps ~60% of
-				# speed through the turn, then accel handles the rest.
-				var blend_rate: float = 1.0 - exp(-delta * 12.0)
-				vel = vel.lerp(input_dir * vel.length(), blend_rate * 0.6)
+		# Direction reflect on reversals only (dot < 0 means >90° turn)
+		if vel.length() > 10.0 and vel.normalized().dot(input_dir) < 0.0:
+			vel = input_dir * vel.length() * 0.85
 		vel = vel.move_toward(input_dir * target_speed, accel * delta)
 	else:
 		vel = vel.move_toward(Vector2.ZERO, decel * delta)

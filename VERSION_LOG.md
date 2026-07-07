@@ -4,6 +4,22 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.12 — Snappy Reflect + Coast Cancel Fix (2026-07-07)
+
+### Movement Feel: Hard Reflect Restored (v0.11 Blend Was Too Soft)
+**Changed:** Replaced v0.11's progressive velocity blend (`lerp` with `exp(-delta*12.0)*0.6` factor) with the v0.10.5 hard reflect on direction changes >90°. The blend was too soft — at 60fps the per-frame blend factor was only ~10.9%, so a full 180° reversal took ~0.4s to actually start moving the other way. The hard reflect snaps velocity to the new direction at 85% of current speed (FLOAT/PHASE), 80% (DIVE), 70% (COAST — lighter so steering out feels deliberate). The 15-30% loss prevents reversal-spam from being free. Partial turns (<90°) still use `move_toward` for smoothness. Reflect is now also applied to PHASE state (v0.10.5 was missing PHASE direction-change handling entirely).
+
+### Chain System Fixed (Coast Cancel Was Too Aggressive)
+**Changed:** The v0.10.5 coast-cancel threshold (`_coast_input_hold > 0.15` on ANY held direction) was kicking the player out of COAST before they could chain phase. By the time they wanted to chain phase→dive→coast→phase, they were already in FLOAT, and the chain halving never fired. Fixed: coast cancel now only triggers on STEERING input — a direction >45° off current velocity, held >0.25s. Holding the dive direction (the natural chain input) keeps you in COAST so the chain stays possible. Threshold raised from 0.15s to 0.25s for more grace.
+
+### Chain Halving + Bank Intact
+**Kept:** v0.11's chain cooldown halving (PHASE_CD * 0.5 when phasing from COAST) and phase_bank reduction are preserved and verified working. Unit-tested: FLOAT→PHASE cd=4.0s, COAST→PHASE cd=0.5s (2.0 halved + 1.5 bank). Three consecutive chain cycles verified end-to-end.
+
+### SFX + Camera Untouched
+**Kept:** All v0.11 speder2 chord-timbre SFX work and v0.10.5 camera feel changes (look-ahead 8px, speed micro-shake, smoothing rates) are preserved — only `ghost_movement.gd` was modified.
+
+---
+
 ## v0.11 — Momentum Blend, Chain Fix, SFX Overhaul (2026-07-07)
 
 ### Momentum Blend Replaces Hard Reflect
