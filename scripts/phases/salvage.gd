@@ -570,77 +570,42 @@ func _take_hazard_damage(h: Dictionary) -> void:
                 # Make the spirit diamonds flash red briefly
                 _spirit_flash = 0.5
 
+# QTE presets — data-driven, tuning = editing this table not navigating match branches
+const QTE_PRESETS := {
+        "pit": {
+                "type": "timing", "verb": "JUMP", "timer": 2.0, "max_timer": 2.0,
+                "target_x": 0.5, "marker_x": 0.0, "marker_dir": 1.0, "marker_speed": 1.2,
+        },
+        "fire": {
+                "type": "spam", "verb": "MASH SPACE!", "timer": 2.5, "max_timer": 2.5,
+                "progress": 0.0, "target": 1.5, "last_press_time": 0.0,
+        },
+        "spikes": {
+                "type": "pattern", "verb": "PATTERN", "timer": 3.0, "max_timer": 3.0,
+        },
+        "debris": {
+                "type": "reverse", "verb": "DON'T MOVE!", "timer": 1.5, "max_timer": 1.5,
+        },
+}
+const QTE_DEFAULT := {
+        "type": "timing", "verb": "TAP", "timer": 2.5, "max_timer": 2.5,
+        "target_x": 0.5, "marker_x": 0.0, "marker_dir": 1.0, "marker_speed": 0.8,
+}
+
 func _start_qte(hazard: Dictionary) -> void:
-        # 4 QTE types — all tightened for real danger:
-        #   timing: faster marker, smaller window
-        #   spam: higher target, less time
-        #   pattern: 5 keys (was 4), less time
-        #   reverse: less time to wait (more tension)
         var qte_type: String = hazard.get("type", "pit")
-        match qte_type:
-                "pit":
-                        # Timing bar — faster marker (1.2 was 0.8), tighter window
-                        active_qte = {
-                                "type": "timing",
-                                "verb": "JUMP",
-                                "timer": 2.0,  # was 2.5
-                                "max_timer": 2.0,
-                                "target_x": 0.5,
-                                "marker_x": 0.0,
-                                "marker_dir": 1.0,
-                                "marker_speed": 1.2,  # was 0.8 — much faster
-                                "hazard": hazard,
-                        }
-                "fire":
-                        # Spam — need 1.5 (was 1.0), 0.12 per press (was 0.15), 2.5s (was 3.0)
-                        active_qte = {
-                                "type": "spam",
-                                "verb": "MASH SPACE!",
-                                "timer": 2.5,  # was 3.0
-                                "max_timer": 2.5,
-                                "progress": 0.0,
-                                "target": 1.5,  # was 1.0 — need ~13 presses in 2.5s
-                                "last_press_time": 0.0,
-                                "hazard": hazard,
-                        }
-                "spikes":
-                        # Pattern — 5 keys (was 4), 3.0s (was 4.0)
-                        var pattern := []
-                        var keys := ["W", "A", "S", "D"]
-                        keys.shuffle()
-                        for i in 5:  # was 4
-                                pattern.append(keys[i % keys.size()])
-                        active_qte = {
-                                "type": "pattern",
-                                "verb": "PATTERN",
-                                "timer": 3.0,  # was 4.0
-                                "max_timer": 3.0,
-                                "pattern": pattern,
-                                "index": 0,
-                                "hazard": hazard,
-                        }
-                "debris":
-                        # Reverse QTE — 1.5s. Short enough to be tense, long enough
-                        # to require deliberate stillness.
-                        active_qte = {
-                                "type": "reverse",
-                                "verb": "DON'T MOVE!",
-                                "timer": 1.5,
-                                "max_timer": 1.5,
-                                "hazard": hazard,
-                        }
-                _:
-                        active_qte = {
-                                "type": "timing",
-                                "verb": "TAP",
-                                "timer": 2.5,
-                                "max_timer": 2.5,
-                                "target_x": 0.5,
-                                "marker_x": 0.0,
-                                "marker_dir": 1.0,
-                                "marker_speed": 0.8,
-                                "hazard": hazard,
-                        }
+        var preset: Dictionary = QTE_PRESETS.get(qte_type, QTE_DEFAULT).duplicate()
+        preset["hazard"] = hazard
+        # Pattern QTE: generate random WASD sequence
+        if preset.type == "pattern":
+                var keys := ["W", "A", "S", "D"]
+                keys.shuffle()
+                var pattern := []
+                for i in 5:
+                        pattern.append(keys[i % keys.size()])
+                preset["pattern"] = pattern
+                preset["index"] = 0
+        active_qte = preset
 
 func _update_qte(delta: float) -> void:
         active_qte.timer -= delta

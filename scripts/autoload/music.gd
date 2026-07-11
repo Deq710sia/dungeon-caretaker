@@ -43,7 +43,7 @@ var _muted: bool = false
 var _saved_volume: float = -10.0
 
 const CACHE_PATH := "user://music_cache.bin"
-const CACHE_VERSION := 6  # bump when music data changes to invalidate cache
+const CACHE_VERSION := 7  # bump when music data changes to invalidate cache
 
 func _ready() -> void:
         _stream = _load_cached()
@@ -175,6 +175,25 @@ const CHORDS := [
 # Sidechain envelope: tracks kick hits, ducks bass
 var _sidechain_gain: float = 1.0
 
+# --- DSP helpers (shared across all render functions) ---
+const _TWO_PI_OVER_SR := 2.0 * PI / SR
+
+## One-pole lowpass coefficient for given cutoff frequency.
+func _lp_coeff(cutoff_hz: float) -> float:
+        return 1.0 - exp(-_TWO_PI_OVER_SR * cutoff_hz)
+
+## One-pole highpass filter (stateful). Usage: var hp := _HPFilter.new(7000.0); y = hp.process(x)
+class _HPFilter:
+        var state: float = 0.0
+        var prev: float = 0.0
+        var alpha: float
+        func _init(cutoff_hz: float) -> void:
+                alpha = 1.0 - exp(-2.0 * PI * cutoff_hz / SR)
+        func process(x: float) -> float:
+                state = x - prev + (1.0 - alpha) * state
+                prev = x
+                return state
+
 func _render_theme() -> AudioStreamWAV:
         var n: int = int(LOOP_DUR * SR)
         # Stereo: L and R buffers
@@ -248,7 +267,7 @@ func _render_bass(L: PackedFloat32Array, R: PackedFloat32Array, start: int, len:
                 var ph_saw := 0.0
                 var ph_sub := 0.0
                 var lp_state: float = 0.0
-                var alpha: float = 1.0 - exp(-2.0 * PI * 400.0 / SR)
+                var alpha: float = _lp_coeff(400.0)
                 var note_len: int = beat_samples
                 for i in note_len:
                         if start + note_start + i >= L.size():
@@ -340,7 +359,7 @@ func _render_chords(L: PackedFloat32Array, R: PackedFloat32Array, start: int, le
                                 sample2 += h1_2 * comp_amps[j]
                         # Lowpass that drops over the stab
                         var cutoff: float = 3000.0 - 2200.0 * (float(i) / stab_dur)
-                        var alpha: float = 1.0 - exp(-2.0 * PI * cutoff / SR)
+                        var alpha: float = _lp_coeff(cutoff)
                         lp1 = lp1 + alpha * (sample1 - lp1)
                         lp2 = lp2 + alpha * (sample2 - lp2)
                         L[stab_start + i] += (lp1 + noise_atk * 0.5) * env * 0.065
@@ -389,237 +408,139 @@ func _render_arp(L: PackedFloat32Array, R: PackedFloat32Array, start: int, len: 
 # Section B: countermelody (chords 17-24) — higher register, transformed motif
 # Section A2: restatement (chords 25-32)
 
+# --- Melody motifs (named for readability — song structure visible at a glance) ---
+const MOTIF_QUESTION := [
+        {pos=0.0, freq=311.13, dur=0.5},   # Eb4 (b3)
+        {pos=0.5, freq=392.00, dur=0.5},   # G4 (5)
+        {pos=1.0, freq=440.00, dur=0.5},   # A4 (6)
+        {pos=1.5, freq=392.00, dur=0.5},   # G4 (5) — back down
+]
+const MOTIF_ANSWER := [
+        {pos=0.0, freq=349.23, dur=0.5},   # F4 (5)
+        {pos=0.5, freq=293.66, dur=0.5},   # D4 (3)
+        {pos=1.0, freq=261.63, dur=0.5},   # C4 (9th)
+        {pos=1.5, freq=293.66, dur=0.5},   # D4 (3) — back up
+]
+const MOTIF_TENSION := [
+        {pos=0.0, freq=493.88, dur=0.5},   # B4 (3)
+        {pos=0.5, freq=466.16, dur=0.5},   # A#4 (#9)
+        {pos=1.0, freq=392.00, dur=0.5},   # G4 (root)
+        {pos=1.5, freq=349.23, dur=0.5},   # F4 (b7) — descends to resolve
+]
+const MOTIF_VARIATION := [
+        {pos=0.0, freq=466.16, dur=0.5},   # Bb4 (9th)
+        {pos=0.5, freq=440.00, dur=0.5},   # A4
+        {pos=1.0, freq=392.00, dur=0.5},   # G4 (5)
+        {pos=1.5, freq=440.00, dur=0.5},   # A4 — passing
+]
+const MOTIF_ANSWER_CHROMATIC := [
+        {pos=0.0, freq=415.30, dur=0.5},   # G#4 — passing tone (chromatic approach)
+        {pos=0.5, freq=440.00, dur=0.5},   # A4
+        {pos=1.0, freq=523.25, dur=0.5},   # C5 (9th)
+        {pos=1.5, freq=466.16, dur=0.5},   # Bb4 (root)
+]
+const MOTIF_RISING_HELD := [
+        {pos=0.0, freq=440.00, dur=0.5},   # A4 (5)
+        {pos=0.5, freq=523.25, dur=0.5},   # C5 (b7)
+        {pos=1.0, freq=659.25, dur=1.0},   # E5 (9) — held long
+]
+const MOTIF_TENSION_HELD := [
+        {pos=0.0, freq=466.16, dur=0.5},   # A#4 (#5)
+        {pos=0.5, freq=523.25, dur=0.5},   # C5 (b7)
+        {pos=1.0, freq=466.16, dur=1.0},   # A#4 — held
+]
+const MOTIF_TENSION_RESOLVE := [
+        {pos=0.0, freq=493.88, dur=0.5},   # B4 (3)
+        {pos=0.5, freq=466.16, dur=0.5},   # A#4 (#9)
+        {pos=1.0, freq=392.00, dur=1.0},   # G4 — held, anticipates B section
+]
+# Section B countermelodies (higher register, unique motifs)
+const MOTIF_B_DBMAJ9 := [
+        {pos=0.0, freq=415.30, dur=0.5},   # Ab4 (5)
+        {pos=0.5, freq=523.25, dur=0.5},   # C5 (7)
+        {pos=1.0, freq=622.25, dur=0.5},   # Eb5 (9)
+        {pos=1.5, freq=523.25, dur=0.5},   # C5 (7)
+]
+const MOTIF_B_DBMM7 := [
+        {pos=0.0, freq=329.63, dur=0.5},   # E4 (b3)
+        {pos=0.5, freq=415.30, dur=0.5},   # Ab4 (5)
+        {pos=1.0, freq=523.25, dur=0.5},   # C5 (7)
+        {pos=1.5, freq=415.30, dur=0.5},   # Ab4 (5)
+]
+const MOTIF_B_DESCENDING := [
+        {pos=0.0, freq=466.16, dur=0.5},   # Bb4
+        {pos=0.5, freq=440.00, dur=0.5},   # A4
+        {pos=1.0, freq=392.00, dur=0.5},   # G4
+        {pos=1.5, freq=349.23, dur=0.5},   # F4 (11th)
+]
+const MOTIF_B_FAUG7 := [
+        {pos=0.0, freq=440.00, dur=0.5},   # A4 (3)
+        {pos=0.5, freq=554.37, dur=0.5},   # C#5 (#5)
+        {pos=1.0, freq=440.00, dur=1.0},   # A4 — held
+]
+const MOTIF_B_BBM7 := [
+        {pos=0.0, freq=349.23, dur=0.5},   # F4 (5)
+        {pos=0.5, freq=415.30, dur=0.5},   # Ab4 (b7)
+        {pos=1.0, freq=523.25, dur=0.5},   # C5 (9)
+        {pos=1.5, freq=415.30, dur=0.5},   # Ab4 (b7)
+]
+const MOTIF_B_BBM7_ANSWER := [
+        {pos=0.0, freq=466.16, dur=0.5},   # Bb4 (root)
+        {pos=0.5, freq=415.30, dur=0.5},   # Ab4 (b7)
+        {pos=1.0, freq=349.23, dur=0.5},   # F4 (5)
+        {pos=1.5, freq=415.30, dur=0.5},   # Ab4 (b7)
+]
+const MOTIF_B_EBMAJ9_HIGH := [
+        {pos=0.0, freq=466.16, dur=0.5},   # Bb4 (5)
+        {pos=0.5, freq=587.33, dur=0.5},   # D5 (7)
+        {pos=1.0, freq=698.46, dur=1.0},   # F5 (9) — high point
+]
+const MOTIF_B_DMI7B5 := [
+        {pos=0.0, freq=698.46, dur=0.5},   # F5
+        {pos=0.5, freq=587.33, dur=0.5},   # D5 (root)
+        {pos=1.0, freq=523.25, dur=0.5},   # C5 (b7)
+        {pos=1.5, freq=440.00, dur=0.5},   # A4 (b5)
+]
+const MOTIF_RESOLVE_LONG := [
+        {pos=0.0, freq=311.13, dur=0.5},   # Eb4 (b3)
+        {pos=0.5, freq=392.00, dur=1.5},   # G4 (5) — held long, resolves to loop
+]
+
 const MELODY := [
         # === SECTION A (chords 1-16) — Question + Answer motif ===
-        # Chord 1 (Cm6): question — rises 5-3-5 (Eb-D-G... wait, let me use scale degrees)
-        # Cm6 = C-Eb-G-A. Melody over it: Eb4 (b3) -> G4 (5) -> A4 (6) -> G4 (5)
-        [
-                {pos=0.0, freq=311.13, dur=0.5},   # Eb4 (b3)
-                {pos=0.5, freq=392.00, dur=0.5},   # G4 (5)
-                {pos=1.0, freq=440.00, dur=0.5},   # A4 (6)
-                {pos=1.5, freq=392.00, dur=0.5},   # G4 (5) — back down
-        ],
-        # Chord 2 (BbM7(9)): answer — descends from the high note
-        # BbM7(9) = Bb-D-F-A-C. Melody: F4 (5) -> D4 (3) -> C4 (9th) -> D4 (3)
-        [
-                {pos=0.0, freq=349.23, dur=0.5},   # F4 (5)
-                {pos=0.5, freq=293.66, dur=0.5},   # D4 (3)
-                {pos=1.0, freq=261.63, dur=0.5},   # C4 (9th)
-                {pos=1.5, freq=293.66, dur=0.5},   # D4 (3) — back up
-        ],
-        # Chord 3 (Cm6): repeat question motif
-        [
-                {pos=0.0, freq=311.13, dur=0.5},
-                {pos=0.5, freq=392.00, dur=0.5},
-                {pos=1.0, freq=440.00, dur=0.5},
-                {pos=1.5, freq=392.00, dur=0.5},
-        ],
-        # Chord 4 (G7#5#9): answer transforms — uses altered tones for tension
-        # G7#5#9 = G-B-D#-F-A#. Melody: B4 (3) -> A#4 (#9) -> G4 (root) -> F4 (b7)
-        [
-                {pos=0.0, freq=493.88, dur=0.5},   # B4 (3)
-                {pos=0.5, freq=466.16, dur=0.5},   # A#4 (#9)
-                {pos=1.0, freq=392.00, dur=0.5},   # G4 (root)
-                {pos=1.5, freq=349.23, dur=0.5},   # F4 (b7) — descends to resolve
-        ],
-        # Chord 5 (Cm7(9)): motif variation — starts higher
-        [
-                {pos=0.0, freq=466.16, dur=0.5},   # Bb4 (9th)
-                {pos=0.5, freq=440.00, dur=0.5},   # A4 (root up... wait Cm7 = C-Eb-G-Bb-D)
-                {pos=1.0, freq=392.00, dur=0.5},   # G4 (5)
-                {pos=1.5, freq=440.00, dur=0.5},   # A4 — passing
-        ],
-        # Chord 6 (BbM7(9)): answer
-        [
-                {pos=0.0, freq=415.30, dur=0.5},   # G#4 — passing tone (chromatic approach)
-                {pos=0.5, freq=440.00, dur=0.5},   # A4 (3rd of Bb... wait BbM7 = Bb-D-F-A-C)
-                {pos=1.0, freq=523.25, dur=0.5},   # C5 (9th)
-                {pos=1.5, freq=466.16, dur=0.5},   # Bb4 (root)
-        ],
-        # Chord 7 (Cm7(9)): repeat
-        [
-                {pos=0.0, freq=466.16, dur=0.5},
-                {pos=0.5, freq=440.00, dur=0.5},
-                {pos=1.0, freq=392.00, dur=0.5},
-                {pos=1.5, freq=440.00, dur=0.5},
-        ],
-        # Chord 8 (Dm7(9)): transition — rising line
-        # Dm7(9) = D-F-A-C-E. Melody: A4 -> C5 -> E5 (rising)
-        [
-                {pos=0.0, freq=440.00, dur=0.5},   # A4 (5)
-                {pos=0.5, freq=523.25, dur=0.5},   # C5 (b7)
-                {pos=1.0, freq=659.25, dur=1.0},   # E5 (9) — held long
-        ],
-        # Chord 9 (Daug7): tension — altered tones
-        # Daug7 = D-F#-A#-C. Melody: A#4 -> C5 -> A#4
-        [
-                {pos=0.0, freq=466.16, dur=0.5},   # A#4 (#5)
-                {pos=0.5, freq=523.25, dur=0.5},   # C5 (b7)
-                {pos=1.0, freq=466.16, dur=1.0},   # A#4 — held
-        ],
-        # Chord 10 (Cm6): return to motif
-        [
-                {pos=0.0, freq=311.13, dur=0.5},
-                {pos=0.5, freq=392.00, dur=0.5},
-                {pos=1.0, freq=440.00, dur=0.5},
-                {pos=1.5, freq=392.00, dur=0.5},
-        ],
-        # Chord 11 (BbM7(9)): answer
-        [
-                {pos=0.0, freq=349.23, dur=0.5},
-                {pos=0.5, freq=293.66, dur=0.5},
-                {pos=1.0, freq=261.63, dur=0.5},
-                {pos=1.5, freq=293.66, dur=0.5},
-        ],
-        # Chord 12 (Cm7(9)): motif
-        [
-                {pos=0.0, freq=466.16, dur=0.5},
-                {pos=0.5, freq=440.00, dur=0.5},
-                {pos=1.0, freq=392.00, dur=0.5},
-                {pos=1.5, freq=440.00, dur=0.5},
-        ],
-        # Chord 13 (G7#5#9): tension
-        [
-                {pos=0.0, freq=493.88, dur=0.5},
-                {pos=0.5, freq=466.16, dur=0.5},
-                {pos=1.0, freq=392.00, dur=0.5},
-                {pos=1.5, freq=349.23, dur=0.5},
-        ],
-        # Chord 14 (Cm6): motif
-        [
-                {pos=0.0, freq=311.13, dur=0.5},
-                {pos=0.5, freq=392.00, dur=0.5},
-                {pos=1.0, freq=440.00, dur=0.5},
-                {pos=1.5, freq=392.00, dur=0.5},
-        ],
-        # Chord 15 (BbM7(9)): answer
-        [
-                {pos=0.0, freq=349.23, dur=0.5},
-                {pos=0.5, freq=293.66, dur=0.5},
-                {pos=1.0, freq=261.63, dur=0.5},
-                {pos=1.5, freq=293.66, dur=0.5},
-        ],
-        # Chord 16 (G7#5#9): tension resolving to Section B
-        [
-                {pos=0.0, freq=493.88, dur=0.5},
-                {pos=0.5, freq=466.16, dur=0.5},
-                {pos=1.0, freq=392.00, dur=1.0},   # held — anticipates B section
-        ],
+        MOTIF_QUESTION,       # 1: Cm6
+        MOTIF_ANSWER,         # 2: BbM7(9)
+        MOTIF_QUESTION,       # 3: Cm6
+        MOTIF_TENSION,        # 4: G7#5#9
+        MOTIF_VARIATION,      # 5: Cm7(9)
+        MOTIF_ANSWER_CHROMATIC, # 6: BbM7(9)
+        MOTIF_VARIATION,      # 7: Cm7(9)
+        MOTIF_RISING_HELD,    # 8: Dm7(9)
+        MOTIF_TENSION_HELD,   # 9: Daug7
+        MOTIF_QUESTION,       # 10: Cm6
+        MOTIF_ANSWER,         # 11: BbM7(9)
+        MOTIF_VARIATION,      # 12: Cm7(9)
+        MOTIF_TENSION,        # 13: G7#5#9
+        MOTIF_QUESTION,       # 14: Cm6
+        MOTIF_ANSWER,         # 15: BbM7(9)
+        MOTIF_TENSION_RESOLVE, # 16: G7#5#9 (resolves to B)
         # === SECTION B (chords 17-32) — Countermelody, higher register ===
-        # Chord 17 (DbM7(9)): countermelody — higher, transformed motif
-        # DbM7(9) = Db-F-Ab-C-Eb. Melody: Ab4 -> C5 -> Eb5 -> C5
-        [
-                {pos=0.0, freq=415.30, dur=0.5},   # Ab4 (5)
-                {pos=0.5, freq=523.25, dur=0.5},   # C5 (7)
-                {pos=1.0, freq=622.25, dur=0.5},   # Eb5 (9)
-                {pos=1.5, freq=523.25, dur=0.5},   # C5 (7)
-        ],
-        # Chord 18 (DbmM7): dark turn
-        # DbmM7 = Db-E-Ab-C. Melody: E4 -> Ab4 -> C5 -> Ab4
-        [
-                {pos=0.0, freq=329.63, dur=0.5},   # E4 (b3)
-                {pos=0.5, freq=415.30, dur=0.5},   # Ab4 (5)
-                {pos=1.0, freq=523.25, dur=0.5},   # C5 (7)
-                {pos=1.5, freq=415.30, dur=0.5},   # Ab4 (5)
-        ],
-        # Chord 19 (Cm7(11)): descending
-        [
-                {pos=0.0, freq=466.16, dur=0.5},   # Bb4
-                {pos=0.5, freq=440.00, dur=0.5},   # A4
-                {pos=1.0, freq=392.00, dur=0.5},   # G4
-                {pos=1.5, freq=349.23, dur=0.5},   # F4 (11th)
-        ],
-        # Chord 20 (Faug7): tension
-        # Faug7 = F-A-C#-E#. Melody: A4 -> C#5 -> A4
-        [
-                {pos=0.0, freq=440.00, dur=0.5},   # A4 (3)
-                {pos=0.5, freq=554.37, dur=0.5},   # C#5 (#5)
-                {pos=1.0, freq=440.00, dur=1.0},   # A4 — held
-        ],
-        # Chord 21 (Bbm7(9)): motif
-        # Bbm7(9) = Bb-Db-F-Ab-C-Eb. Melody: F4 -> Ab4 -> C5 -> Ab4
-        [
-                {pos=0.0, freq=349.23, dur=0.5},   # F4 (5)
-                {pos=0.5, freq=415.30, dur=0.5},   # Ab4 (b7)
-                {pos=1.0, freq=523.25, dur=0.5},   # C5 (9)
-                {pos=1.5, freq=415.30, dur=0.5},   # Ab4 (b7)
-        ],
-        # Chord 22 (Bbm7(11)): answer
-        [
-                {pos=0.0, freq=466.16, dur=0.5},   # Bb4 (root)
-                {pos=0.5, freq=415.30, dur=0.5},   # Ab4 (b7)
-                {pos=1.0, freq=349.23, dur=0.5},   # F4 (5)
-                {pos=1.5, freq=415.30, dur=0.5},   # Ab4 (b7)
-        ],
-        # Chord 23 (EbM7(9)): rising
-        # EbM7(9) = Eb-G-Bb-D-F. Melody: Bb4 -> D5 -> F5
-        [
-                {pos=0.0, freq=466.16, dur=0.5},   # Bb4 (5)
-                {pos=0.5, freq=587.33, dur=0.5},   # D5 (7)
-                {pos=1.0, freq=698.46, dur=1.0},   # F5 (9) — high point
-        ],
-        # Chord 24 (Dm7b5): turn back
-        # Dm7b5 = D-F-Ab-C. Melody: F5 -> D5 -> C5 -> A4
-        [
-                {pos=0.0, freq=698.46, dur=0.5},   # F5 (b3... wait Dm7b5 = D-F-Ab-C-Eb)
-                {pos=0.5, freq=587.33, dur=0.5},   # D5 (root)
-                {pos=1.0, freq=523.25, dur=0.5},   # C5 (b7)
-                {pos=1.5, freq=440.00, dur=0.5},   # A4 (b5)
-        ],
-        # Chord 25 (G7#5#9): tension
-        [
-                {pos=0.0, freq=493.88, dur=0.5},
-                {pos=0.5, freq=466.16, dur=0.5},
-                {pos=1.0, freq=392.00, dur=0.5},
-                {pos=1.5, freq=349.23, dur=0.5},
-        ],
-        # Chord 26 (Cm6): return to A motif
-        [
-                {pos=0.0, freq=311.13, dur=0.5},
-                {pos=0.5, freq=392.00, dur=0.5},
-                {pos=1.0, freq=440.00, dur=0.5},
-                {pos=1.5, freq=392.00, dur=0.5},
-        ],
-        # Chord 27 (BbM7(9)): answer
-        [
-                {pos=0.0, freq=349.23, dur=0.5},
-                {pos=0.5, freq=293.66, dur=0.5},
-                {pos=1.0, freq=261.63, dur=0.5},
-                {pos=1.5, freq=293.66, dur=0.5},
-        ],
-        # Chord 28 (Cm7(9)): motif
-        [
-                {pos=0.0, freq=466.16, dur=0.5},
-                {pos=0.5, freq=440.00, dur=0.5},
-                {pos=1.0, freq=392.00, dur=0.5},
-                {pos=1.5, freq=440.00, dur=0.5},
-        ],
-        # Chord 29 (G7#5#9): tension
-        [
-                {pos=0.0, freq=493.88, dur=0.5},
-                {pos=0.5, freq=466.16, dur=0.5},
-                {pos=1.0, freq=392.00, dur=0.5},
-                {pos=1.5, freq=349.23, dur=0.5},
-        ],
-        # Chord 30 (Cm6): motif
-        [
-                {pos=0.0, freq=311.13, dur=0.5},
-                {pos=0.5, freq=392.00, dur=0.5},
-                {pos=1.0, freq=440.00, dur=0.5},
-                {pos=1.5, freq=392.00, dur=0.5},
-        ],
-        # Chord 31 (BbM7(9)): answer
-        [
-                {pos=0.0, freq=349.23, dur=0.5},
-                {pos=0.5, freq=293.66, dur=0.5},
-                {pos=1.0, freq=261.63, dur=0.5},
-                {pos=1.5, freq=293.66, dur=0.5},
-        ],
-        # Chord 32 (Cm6): resolve back to start — long final note
-        [
-                {pos=0.0, freq=311.13, dur=0.5},   # Eb4 (b3)
-                {pos=0.5, freq=392.00, dur=1.5},   # G4 (5) — held long, resolves to loop
-        ],
+        MOTIF_B_DBMAJ9,       # 17: DbM7(9)
+        MOTIF_B_DBMM7,        # 18: DbmM7
+        MOTIF_B_DESCENDING,   # 19: Cm7(11)
+        MOTIF_B_FAUG7,        # 20: Faug7
+        MOTIF_B_BBM7,         # 21: Bbm7(9)
+        MOTIF_B_BBM7_ANSWER,  # 22: Bbm7(11)
+        MOTIF_B_EBMAJ9_HIGH,  # 23: EbM7(9)
+        MOTIF_B_DMI7B5,       # 24: Dm7b5
+        MOTIF_TENSION,        # 25: G7#5#9
+        MOTIF_QUESTION,       # 26: Cm6
+        MOTIF_ANSWER,         # 27: BbM7(9)
+        MOTIF_VARIATION,      # 28: Cm7(9)
+        MOTIF_TENSION,        # 29: G7#5#9
+        MOTIF_QUESTION,       # 30: Cm6
+        MOTIF_ANSWER,         # 31: BbM7(9)
+        MOTIF_RESOLVE_LONG,   # 32: Cm6 (resolve back to start)
 ]
 # --- Layer 4: Melody (singable motif, 2-4 notes per chord, doubled with detune) ---
 func _render_lead(L: PackedFloat32Array, R: PackedFloat32Array, start: int, len: int, chord: Dictionary, chord_idx: int) -> void:
@@ -707,7 +628,7 @@ func _render_kick(L: PackedFloat32Array, R: PackedFloat32Array, start: int, n: i
         var kick_dur: int = int(0.14 * SR)
         var ph := 0.0
         var click_lp: float = 0.0
-        var click_alpha: float = 1.0 - exp(-2.0 * PI * 2000.0 / SR)
+        var click_alpha: float = _lp_coeff(2000.0)
         for i in kick_dur:
                 if start + i >= n:
                         break
@@ -729,8 +650,8 @@ func _render_clap(L: PackedFloat32Array, R: PackedFloat32Array, start: int, n: i
         var clap_dur: int = int(0.1 * SR)
         var hp_state: float = 0.0
         var lp_state: float = 0.0
-        var hp_alpha: float = 1.0 - exp(-2.0 * PI * 800.0 / SR)
-        var lp_alpha: float = 1.0 - exp(-2.0 * PI * 3000.0 / SR)
+        var hp_alpha: float = _lp_coeff(800.0)
+        var lp_alpha: float = _lp_coeff(3000.0)
         var prev_raw: float = 0.0
         for i in clap_dur:
                 if start + i >= n:
@@ -748,7 +669,7 @@ func _render_clap(L: PackedFloat32Array, R: PackedFloat32Array, start: int, n: i
 func _render_hat(L: PackedFloat32Array, R: PackedFloat32Array, start: int, n: int) -> void:
         var hat_dur: int = int(0.05 * SR)
         var hp_state: float = 0.0
-        var hp_alpha: float = 1.0 - exp(-2.0 * PI * 7000.0 / SR)
+        var hp_alpha: float = _lp_coeff(7000.0)
         var prev_raw: float = 0.0
         for i in hat_dur:
                 if start + i >= n:
@@ -769,8 +690,8 @@ func _render_cowbell(L: PackedFloat32Array, R: PackedFloat32Array, start: int, n
         var lp_state: float = 0.0
         var hp_state: float = 0.0
         var prev_hp: float = 0.0
-        var lp_alpha: float = 1.0 - exp(-2.0 * PI * 4000.0 / SR)
-        var hp_alpha: float = 1.0 - exp(-2.0 * PI * 600.0 / SR)
+        var lp_alpha: float = _lp_coeff(4000.0)
+        var hp_alpha: float = _lp_coeff(600.0)
         for i in cow_dur:
                 if start + i >= n:
                         break
@@ -792,7 +713,7 @@ func _render_cowbell(L: PackedFloat32Array, R: PackedFloat32Array, start: int, n
 func _render_ghost_snare(L: PackedFloat32Array, R: PackedFloat32Array, start: int, n: int) -> void:
         var dur: int = int(0.04 * SR)
         var lp_state: float = 0.0
-        var alpha: float = 1.0 - exp(-2.0 * PI * 2500.0 / SR)
+        var alpha: float = _lp_coeff(2500.0)
         for i in dur:
                 if start + i >= n:
                         break
@@ -822,7 +743,7 @@ func _render_shaker(L: PackedFloat32Array, R: PackedFloat32Array, bar_start: int
                 if sixteenth_idx == 13:
                         vel = 0.025
                 var hp_state: float = 0.0
-                var hp_alpha: float = 1.0 - exp(-2.0 * PI * 6000.0 / SR)
+                var hp_alpha: float = _lp_coeff(6000.0)
                 var prev_raw: float = 0.0
                 for i in shaker_dur:
                         if pos + i >= n:
@@ -846,7 +767,7 @@ func _render_drum_fill(L: PackedFloat32Array, R: PackedFloat32Array, start: int,
                         break
                 var intensity: float = 0.05 + 0.03 * hit  # builds up
                 var lp_state: float = 0.0
-                var alpha: float = 1.0 - exp(-2.0 * PI * 3000.0 / SR)
+                var alpha: float = _lp_coeff(3000.0)
                 for i in roll_dur:
                         if pos + i >= n:
                                 break
@@ -861,7 +782,7 @@ func _render_drum_fill(L: PackedFloat32Array, R: PackedFloat32Array, start: int,
         if crash_pos < n:
                 var crash_dur: int = int(0.4 * SR)
                 var hp_state: float = 0.0
-                var hp_alpha: float = 1.0 - exp(-2.0 * PI * 5000.0 / SR)
+                var hp_alpha: float = _lp_coeff(5000.0)
                 var prev_raw: float = 0.0
                 for i in crash_dur:
                         if crash_pos + i >= n:
@@ -948,7 +869,7 @@ func _apply_reverb_stereo(L: PackedFloat32Array, R: PackedFloat32Array, n: int) 
 func _master_process(L: PackedFloat32Array, R: PackedFloat32Array, n: int) -> void:
         var lp_l: float = 0.0
         var lp_r: float = 0.0
-        var alpha: float = 1.0 - exp(-2.0 * PI * 6000.0 / SR)
+        var alpha: float = _lp_coeff(6000.0)
         for i in n:
                 # Lowpass @ 6kHz (warm, removes remaining harshness)
                 lp_l = lp_l + alpha * (L[i] - lp_l)
