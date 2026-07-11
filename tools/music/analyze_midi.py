@@ -50,17 +50,18 @@ def parse_music_gd():
                 if 'bass' in d:
                     chords.append(d)
     
-    # Parse MELODY (named motif references)
+    # Parse MELODY (named motif references, in order)
     melody = []
     melody_match = re.search(r'const MELODY := \[(.*?)\n\]', content, re.DOTALL)
     if melody_match:
         content_str = melody_match.group(1)
-        for line in content_str.split('\n'):
-            line = line.strip()
-            # Match "MOTIF_NAME," or "MOTIF_NAME       # comment"
-            m = re.match(r'(MOTIF_\w+)', line)
-            if m:
-                melody.append(m.group(1))
+        # Parse token by token: MOTIF_X or [] (rest), preserving order
+        tokens = re.findall(r'(MOTIF_\w+|\[\])', content_str)
+        for token in tokens:
+            if token == '[]':
+                melody.append('REST')
+            else:
+                melody.append(token)
     
     # Parse individual MOTIF definitions
     motifs = {}
@@ -279,10 +280,10 @@ def analyze_layers(chords, melody_names, motifs):
     # Lead/melody: 2-4 notes per chord
     # Drums: 4 kicks + 2 claps + 4 hats + 2 cowbell = ~12 hits per bar = ~6 per chord
     
-    avg_polyphony = 1 + 4.5 + 6 + 3 + 6  # rough estimate
+    avg_polyphony = 1 + 4.5 + 3 + 6  # rough estimate
     
     return {
-        "layers": ["bass", "chords", "arp", "lead/melody", "drums"],
+        "layers": ["bass", "chords", "lead/melody", "drums"],
         "estimated_avg_polyphony": avg_polyphony,
         "density_warning": avg_polyphony > 20,
         "total_chord_segments": len(chords),

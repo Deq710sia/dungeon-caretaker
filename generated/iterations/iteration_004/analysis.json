@@ -4,7 +4,7 @@
     "bpm": 128.0,
     "total_chords": 32,
     "total_motifs": 4,
-    "total_melody_entries": 35
+    "total_melody_entries": 32
   },
   "melody": {
     "range": "C4\u2013D#5",
@@ -13,12 +13,9 @@
     "largest_leap_semitones": 4,
     "largest_leap_warning": false,
     "phrase_lengths": [
-      8,
-      8,
-      1,
+      17,
       3,
-      2,
-      8
+      10
     ],
     "contour": "mixed",
     "ascending_steps": 53,
@@ -29,8 +26,8 @@
       "MOTIF_A": 13,
       "MOTIF_B": 6,
       "MOTIF_C": 7,
-      "REST": 5,
-      "MOTIF_D": 4
+      "MOTIF_D": 4,
+      "REST": 2
     },
     "motif_reuse_ratio": 1.0
   },
