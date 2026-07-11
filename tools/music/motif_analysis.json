@@ -1,0 +1,26 @@
+{
+  "main_motif": "MOTIF_QUESTION",
+  "main_motif_occurrences": 6,
+  "motif_counts": {
+    "MOTIF_QUESTION": 6,
+    "MOTIF_ANSWER": 5,
+    "MOTIF_TENSION": 4,
+    "MOTIF_VARIATION": 4,
+    "MOTIF_ANSWER_CHROMATIC": 1,
+    "MOTIF_RISING_HELD": 1,
+    "MOTIF_TENSION_HELD": 1,
+    "MOTIF_TENSION_RESOLVE": 1,
+    "MOTIF_B_DBMAJ9": 1,
+    "MOTIF_B_DBMM7": 1,
+    "MOTIF_B_DESCENDING": 1,
+    "MOTIF_B_FAUG7": 1,
+    "MOTIF_B_BBM7": 1,
+    "MOTIF_B_BBM7_ANSWER": 1,
+    "MOTIF_B_EBMAJ9_HIGH": 1,
+    "MOTIF_B_DMI7B5": 1,
+    "MOTIF_RESOLVE_LONG": 1
+  },
+  "total_motifs_defined": 17,
+  "total_motifs_used": 17,
+  "reuse_ratio": 0.59375
+}

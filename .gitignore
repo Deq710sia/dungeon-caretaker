@@ -17,3 +17,6 @@ mono_crash.*.json
 Thumbs.db
 .vscode/
 .idea/
+generated/wav/
+generated/spectrograms/
+tools/music/output/
