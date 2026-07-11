@@ -43,7 +43,7 @@ var _muted: bool = false
 var _saved_volume: float = -10.0
 
 const CACHE_PATH := "user://music_cache.bin"
-const CACHE_VERSION := 8  # bump when music data changes to invalidate cache
+const CACHE_VERSION := 9  # bump when music data changes to invalidate cache
 
 func _ready() -> void:
         _stream = _load_cached()
@@ -120,42 +120,52 @@ func is_muted() -> bool:
         return _muted
 
 const CHORDS := [
-        # === A1 (bars 1-4) ===
-        {"bass": 65.41, "comp": [311.13, 392.00, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 523.25, 587.33], "lead": 392.00},  # Cm6: Eb-G-A-C
-        {"bass": 58.27, "comp": [293.66, 349.23, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [349.23, 440.00, 523.25, 587.33], "lead": 523.25},  # BbM7(9): D-F-A-C
-        {"bass": 65.41, "comp": [311.13, 392.00, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 523.25, 587.33], "lead": 392.00},  # Cm6
-        {"bass": 49.00, "comp": [246.94, 311.13, 349.23, 466.16], "amps": [0.20, 0.14, 0.16, 0.08], "arp": [311.13, 349.23, 466.16, 523.25], "lead": 466.16},  # G7#5#9: B-D#-F-A#
-        {"bass": 65.41, "comp": [311.13, 392.00, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 523.25, 587.33], "lead": 392.00},  # Cm6
-        {"bass": 58.27, "comp": [293.66, 349.23, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [349.23, 440.00, 523.25, 587.33], "lead": 523.25},  # BbM7(9)
-        {"bass": 65.41, "comp": [311.13, 392.00, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 523.25, 587.33], "lead": 392.00},  # Cm6
-        {"bass": 49.00, "comp": [246.94, 311.13, 349.23, 466.16], "amps": [0.20, 0.14, 0.16, 0.08], "arp": [311.13, 349.23, 466.16, 523.25], "lead": 466.16},  # G7#5#9
-        # === A2 (bars 5-8) — exact repeat ===
-        {"bass": 65.41, "comp": [311.13, 392.00, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 523.25, 587.33], "lead": 392.00},
-        {"bass": 58.27, "comp": [293.66, 349.23, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [349.23, 440.00, 523.25, 587.33], "lead": 523.25},
-        {"bass": 65.41, "comp": [311.13, 392.00, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 523.25, 587.33], "lead": 392.00},
-        {"bass": 49.00, "comp": [246.94, 311.13, 349.23, 466.16], "amps": [0.20, 0.14, 0.16, 0.08], "arp": [311.13, 349.23, 466.16, 523.25], "lead": 466.16},
-        {"bass": 65.41, "comp": [311.13, 392.00, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 523.25, 587.33], "lead": 392.00},
-        {"bass": 58.27, "comp": [293.66, 349.23, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [349.23, 440.00, 523.25, 587.33], "lead": 523.25},
-        {"bass": 65.41, "comp": [311.13, 392.00, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 523.25, 587.33], "lead": 392.00},
-        {"bass": 49.00, "comp": [246.94, 311.13, 349.23, 466.16], "amps": [0.20, 0.14, 0.16, 0.08], "arp": [311.13, 349.23, 466.16, 523.25], "lead": 466.16},
-        # === B (bars 9-12) — contrast: Ab major modal interchange ===
-        {"bass": 51.91, "comp": [261.63, 311.13, 392.00, 466.16], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 466.16, 587.33], "lead": 466.16},  # AbM7(9): C-Eb-G-Bb
-        {"bass": 49.00, "comp": [233.08, 293.66, 349.23, 440.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 349.23, 440.00, 523.25], "lead": 440.00},  # Gm7: Bb-D-F-A (Gm9 rootless)
-        {"bass": 65.41, "comp": [311.13, 392.00, 466.16, 587.33], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 466.16, 587.33], "lead": 587.33},  # Cm7(9): Eb-G-Bb-D
-        {"bass": 43.65, "comp": [207.65, 261.63, 311.13, 392.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [261.63, 311.13, 392.00, 466.16], "lead": 392.00},  # Fm7(9): Ab-C-Eb-G
-        {"bass": 51.91, "comp": [261.63, 311.13, 392.00, 466.16], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 466.16, 587.33], "lead": 466.16},  # AbM7(9)
-        {"bass": 49.00, "comp": [233.08, 293.66, 349.23, 440.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 349.23, 440.00, 523.25], "lead": 440.00},  # Gm7
-        {"bass": 65.41, "comp": [311.13, 392.00, 466.16, 587.33], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 466.16, 587.33], "lead": 587.33},  # Cm7(9)
-        {"bass": 49.00, "comp": [246.94, 311.13, 349.23, 466.16], "amps": [0.20, 0.14, 0.16, 0.08], "arp": [311.13, 349.23, 466.16, 523.25], "lead": 466.16},  # G7#5#9 (turn back)
-        # === A3 (bars 13-16) — return ===
-        {"bass": 65.41, "comp": [311.13, 392.00, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 523.25, 587.33], "lead": 392.00},
-        {"bass": 58.27, "comp": [293.66, 349.23, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [349.23, 440.00, 523.25, 587.33], "lead": 523.25},
-        {"bass": 65.41, "comp": [311.13, 392.00, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 523.25, 587.33], "lead": 392.00},
-        {"bass": 49.00, "comp": [246.94, 311.13, 349.23, 466.16], "amps": [0.20, 0.14, 0.16, 0.08], "arp": [311.13, 349.23, 466.16, 523.25], "lead": 466.16},
-        {"bass": 65.41, "comp": [311.13, 392.00, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 523.25, 587.33], "lead": 392.00},
-        {"bass": 58.27, "comp": [293.66, 349.23, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [349.23, 440.00, 523.25, 587.33], "lead": 523.25},
-        {"bass": 65.41, "comp": [311.13, 392.00, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 523.25, 587.33], "lead": 392.00},
-        {"bass": 65.41, "comp": [311.13, 392.00, 440.00, 523.25], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [311.13, 392.00, 523.25, 587.33], "lead": 392.00},  # Cm6 (resolve)
+	# === A1 (bars 1-4) — D major diatonic, warm maj7(9) ===
+	# Dmaj9: D-F#-A-C#-E. Rootless: F#-A-C#-E = [185.00, 220.00, 277.18, 329.63]
+	{"bass": 73.42, "comp": [185.00, 220.00, 277.18, 329.63], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 369.99, 440.00, 554.37], "lead": 587.33},  # Dmaj9
+	# Amaj9: A-C#-E-G#-B. Rootless: C#-E-G#-B = [277.18, 329.63, 415.30, 493.88]
+	{"bass": 55.00, "comp": [277.18, 329.63, 415.30, 493.88], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [329.63, 415.30, 493.88, 587.33], "lead": 659.25},  # Amaj9
+	# Bm7(9): B-D-F#-A-C#. Rootless: D-F#-A-C# = [293.66, 369.99, 440.00, 554.37]
+	{"bass": 61.74, "comp": [293.66, 369.99, 440.00, 554.37], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [369.99, 440.00, 554.37, 587.33], "lead": 587.33},  # Bm7(9)
+	# Gmaj9: G-B-D-F#-A. Rootless: B-D-F#-A = [246.94, 293.66, 369.99, 440.00]
+	{"bass": 49.00, "comp": [246.94, 293.66, 369.99, 440.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 369.99, 440.00, 587.33], "lead": 659.25},  # Gmaj9
+	# repeat
+	{"bass": 73.42, "comp": [185.00, 220.00, 277.18, 329.63], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 369.99, 440.00, 554.37], "lead": 587.33},
+	{"bass": 55.00, "comp": [277.18, 329.63, 415.30, 493.88], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [329.63, 415.30, 493.88, 587.33], "lead": 659.25},
+	{"bass": 61.74, "comp": [293.66, 369.99, 440.00, 554.37], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [369.99, 440.00, 554.37, 587.33], "lead": 587.33},
+	{"bass": 49.00, "comp": [246.94, 293.66, 369.99, 440.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 369.99, 440.00, 587.33], "lead": 659.25},
+	# === A2 (bars 5-8) — exact repeat ===
+	{"bass": 73.42, "comp": [185.00, 220.00, 277.18, 329.63], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 369.99, 440.00, 554.37], "lead": 587.33},
+	{"bass": 55.00, "comp": [277.18, 329.63, 415.30, 493.88], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [329.63, 415.30, 493.88, 587.33], "lead": 659.25},
+	{"bass": 61.74, "comp": [293.66, 369.99, 440.00, 554.37], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [369.99, 440.00, 554.37, 587.33], "lead": 587.33},
+	{"bass": 49.00, "comp": [246.94, 293.66, 369.99, 440.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 369.99, 440.00, 587.33], "lead": 659.25},
+	{"bass": 73.42, "comp": [185.00, 220.00, 277.18, 329.63], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 369.99, 440.00, 554.37], "lead": 587.33},
+	{"bass": 55.00, "comp": [277.18, 329.63, 415.30, 493.88], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [329.63, 415.30, 493.88, 587.33], "lead": 659.25},
+	{"bass": 61.74, "comp": [293.66, 369.99, 440.00, 554.37], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [369.99, 440.00, 554.37, 587.33], "lead": 587.33},
+	{"bass": 49.00, "comp": [246.94, 293.66, 369.99, 440.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 369.99, 440.00, 587.33], "lead": 659.25},
+	# === B (bars 9-12) — subdominant excursion, Em7 → F#m7 → Gmaj9 → A7sus4 ===
+	# Em7(9): E-G-B-D-F#. Rootless: G-B-D-F# = [196.00, 246.94, 293.66, 369.99]
+	{"bass": 41.20, "comp": [196.00, 246.94, 293.66, 369.99], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [246.94, 293.66, 369.99, 493.88], "lead": 493.88},  # Em7(9)
+	# F#m7: F#-A-C#-E. Rootless: A-C#-E-G# = [220.00, 277.18, 329.63, 415.30]
+	{"bass": 46.25, "comp": [293.66, 369.99, 440.00, 554.37], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 369.99, 440.00, 554.37], "lead": 554.37},  # F#m7
+	# Gmaj9 (again)
+	{"bass": 49.00, "comp": [246.94, 293.66, 369.99, 440.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 369.99, 440.00, 587.33], "lead": 587.33},
+	# A7sus4: A-D-E-G. Rootless: D-E-G-A = [293.66, 329.63, 392.00, 440.00] (sus = no 3rd)
+	{"bass": 55.00, "comp": [293.66, 329.63, 392.00, 440.00], "amps": [0.22, 0.16, 0.14, 0.10], "arp": [329.63, 392.00, 440.00, 587.33], "lead": 659.25},  # A7sus4
+	# repeat
+	{"bass": 41.20, "comp": [196.00, 246.94, 293.66, 369.99], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [246.94, 293.66, 369.99, 493.88], "lead": 493.88},
+	{"bass": 46.25, "comp": [293.66, 369.99, 440.00, 554.37], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 369.99, 440.00, 554.37], "lead": 554.37},
+	{"bass": 49.00, "comp": [246.94, 293.66, 369.99, 440.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 369.99, 440.00, 587.33], "lead": 587.33},
+	{"bass": 55.00, "comp": [293.66, 329.63, 392.00, 440.00], "amps": [0.22, 0.16, 0.14, 0.10], "arp": [329.63, 392.00, 440.00, 587.33], "lead": 659.25},
+	# === A3 (bars 13-16) — return ===
+	{"bass": 73.42, "comp": [185.00, 220.00, 277.18, 329.63], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 369.99, 440.00, 554.37], "lead": 587.33},
+	{"bass": 55.00, "comp": [277.18, 329.63, 415.30, 493.88], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [329.63, 415.30, 493.88, 587.33], "lead": 659.25},
+	{"bass": 61.74, "comp": [293.66, 369.99, 440.00, 554.37], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [369.99, 440.00, 554.37, 587.33], "lead": 587.33},
+	{"bass": 49.00, "comp": [246.94, 293.66, 369.99, 440.00], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 369.99, 440.00, 587.33], "lead": 659.25},
+	{"bass": 73.42, "comp": [185.00, 220.00, 277.18, 329.63], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 369.99, 440.00, 554.37], "lead": 587.33},
+	{"bass": 55.00, "comp": [277.18, 329.63, 415.30, 493.88], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [329.63, 415.30, 493.88, 587.33], "lead": 659.25},
+	{"bass": 61.74, "comp": [293.66, 369.99, 440.00, 554.37], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [369.99, 440.00, 554.37, 587.33], "lead": 587.33},
+	{"bass": 73.42, "comp": [185.00, 220.00, 277.18, 329.63], "amps": [0.20, 0.18, 0.14, 0.08], "arp": [293.66, 369.99, 440.00, 554.37], "lead": 587.33},  # Dmaj9 (resolve)
 ]
 
 # Sidechain envelope: tracks kick hits, ducks bass
@@ -393,55 +403,50 @@ func _render_arp(L: PackedFloat32Array, R: PackedFloat32Array, start: int, len: 
 # Section B: countermelody (chords 17-24) — higher register, transformed motif
 # Section A2: restatement (chords 25-32)
 
-# --- Melody motifs (4 only — memorable, high reuse) ---
-const MOTIF_A := [  # The hook: Eb4→G4→A4→G4 (stepwise, singable)
-        {pos=0.0, freq=311.13, dur=0.5},   # Eb4 (b3)
-        {pos=0.5, freq=392.00, dur=0.5},   # G4 (5)
-        {pos=1.0, freq=440.00, dur=0.5},   # A4 (6)
-        {pos=1.5, freq=392.00, dur=1.0},   # G4 (5) — held
+# --- Melody motifs (4 only — pretty, bell-like, higher register) ---
+const MOTIF_A := [  # The hook: D5→E5→F#5→E5 (stepwise in D major, singable, pretty)
+	{pos=0.0, freq=587.33, dur=0.5},   # D5 (root)
+	{pos=0.5, freq=659.25, dur=0.5},   # E5 (2nd)
+	{pos=1.0, freq=739.99, dur=0.5},   # F#5 (3rd)
+	{pos=1.5, freq=659.25, dur=1.0},   # E5 (2nd) — held
 ]
-const MOTIF_B := [  # The answer: F4→D4→C4→D4 (descends, resolves)
-        {pos=0.0, freq=349.23, dur=0.5},   # F4 (5)
-        {pos=0.5, freq=293.66, dur=0.5},   # D4 (3)
-        {pos=1.0, freq=261.63, dur=0.5},   # C4 (9th)
-        {pos=1.5, freq=293.66, dur=0.5},   # D4 (3)
+const MOTIF_B := [  # The answer: A4→F#4→E4→F#4 (descends, resolves warmly)
+	{pos=0.0, freq=440.00, dur=0.5},   # A4 (5th)
+	{pos=0.5, freq=369.99, dur=0.5},   # F#4 (3rd)
+	{pos=1.0, freq=329.63, dur=0.5},   # E4 (2nd)
+	{pos=1.5, freq=369.99, dur=0.5},   # F#4 (3rd)
 ]
-const MOTIF_C := [  # Tension: B4→A#4→G4→F4 (altered tones over G7#5#9)
-        {pos=0.0, freq=493.88, dur=0.5},   # B4 (3)
-        {pos=0.5, freq=466.16, dur=0.5},   # A#4 (#9)
-        {pos=1.0, freq=392.00, dur=0.5},   # G4 (root)
-        {pos=1.5, freq=349.23, dur=0.5},   # F4 (b7)
+const MOTIF_C := [  # Tension: B4→A4→F#4→E4 (stepwise descent, gentle not harsh)
+	{pos=0.0, freq=493.88, dur=0.5},   # B4 (7th)
+	{pos=0.5, freq=440.00, dur=0.5},   # A4 (5th)
+	{pos=1.0, freq=369.99, dur=0.5},   # F#4 (3rd)
+	{pos=1.5, freq=440.00, dur=0.5},   # A4 (5th) — resolves upward
 ]
-const MOTIF_D := [  # B-section variation: Ab4→C5→Eb5→C5 (transforms A up)
-        {pos=0.0, freq=415.30, dur=0.5},   # Ab4 (5 of Ab)
-        {pos=0.5, freq=523.25, dur=0.5},   # C5 (7)
-        {pos=1.0, freq=622.25, dur=0.5},   # Eb5 (9)
-        {pos=1.5, freq=523.25, dur=0.5},   # C5 (7)
+const MOTIF_D := [  # B-section variation: G4→B4→D5→B4 (opens up, hopeful)
+	{pos=0.0, freq=392.00, dur=0.5},   # G4 (4th — pretty sus4 color)
+	{pos=0.5, freq=493.88, dur=0.5},   # B4 (7th)
+	{pos=1.0, freq=587.33, dur=0.5},   # D5 (root)
+	{pos=1.5, freq=493.88, dur=0.5},   # B4 (7th)
 ]
 
-# AABA form: A appears 10×, B 6×, C 6×, D 4×, REST 2× (not in motifs = phrase break)
-# Unique motifs: 4 (target 4-8 = HOOK score 100)
-# Reuse ratio: 30/32 = 94% (target ≥60% = HOOK score 100)
-# Phrase lengths: [8, 8, 1, 3, 2, 8] avg=5.0 (target 4-8 = PHRASE DEV score 100)
+# AABA form with section-break rests for phrase structure
 const MELODY := [
-        # A1 (chords 1-8) — 4-bar phrase
-        MOTIF_A, MOTIF_B, MOTIF_A, MOTIF_C,
-        MOTIF_A, MOTIF_B, MOTIF_A, MOTIF_C,
-        [],  # phrase break (end of A1)
-        # A2 (chords 9-16) — exact repeat
-        MOTIF_A, MOTIF_B, MOTIF_A, MOTIF_C,
-        MOTIF_A, MOTIF_B, MOTIF_A, MOTIF_C,
-        [],  # phrase break (end of A2)
-        # B (chords 17-24) — contrast with REST breaks
-        MOTIF_D, [], MOTIF_D, MOTIF_C,
-        MOTIF_D, [], MOTIF_D, MOTIF_C,
-        [],  # phrase break (end of B)
-        # A3 (chords 25-32) — return, slight variation at end
-        MOTIF_A, MOTIF_B, MOTIF_A, MOTIF_C,
-        MOTIF_A, MOTIF_B, MOTIF_A, MOTIF_A,  # ends on A (not C) for resolution
+	# A1 (chords 1-8) — 4-bar phrase
+	MOTIF_A, MOTIF_B, MOTIF_A, MOTIF_C,
+	MOTIF_A, MOTIF_B, MOTIF_A, MOTIF_C,
+	[],  # phrase break (end of A1)
+	# A2 (chords 9-16) — exact repeat
+	MOTIF_A, MOTIF_B, MOTIF_A, MOTIF_C,
+	MOTIF_A, MOTIF_B, MOTIF_A, MOTIF_C,
+	[],  # phrase break (end of A2)
+	# B (chords 17-24) — contrast with REST breaks
+	MOTIF_D, [], MOTIF_D, MOTIF_C,
+	MOTIF_D, [], MOTIF_D, MOTIF_C,
+	[],  # phrase break (end of B)
+	# A3 (chords 25-32) — return, slight variation at end
+	MOTIF_A, MOTIF_B, MOTIF_A, MOTIF_C,
+	MOTIF_A, MOTIF_B, MOTIF_A, MOTIF_A,  # ends on A (not C) for resolution
 ]
-# MOTIF_REST is intentionally NOT defined — it creates phrase breaks in the
-# analysis (melody entries not in the motifs dict are skipped, breaking phrases).
 
 # --- Layer 4: Melody (singable motif, 2-4 notes per chord, doubled with detune) ---
 func _render_lead(L: PackedFloat32Array, R: PackedFloat32Array, start: int, len: int, chord: Dictionary, chord_idx: int) -> void:

@@ -29,7 +29,7 @@
        Chords: 32 | 
        Motifs: 4 |
        Duration: 30.0s</p>
-<div class="export-yes">✓ ALL TESTS PASS — Export to game: YES</div>
+<div class="export-no">✗ 1 TEST(S) FAILED — Export to game: NO — Continue iterating</div>
 <h2>📊 Quality Scores</h2>
 <table>
 <tr><td>HOOK</td><td><div class="score-bar score-pass" style="width:100%;">&nbsp;</div></td><td>100 ✓</td></tr>
@@ -37,10 +37,10 @@
 <tr><td>PHRASE DEV</td><td><div class="score-bar score-pass" style="width:100%;">&nbsp;</div></td><td>100 ✓</td></tr>
 <tr><td>RHYTHM</td><td><div class="score-bar score-warn" style="width:76%;">&nbsp;</div></td><td>76 ⚠</td></tr>
 <tr><td>MOTIF</td><td><div class="score-bar score-pass" style="width:100%;">&nbsp;</div></td><td>100 ✓</td></tr>
-<tr><td>TENSION</td><td><div class="score-bar score-warn" style="width:76%;">&nbsp;</div></td><td>76 ⚠</td></tr>
+<tr><td>TENSION</td><td><div class="score-bar score-warn" style="width:67%;">&nbsp;</div></td><td>67 ⚠</td></tr>
 <tr><td>REGISTER BALANCE</td><td><div class="score-bar score-pass" style="width:100%;">&nbsp;</div></td><td>100 ✓</td></tr>
 <tr><td>DENSITY</td><td><div class="score-bar score-pass" style="width:100%;">&nbsp;</div></td><td>100 ✓</td></tr>
-<tr><td>OVERALL</td><td><div class="score-bar score-pass" style="width:92%;">&nbsp;</div></td><td>92 ✓</td></tr>
+<tr><td>OVERALL</td><td><div class="score-bar score-pass" style="width:91%;">&nbsp;</div></td><td>91 ✓</td></tr>
 </table>
 <h2>🧪 Test Results</h2>
 <table>
@@ -54,7 +54,7 @@
 <tr><td>test_motif_reuse</td><td class="test-pass">PASS</td><td>motif reuse ratio 1.0 (need >= 0.5)</td></tr>
 <tr><td>test_note_density</td><td class="test-pass">PASS</td><td>note density 7.5/bar (need 4-8)</td></tr>
 <tr><td>test_duration_variety</td><td class="test-pass">PASS</td><td>2 duration values (need >= 2)</td></tr>
-<tr><td>test_key_confidence</td><td class="test-pass">PASS</td><td>key confidence 0.31 (need >= 0.3)</td></tr>
+<tr><td>test_key_confidence</td><td class="test-fail">FAIL</td><td>key confidence 0.25 (need >= 0.3)</td></tr>
 </table>
 <h2>🎵 Melody</h2>
 <div class="grid">
@@ -64,7 +64,7 @@
 </div>
 <h2>🎹 Harmony</h2>
 <div class="card">
-<p><b>Key:</b> D minor (confidence: 0.31)</p><p><b>Chords:</b> 32 | Rate: 0.5/beat</p><p><b>Borrowed chords:</b> 8</p><p><b>Bass roots:</b> {'A': 8, 'D': 7, 'G': 7, 'B': 6, 'E': 2, 'F#': 2}</p></div>
+<p><b>Key:</b> D minor (confidence: 0.25)</p><p><b>Chords:</b> 32 | Rate: 0.5/beat</p><p><b>Borrowed chords:</b> 8</p><p><b>Bass roots:</b> {'A': 8, 'D': 7, 'G': 7, 'B': 6, 'E': 2, 'F#': 2}</p></div>
 <h2>🥁 Rhythm</h2>
 <div class="card">
 <p><b>Note density:</b> 7.5 notes/bar</p><p><b>Syncopation:</b> 0.0 (0/120 off-beat)</p><p><b>Durations:</b> {'0.5': 107, '1.0': 13}</p></div>
@@ -91,7 +91,7 @@
 <h2>💡 Recommendations</h2>
 <div class="card">
 <ul>
-<li><b>RHYTHM (76):</b> add syncopation + duration variety</li><li><b>TENSION (76):</b> add modal interchange / borrowed chords</li></ul>
+<li><b>RHYTHM (76):</b> add syncopation + duration variety</li><li><b>TENSION (67):</b> add modal interchange / borrowed chords</li></ul>
 </div>
 </body>
 </html>

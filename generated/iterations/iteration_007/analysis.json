@@ -9,9 +9,9 @@
   "melody": {
     "range": "E4\u2013F#5",
     "range_semitones": 14,
-    "avg_leap_semitones": 3.1,
-    "largest_leap_semitones": 8,
-    "largest_leap_warning": false,
+    "avg_leap_semitones": 3.3,
+    "largest_leap_semitones": 10,
+    "largest_leap_warning": true,
     "phrase_lengths": [
       8,
       8,
@@ -21,8 +21,8 @@
       8
     ],
     "contour": "mixed",
-    "ascending_steps": 58,
-    "descending_steps": 59,
+    "ascending_steps": 53,
+    "descending_steps": 64,
     "total_notes": 120,
     "unique_motifs": 5,
     "repeated_motifs": {
@@ -36,7 +36,7 @@
   },
   "harmony": {
     "detected_key": "D minor",
-    "key_confidence": 0.31,
+    "key_confidence": 0.25,
     "total_chords": 32,
     "chord_rate_per_beat": 0.5,
     "unique_bass_roots": 6,

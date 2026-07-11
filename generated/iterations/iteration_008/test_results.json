@@ -46,7 +46,7 @@
   },
   {
     "name": "test_key_confidence",
-    "passed": true,
-    "message": "key confidence 0.31 (need >= 0.3)"
+    "passed": false,
+    "message": "key confidence 0.25 (need >= 0.3)"
   }
 ]

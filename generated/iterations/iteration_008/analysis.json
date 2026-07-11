@@ -36,7 +36,7 @@
   },
   "harmony": {
     "detected_key": "D minor",
-    "key_confidence": 0.31,
+    "key_confidence": 0.25,
     "total_chords": 32,
     "chord_rate_per_beat": 0.5,
     "unique_bass_roots": 6,

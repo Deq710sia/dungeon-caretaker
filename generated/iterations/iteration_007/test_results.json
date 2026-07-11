@@ -6,8 +6,8 @@
   },
   {
     "name": "test_melody_leaps",
-    "passed": true,
-    "message": "largest leap 8 semitones (max 9)"
+    "passed": false,
+    "message": "largest leap 10 semitones (max 9)"
   },
   {
     "name": "test_phrase_length",
@@ -46,7 +46,7 @@
   },
   {
     "name": "test_key_confidence",
-    "passed": true,
-    "message": "key confidence 0.31 (need >= 0.3)"
+    "passed": false,
+    "message": "key confidence 0.25 (need >= 0.3)"
   }
 ]
