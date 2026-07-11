@@ -32,11 +32,13 @@ The player also wanted multiple sources for fresh gear when the salvage pit runs
 
 ## 3. Ghost Phase / Incorporeal Verb (from Mina the Hollower discussion)
 
-**Status:** Not implemented — Priority 1 in DESIGN_PLAN.md.
+**Status:** Implemented (v0.17+) but NOT FUN YET — Priority 1 in DESIGN_PLAN.md, PARTIAL.
 
 The player identified Mina the Hollower's "hollow tunnel" as the reference for how to make top-down movement feel good. The lesson: give the ghost ONE signature verb that touches everything — a phase/incorporeal ability that lets the ghost briefly pass through hazards, move faster, and slow enemies in battle. The verb and the character concept are the same fact: a ghost that goes incorporeal.
 
 Also informed by UFO 50's design philosophy: "give the old genre skeleton exactly one new verb, and let it touch everything."
+
+**Current state:** The phase verb (SPACE) works, plus a tap pulse (SHIFT) for momentum burst. But the 4-state momentum system (FLOAT/PHASE/DIVE/COAST) has design tension: it rewards staying fast in a game that rewards stopping precisely. Phase auto-fires DIVE on natural expiry, costing ~2.5s of reduced control after using your hazard tool. Needs playtest-driven tuning. See DESIGN_PLAN.md Priority 1 for details.
 
 ---
 
@@ -167,8 +169,43 @@ The player's original premise: "you're a ghost haunting a dungeon, you want to b
 
 ---
 
-## 18. Real Pixel Art Assets ( eventual replacement for procedural sprites)
+## 19. Salvage Crossroads Needs to Be a Real Choice (v0.25 player feedback)
 
-**Status:** Not implemented — all sprites are procedurally generated.
+**Status:** Implemented but BROKEN — Priority 2 in DESIGN_PLAN.md, PARTIAL / NOT FUN YET.
 
-The player acknowledged the procedural sprites are placeholders: "you can make pixel sprites but look to see if any existing pixel sprites would fit or be better." Kenney.nl CC0 packs (Tiny Dungeon, Tiny Town, 1-Bit Pack) were identified as drop-in replacements for V1.1. The procedural system works but the art is generic.
+The push-your-luck branching in salvage is technically implemented (main corridor + optional deeper section, `committed_deeper` flag) but the "crossroads" doesn't feel like a choice. Current state: it's just a body + text that says "deeper," then the exit disappears and you get an easy pickup. No visual bend, no risk/reward tension — it's a no-brainer.
+
+**What it should be:**
+- A visual fork in the corridor (not just text) — the player SEES the two paths diverging
+- The deeper path should have MORE hazards, tighter corridors, and require real commitment (no turning back)
+- The reward should be meaningfully better (cursed/legendary weapons, not just another easy corpse)
+- The exit should remain visible but require backtracking THROUGH the hazards to reach — not just disappear
+- Difficulty is inconsistent: sometimes the salvage feels good, sometimes too easy. Needs tuning so the deeper path consistently feels risky.
+
+**Design principle:** The "exceed expectations" curve only works if the floor (reach exit) is guaranteed and the ceiling (deeper path) costs real risk. Right now the deeper path is free reward.
+
+---
+
+## 20. Music Theme Still Needs Work (v0.25 player feedback)
+
+**Status:** Implemented but user says "sounds bad" — Priority 7 in DESIGN_PLAN.md, PARTIAL.
+
+The procedural main theme has been through 9+ iterations (v0.14-v0.22). Current state: speder2-style chord palette, 8 layers, stereo, Schroeder reverb, melody. But user feedback is still "sounds kinda bad." The melody was added in v0.22 but the overall mix/arrangement needs more iteration. User asked for a mute button (added v0.23, M key) while the theme is being fixed.
+
+**Known issues to address:**
+- The mix may still be too dense (8 layers all playing)
+- The melody needs to be more singable / prominent
+- The chord voicings were fixed in v0.21 but may still clash in places
+- Needs A/B testing against actual speder2 reference tracks
+
+---
+
+## 21. Code Quality Issues (v0.25 Claude review)
+
+**Status:** Partially addressed — see VERSION_LOG v0.23-v0.25.
+
+Claude (Sonnet 5) reviewed the codebase and found:
+- **Fixed:** Salvage HUD lying about controls, gate.gd stale constants, wall collision velocity bug, pulse_charge dead code (v0.23), music disk cache (v0.24), documentation overhaul (v0.25)
+- **Not fixed:** Repair folder duplication (4 files share ~120 lines of scaffolding, could be RepairMinigame base class), get_speed() circularity (investigated, self-stabilizing), stale "Sidestep" comments, ghost_movement state-update functions share 80% structure (could parameterize)
+
+A full refactoring review (v0.25) identified ~400 lines of potential savings across the codebase. Top opportunities: RepairMinigame base class (~120 lines), MELODY motif extraction (~150 lines), sine-chord timbre helper (~50 lines). See AGENT.md for the full refactoring checklist.

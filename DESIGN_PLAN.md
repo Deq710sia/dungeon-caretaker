@@ -9,21 +9,21 @@ The roguelike layer (combat variance, hazard RNG, salvage rolls) stays genuinely
 
 ## BUILD STATUS
 
-- [x] **Priority 1 — Movement feel + Phase verb** — DONE (v0.17+ redesign). Ghost has 4-state movement machine (FLOAT/PHASE/DIVE/COAST) with compoundable momentum, tap pulse (SHIFT), chain degradation, and direction reflect. Phase verb (SPACE) works across all walkable phases.
-- [x] **Priority 2 — Salvage overhaul** — DONE. Shortened corridor, 4 QTE types (timing/spam/pattern/reverse), push-your-luck branching (deeper section), corpse identity (named fallen vs random).
+- [ ] **Priority 1 — Movement feel + Phase verb** — PARTIAL / NOT FUN YET. The 4-state movement machine (FLOAT/PHASE/DIVE/COAST) with compoundable momentum, tap pulse (SHIFT), and chain degradation is *implemented* but has design tension: the momentum system rewards staying fast, but the game's tasks (narrow corridors, small hazard hitboxes, 45s timer) reward stopping precisely. Phase auto-fires DIVE on natural expiry, costing ~2.5s of reduced control after using your hazard tool. Wall collision was silently building momentum (fixed v0.23). Needs playtest-driven tuning before it's "done."
+- [ ] **Priority 2 — Salvage overhaul** — PARTIAL / NOT FUN YET. 4 QTE types (timing/spam/pattern/reverse) and push-your-luck branching are *implemented* but: the "crossroads" is not a visual bend — it's just a body + text that says "deeper," then the exit disappears and you get an easy pickup. No real choice tension. Difficulty is inconsistent (sometimes good, sometimes too easy). Needs the deeper path to actually feel risky/rewarding, not a no-brainer.
 - [ ] Priority 3 — Repair minigame overhaul (visible transform, live stats, triage, system-changing upgrades) — PARTIAL. oil_grindstone rotates + sparks. reforge_furnace transforms. Polish/exorcise still static. No quick-repair, no live stats, no system-changing upgrades.
 - [ ] Priority 4 — Battle drama (speed, sparks, boss waves) — PARTIAL. Phase verb integrated (replaced '1' key Haunt). No boss waves, no speed increases, no weapon sparks.
 - [ ] Priority 5 — Ghost personality + tone — NOT STARTED
 - [ ] Priority 6 — Diegetic upgrade shop + incremental reward curve — NOT STARTED (still scroll list)
-- [x] **Priority 7 (partial) — Polish pass** — Sound bed DONE (procedural main theme, speder2-style, disk-cached). Screen transitions working. Walk cycles, ambient lighting, UI consistency not done.
+- [ ] **Priority 7 (partial) — Polish pass** — Sound bed implemented (procedural main theme, speder2-style, disk-cached) but the theme itself still needs work (user feedback: "sounds bad," no melody was fixed in v0.22 but still needs iteration). Screen transitions working. Walk cycles, ambient lighting, UI consistency not done.
 
-**Last updated:** v0.24 (2026-07-12). Check VERSION_LOG.md for latest.
+**Last updated:** v0.25 (2026-07-12). Check VERSION_LOG.md for latest.
 
 ## THE 7 PRIORITIES (IN BUILD ORDER)
 
 ---
 
-### 1. MOVEMENT FEEL + GHOST PHASE VERB  ✅ DONE
+### 1. MOVEMENT FEEL + GHOST PHASE VERB  ⚠️ PARTIAL / NOT FUN YET
 
 **Why first:** Everything sits on top of the base verb. If movement doesn't feel good, nothing else matters. This is the UFO 50 / Mina lesson — obsessively tune the action/feedback loop before touching systems.
 

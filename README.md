@@ -37,9 +37,9 @@ Also delete the `.godot/` folder in the project directory if experiencing stale 
 | Inspect carried weapon | TAB (in workshop) |
 | Back to menu | ESC |
 
-## The Movement System
+## The Movement System (WORK IN PROGRESS)
 
-The ghost uses a **4-state movement machine** with compoundable momentum:
+The ghost uses a **4-state movement machine** with compoundable momentum. **Note: this system is implemented but still being tuned — it has design tension between rewarding speed and requiring precision.**
 
 - **FLOAT** — normal walking. Build momentum by moving fast.
 - **PHASE** (SPACE) — incorporeal dash, 2x speed, costs 1 soul shard, bypasses fire/spikes. 4s cooldown (halved to 2s when chained from COAST).
@@ -49,10 +49,12 @@ The ghost uses a **4-state movement machine** with compoundable momentum:
 
 **Momentum** (0-2.0) builds when moving fast, decays when slow, and modifies speed up to +50%. It's preserved across states — the skill is compounding it through the chain: phase → cancel → dive → coast → pulse (reset) → phase → ...
 
+**Known issue:** The momentum system rewards staying fast, but the game's tasks (narrow corridors, small hazard hitboxes, timer) reward stopping precisely. Phase auto-fires DIVE on natural expiry, costing ~2.5s of reduced control after using your hazard tool. Needs playtest-driven tuning.
+
 ## Game Loop (Per Wave)
 
 1. **Gate** — Walk past grave markers of the fallen. New run shows predecessors; later cycles show actual casualties.
-2. **Salvage** — Top-down corridor with push-your-luck branching. Collect gear from named corpses (your dead party's ACTUAL weapons). 4 QTE types (timing, spam, pattern, reverse). Ghost has 3 Spirit (HP). Phase through fire/spikes to grab corpses faster. Go deeper for better gear but more risk. Reach exit → workshop.
+2. **Salvage** — Top-down corridor. Collect gear from named corpses (your dead party's ACTUAL weapons). 4 QTE types (timing, spam, pattern, reverse). Ghost has 3 Spirit (HP). Phase through fire/spikes. Push-your-luck branching exists (main path + optional deeper section) but is not yet a real choice — the "crossroads" is just text, not a visual fork, and the deeper path is currently a no-brainer. Reach exit → workshop.
 3. **Workshop** — Walk between 5 repair stations (Arsenal, Polish, Grind, Altar, Forge). Each minigame shows the weapon large. Graduated repair (no full-reset). TAB inspects weapon stats. Phase for 2x movement. Pulse for momentum burst. Ring bell → upgrade shop.
 4. **Upgrade** — Buy meta-upgrades (currently a scroll list — planned V2: diegetic wall).
 5. **Planning** — Walk to weapon rack, pick up gear, carry to adventurers to assign. Recruit at shrine. View map for wave intel. Phase for faster movement. Ring bell → battle.

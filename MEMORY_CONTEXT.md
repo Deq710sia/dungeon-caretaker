@@ -3,7 +3,7 @@
 
 This file contains everything a new AI session needs to understand the project's history, current state, design philosophy, and next steps. **Read this before touching any code.**
 
-**Last updated:** v0.24 (2026-07-12). If this file is stale, check VERSION_LOG.md for the latest changes and update this file before working.
+**Last updated:** v0.25 (2026-07-12). If this file is stale, check VERSION_LOG.md for the latest changes and update this file before working.
 
 ---
 
@@ -63,9 +63,9 @@ Pick which old frictions to keep ON PURPOSE (weapon loss, checkpoint distance), 
 ### Phase Flow
 `menu → gate → salvage → workshop → upgrade → planning → battle → results → aftermath → gate → ...`
 
-### Movement System (v0.17+ — MAJOR REDESIGN)
+### Movement System (v0.17+ — REDESIGNED, NOT FUN YET)
 
-The movement system is a **state machine with compoundable momentum**, NOT just preserved velocity. This was redesigned in v0.17 after the user reported 9 specific issues with the v0.14 charge-based pulse design.
+The movement system is a **state machine with compoundable momentum**, NOT just preserved velocity. This was redesigned in v0.17 after the user reported 9 specific issues with the v0.14 charge-based pulse design. **The system is implemented but has design tension — see below.**
 
 **4 states:**
 - `FLOAT` — normal walking. Build momentum by moving fast. Tap SHIFT to pulse.
@@ -99,10 +99,10 @@ The movement system is a **state machine with compoundable momentum**, NOT just 
 
 **Wall collision fix (v0.23):** `clampf(pos)` now zeros the clamped axis of velocity (was: position stopped but velocity kept building, causing momentum buildup against walls). Applied to salvage `_clamp_to_corridor()`, workshop, planning.
 
-### Salvage System (v0.10+ — redesigned)
+### Salvage System (v0.10+ — redesigned, NOT FUN YET)
 - Dead party members' weapons go to `last_battle_result.fallen_gear`. Salvage reads this and spawns corpses carrying the ACTUAL weapons (preserving name, history, kill log, fingerprints). Bonus random corpses also spawn.
 - **4 QTE types** (not just timing bar): timing, spam, pattern, reverse. Each hazard type gets a different minigame.
-- **Push-your-luck branching:** Main corridor + optional deeper section. Once you enter deeper, you can't go back (`committed_deeper` flag). Deeper has better gear but more hazards + time cost.
+- **Push-your-luck branching (BROKEN):** Main corridor + optional deeper section. Once you enter deeper, you can't go back (`committed_deeper` flag). **BUT:** the "crossroads" is not a visual bend — it's just a body + text that says "deeper," then the exit disappears and you get an easy pickup. No real choice tension — it's a no-brainer. Difficulty is inconsistent (sometimes good, sometimes too easy). Needs the deeper path to actually feel risky/rewarding.
 - Hazards trigger QTE on E press — touching hazards does NOT damage (fixed). Only QTE failure damages.
 - Ghost has 3 Spirit (HP), upgradeable via ghost_resilience. I-frames after damage. At 0 HP, forced exit to workshop.
 
