@@ -4,6 +4,41 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.23 — Mute Button + Claude Review Bug Fixes (2026-07-12)
+
+### Mute Music Button (M key)
+**Added:** Press **M** to toggle music mute. Music autoload tracks `_muted` state, saves/restores volume. HUD hints updated to show "M:mute" on all walkable phases (salvage, workshop, planning, gate).
+
+### Claude Review Bug Fixes
+Claude (Sonnet 5) reviewed the codebase and found several real issues. Fixed the cheap/high-value ones:
+
+**1. Salvage HUD string was lying about controls**
+- Was: "SHIFT:hold pulse" (the pre-v0.17 charge design)
+- Now: "SHIFT:pulse" (the v0.17 tap design)
+- This was actively teaching players the wrong mental model in the one phase with a timer + touch hazards.
+
+**2. gate.gd was running OLD movement constants**
+- Was: 220 accel, 0.3 decel (the pre-v0.17 values that felt bad)
+- Now: 300 accel, 0.5 decel (matches current GhostMovement)
+- The very first movement of every cycle was using the tuning you already decided felt bad.
+
+**3. Wall collision never zeroed velocity (momentum buildup against walls)**
+- Was: `move.pos.x = clampf(...)` — clamps position but velocity keeps building
+- Now: if pos got clamped, zero that axis of velocity
+- Fix applied to salvage `_clamp_to_corridor()`, workshop, and planning
+- This was the "slam a DIVE into a wall, position stops but velocity/momentum keeps building, then launch when you turn away" bug.
+
+### Claude's Other Findings (acknowledged, not yet fixed)
+- **Phase auto-fires DIVE on natural expiry** — design call, not a bug. Phase is your hazard tool but always costs ~2.5s of reduced control. Worth considering: only DIVE on manual cancel, not natural expiry.
+- **pulse_charge SFX is dead code** — left over from pre-v0.17 charge design. Low priority cleanup.
+- **Stale "Sidestep" comments** in 3 files — orphaned comments, no dead code beneath. Cosmetic.
+- **Music renders synchronously at startup** — 1.3M-sample GDScript DSP loop at boot, potential hitch. Could thread it or show a loading screen.
+- **get_speed() circularity** — momentum bonus baked into get_speed(), and _update_momentum measures speed_pct against that same get_speed(). Probably converges fine but worth a debug overlay check.
+- **MEMORY_CONTEXT.md says accel "220, was 300" backwards** — the doc has it exactly reversed. Real value is 300.
+- **DESIGN_PLAN.md shows Priority 2 unchecked** despite being done — 38 commits of doc drift.
+
+---
+
 ## v0.22 — Added Real Melody (Singable Motif, Toby Fox Leitmotif Style) (2026-07-07)
 
 ### Problem: No Melody

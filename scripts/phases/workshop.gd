@@ -162,8 +162,15 @@ func _process(delta: float) -> void:
         # Sidestep
         move.update_pulse(delta)
         move.update(input_dir, delta)
-        move.pos.x = clampf(move.pos.x, 12, ROOM_W - 12)
-        move.pos.y = clampf(move.pos.y, HUD_H + 30, ROOM_H - 40)
+        # FIX: zero velocity on clamped axis (prevents momentum buildup against walls)
+        var new_x: float = clampf(move.pos.x, 12, ROOM_W - 12)
+        if new_x != move.pos.x:
+                move.vel.x = 0.0
+        move.pos.x = new_x
+        var new_y: float = clampf(move.pos.y, HUD_H + 30, ROOM_H - 40)
+        if new_y != move.pos.y:
+                move.vel.y = 0.0
+        move.pos.y = new_y
         _find_nearest_interactive()
         if Input.is_action_just_pressed("interact") and not interact_pressed:
                 interact_pressed = true
@@ -399,7 +406,7 @@ func _draw() -> void:
         # Particles
         Juice.draw_particles(self)
         # Hint
-        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 6), "WASD:move E:interact SPACE:phase SHIFT:pulse TAB:inspect", 8, Palette.TEXT_DIM)
+        GameFont.draw_string_centered(self, Vector2(ROOM_W / 2, ROOM_H - 6), "WASD:move E:interact SPACE:phase SHIFT:pulse TAB:inspect  M:mute", 8, Palette.TEXT_DIM)
 
 func _show_weapon_inspect(w: Weapon) -> void:
         if inspect_panel:

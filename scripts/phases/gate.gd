@@ -62,7 +62,7 @@ func _build_graves() -> void:
 
 func _build_hud() -> void:
         hint_label = Label.new()
-        hint_label.text = "WASD:move E:open gate"
+        hint_label.text = "WASD:move E:open gate  M:mute"
         hint_label.add_theme_font_size_override("font_size", 8)
         hint_label.add_theme_color_override("font_color", Palette.TEXT_DIM)
         hint_label.position = Vector2(0, ROOM_H - 18)
@@ -81,11 +81,11 @@ func _process(delta: float) -> void:
         if Input.is_action_pressed("move_down"):  input_dir.y += 1
         if input_dir != Vector2.ZERO:
                 input_dir = input_dir.normalized()
-                # Match GhostMovement constants (220 accel, 55 speed)
-                ghost_vel = ghost_vel.move_toward(input_dir * 55.0, 220.0 * delta)
+                # Match GhostMovement constants (300 accel, 55 speed) — updated v0.17
+                ghost_vel = ghost_vel.move_toward(input_dir * 55.0, 300.0 * delta)
         else:
-                # 30% decel (matches GhostMovement.DECEL_MULT — responsive direction changes)
-                ghost_vel = ghost_vel.move_toward(Vector2.ZERO, 220.0 * 0.3 * delta)
+                # 50% decel (matches GhostMovement.DECEL_MULT — updated v0.17)
+                ghost_vel = ghost_vel.move_toward(Vector2.ZERO, 300.0 * 0.5 * delta)
         ghost_pos += ghost_vel * delta
         ghost_pos.x = clampf(ghost_pos.x, 12, ROOM_W - 12)
         ghost_pos.y = clampf(ghost_pos.y, 36, ROOM_H - 30)

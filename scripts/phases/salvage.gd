@@ -282,7 +282,7 @@ func _build_hud() -> void:
         hud_collected.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
         panel.add_child(hud_collected)
         hud_hint = Label.new()
-        hud_hint.text = "WASD:move E:interact SPACE:phase SHIFT:hold pulse"
+        hud_hint.text = "WASD:move E:interact SPACE:phase SHIFT:pulse  M:mute"
         hud_hint.add_theme_font_size_override("font_size", 8)
         hud_hint.add_theme_color_override("font_color", Palette.TEXT_DIM)
         hud_hint.position = Vector2(0, VIEW_H - 12)
@@ -422,12 +422,19 @@ func _clamp_to_corridor() -> void:
         var bounds: Vector2 = gen.get_width_bounds_at_y(ghost_tile_y)
         var left: float = bounds.x * TILE
         var right: float = bounds.y * TILE
-        move.pos.x = clampf(move.pos.x, left, right)
+        # FIX: zero velocity on the axis that got clamped (prevents momentum
+        # buildup against walls — Claude review finding)
+        var new_x: float = clampf(move.pos.x, left, right)
+        if new_x != move.pos.x:
+                move.vel.x = 0.0
+        move.pos.x = new_x
         # Y clamping: if committed to deeper, can't go back above the fork
-        if committed_deeper:
-                move.pos.y = clampf(move.pos.y, (gen.fork_y + 1) * TILE, (corridor_h - 1) * TILE)
-        else:
-                move.pos.y = clampf(move.pos.y, 22, (corridor_h - 1) * TILE)
+        var y_min: float = (gen.fork_y + 1) * TILE if committed_deeper else 22.0
+        var y_max: float = (corridor_h - 1) * TILE
+        var new_y: float = clampf(move.pos.y, y_min, y_max)
+        if new_y != move.pos.y:
+                move.vel.y = 0.0
+        move.pos.y = new_y
 
 func _check_hazard_touch() -> void:
         # Hazards activate on TOUCH, not just E press. If the ghost overlaps an
@@ -462,9 +469,9 @@ func _find_nearest_interactive() -> void:
                         hud_hint.text = "[E] Salvage %s" % near_interactive.gear_name
         else:
                 if committed_deeper:
-                        hud_hint.text = "WASD:move E:interact SPACE:phase SHIFT:hold pulse  Find deeper exit"
+                        hud_hint.text = "WASD:move E:interact SPACE:phase SHIFT:pulse  M:mute  Find deeper exit"
                 else:
-                        hud_hint.text = "WASD:move E:interact SPACE:phase SHIFT:hold pulse  Exit or go DEEPER"
+                        hud_hint.text = "WASD:move E:interact SPACE:phase SHIFT:pulse  M:mute  Exit or go DEEPER"
 
 func _handle_interact() -> void:
         if near_interactive is Dictionary:
