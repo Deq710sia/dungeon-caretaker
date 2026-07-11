@@ -1,7 +1,9 @@
 # MEMORY CONTEXT — Dungeon Caretaker
 ## Complete project memory for handoff to a new chat session
 
-This file contains everything a new AI session needs to understand the project's history, current state, design philosophy, and next steps. Read this before touching any code.
+This file contains everything a new AI session needs to understand the project's history, current state, design philosophy, and next steps. **Read this before touching any code.**
+
+**Last updated:** v0.24 (2026-07-12). If this file is stale, check VERSION_LOG.md for the latest changes and update this file before working.
 
 ---
 
@@ -36,45 +38,101 @@ Tedious early actions should pull the player toward the system that relieves the
 Tone should be professional, not mournful. The ghost is a caretaker running an operation, not a grieving friend. "Mira fell — as expected. The operation continues." Not "THE FALLEN...". Only total party collapse is presented as failure.
 
 ### The Phase Verb (Mina the Hollower / UFO 50 lesson)
-The ghost should have ONE signature verb that touches every phase — a "phase" (go incorporeal). It's traversal in salvage, dodge/support in battle, speed in workshop/planning. One well-crafted toy, reused everywhere, instead of several thin single-purpose abilities. The verb and the character concept are the same fact: a ghost that goes incorporeal.
+The ghost has TWO signature verbs that touch every phase:
+1. **Phase** (SPACE) — go incorporeal. Traversal in salvage, dodge/support in battle, speed in workshop/planning.
+2. **Pulse** (SHIFT, tap) — instant momentum burst. Costs momentum, resets chain degradation.
 
 ### Retro Aesthetic, Modern Craft (UFO 50 / Mina lesson)
 Pick which old frictions to keep ON PURPOSE (weapon loss, checkpoint distance), not by default. Ship with accessibility options. Put real craft into the moment-to-moment verb layer — the walk cycle, the sound, the camera — not just the systems layer. Smallness is the feature: one well-made traversal verb, one legible hazard language, one coherent economy.
 
 ---
 
-## 3. CURRENT CODE STATE (as of latest commit)
+## 3. CURRENT CODE STATE (v0.24, 2026-07-12)
 
 ### Architecture
 - `main.gd` — Phase manager. Swaps Node2D + set_script per phase. Has fade transitions (working — `_on_phase_changed` calls `_start_fade`, 0.15s fade-to-black, swap mid-fade, 0.15s fade back). ESC → menu. Calls `_on_phase_exit()` on old phase before freeing (prevents weapon loss).
 - `GameState` (autoload) — Single source of truth: stage/wave, soul_shards, arsenal[], party[], meta_upgrades{}, run_log[], last_battle_result{}. Saves only meta_upgrades to `user://save_v3.json`.
 - `Juice` (autoload) — Screen shake (trauma-based), hit-stop, particle system (pixel squares, directional, integer-snapped), ghost trail (4 fading afterimages at 0.07s intervals, denser + bluer when phasing).
-- `SFX` (autoload) — 15 procedural SFX (blip, chime, thud, hit, shatter, coin, select, deny, bell, death, repair, recruit, footstep, phase_in, phase_out). Pre-rendered as AudioStreamWAV from raw PCM. 8-voice round-robin pool with pitch jitter. SFX + Music buses created at runtime.
+- `SFX` (autoload) — **18 procedural SFX** (blip, chime, thud, hit, shatter, coin, select, deny, bell, death, repair, recruit, footstep, phase_in, phase_out, pulse_charge [DEAD CODE — left over from v0.14 charge design, never played], pulse_release). Pre-rendered as AudioStreamWAV from raw PCM. 8-voice round-robin pool with pitch jitter. SFX + Music buses created at runtime.
+- `Music` (autoload) — **Procedural main theme** (v6). 30-second stereo loop at 128 BPM, 16 bars, speder2-style game-electronica. 8 layers (kick, clap, hats, cowbell, bass, chords, arp, lead/melody). Schroeder reverb (4 combs + 2 allpass). **Disk-cached** (`user://music_cache.bin`) — first boot renders in ~8.7s, subsequent boots load from disk in <100ms. Cache version constant (6) invalidates on music data changes. **M key mutes.**
 - `Palette` — 48 curated colors. ALL colors in the game come from here.
-- `Sprites` — All sprites procedurally generated at 16×16 via Image API. 30+ sprite types. `get_weapon_sprite(type, state)` returns state-tinted weapon art.
+- `Sprites` — All sprites procedurally generated at 16×16 via Image API. 30+ sprite types. `get_weapon_sprite(type, state)` returns state-tinted weapon art. **Cached** in `_cache` dict (good — not regenerated per call).
 - `GameFont` — Press Start 2P helper. NEVER use default Godot font. Only crisp at 8px or 16px.
 - `Weapon` (RefCounted class) — The emotional anchor. Has: type, display_name, day_forged, wielder, wear_state (PRISTINE/WORN/DAMAGED/BROKEN), durability, unexorcised_deaths, sharpness/balance/power/mystic (0-1 fingerprints), kill_log[], history[], is_legendary, is_broken, break_announced. Methods: stat_multiplier(), take_durability_damage(), apply_repair(), recalculate_wear(), can_repair_at(), exorcise(), record_kill(), get_full_history(), authoring_blurb().
 
 ### Phase Flow
 `menu → gate → salvage → workshop → upgrade → planning → battle → results → aftermath → gate → ...`
 
-### Key Systems (working)
-- **Phase verb (V2):** SPACE in any walkable phase = go incorporeal for 1.5s, 4s cooldown, costs 1 soul shard. In salvage: 2x speed + bypass fire/spikes (NOT pits). In workshop/planning: 2x movement only (QoL). In battle: 2x slowdown of all enemies (replaces old '1'-key Haunt, was 20s cd / 4s dur). Ghost drawn semi-transparent while phasing, trail tints bluer and samples denser.
-- **Movement feel (V2):** Tighter accel (220, was 300) and matched friction so the ghost stops on key release. Velocity-driven camera bob (3Hz idle -> 9Hz top speed). Ghost trail (4 fading afterimages). Footstep whoosh tied to velocity.
-- **Salvage loop:** Dead party members' weapons go to `last_battle_result.fallen_gear`. Salvage reads this and spawns corpses carrying the ACTUAL weapons (preserving name, history, kill log, fingerprints). Bonus random corpses also spawn. Hazards trigger QTE on E press — touching hazards does NOT damage (fixed). Only QTE failure damages.
+### Movement System (v0.17+ — MAJOR REDESIGN)
+
+The movement system is a **state machine with compoundable momentum**, NOT just preserved velocity. This was redesigned in v0.17 after the user reported 9 specific issues with the v0.14 charge-based pulse design.
+
+**4 states:**
+- `FLOAT` — normal walking. Build momentum by moving fast. Tap SHIFT to pulse.
+- `PHASE` — incorporeal dash (2x speed + momentum bonus, costs shard). **Holds current velocity when no input** (was pushing toward facing — fixed v0.17).
+- `DIVE` — momentum burst on phase cancel. Boost scales with remaining phase energy AND current momentum. Chain degradation reduces boost 10% per consecutive phase (min 50%).
+- `COAST` — carrying momentum. Low deceleration. Pulse extends duration + adds momentum.
+
+**Momentum system (the core compoundable value):**
+- `momentum` float (0.0 to 2.0) — builds when moving fast (speed_pct > 0.7): +0.5/s. Decays when slow in FLOAT: -0.3/s. Spent by DIVE: -0.3. Added by PULSE: +0.4 (net +0.1 after 0.3 cost). Modifies speed: up to +50% at full momentum. Preserved across states (compounds), resets when FLOAT for 0.5s.
+- Phase gets +30% speed at full momentum. Dive gets +0.5 mult per momentum point.
+
+**Pulse verb (v0.17+ — TAP, not charge):**
+- TAP SHIFT for instant 1.5x burst. No charge, no cooldown, no slowdown.
+- Costs 0.3 momentum (must have >= 0.3 to fire). Adds 0.4 momentum (net +0.1).
+- Resets `chain_count` to 0 (creative continuation reward).
+- During COAST: also extends coast duration.
+- Manual edge detection (`_pulse_was_pressed`) instead of `Input.is_action_just_pressed` (more reliable).
+
+**Chain system (v0.17+):**
+- `chain_count` increments on each phase. Each chain step: dive boost reduced 10% (min 50%).
+- Chain resets when FLOAT for 0.5s, OR when pulse fires.
+- Optimal loop: phase → cancel → dive → coast → pulse (reset) → phase → ...
+- Without pulse, chain degrades — rewards creative continuation.
+
+**Key constants (current):**
+- `BASE_SPEED = 55.0`, `ACCEL = 300.0` (was 220 — snappier), `DECEL_MULT = 0.5` (was 0.3 — faster stop), `COAST_DECEL_MULT = 0.25` (was 0.08 — much faster coast stop)
+- `PHASE_DURATION = 1.5s`, `PHASE_CD = 4.0s` (halved to 2.0s from COAST — chain reward), `PHASE_COST = 1 shard`
+- `MOMENTUM_MAX = 2.0`, `MOMENTUM_SPEED_BONUS = 0.5`, `MOMENTUM_PHASE_BONUS = 0.3`, `MOMENTUM_DIVE_BONUS = 0.5`
+
+**Known design tension (Claude review, v0.23):** The momentum system rewards staying fast, but the game's tasks (narrow corridors, small hazard hitboxes, 45s timer) reward stopping precisely. This is a design call, not a bug — but it's the core "why does movement feel bad" tension. Possible fix: phase natural expiry returns to FLOAT instead of forcing DIVE.
+
+**Wall collision fix (v0.23):** `clampf(pos)` now zeros the clamped axis of velocity (was: position stopped but velocity kept building, causing momentum buildup against walls). Applied to salvage `_clamp_to_corridor()`, workshop, planning.
+
+### Salvage System (v0.10+ — redesigned)
+- Dead party members' weapons go to `last_battle_result.fallen_gear`. Salvage reads this and spawns corpses carrying the ACTUAL weapons (preserving name, history, kill log, fingerprints). Bonus random corpses also spawn.
+- **4 QTE types** (not just timing bar): timing, spam, pattern, reverse. Each hazard type gets a different minigame.
+- **Push-your-luck branching:** Main corridor + optional deeper section. Once you enter deeper, you can't go back (`committed_deeper` flag). Deeper has better gear but more hazards + time cost.
+- Hazards trigger QTE on E press — touching hazards does NOT damage (fixed). Only QTE failure damages.
+- Ghost has 3 Spirit (HP), upgradeable via ghost_resilience. I-frames after damage. At 0 HP, forced exit to workshop.
+
+### Repair System
 - **Graduated repair:** `repair_curve(quality)` is a logistic function. Single pass never fully restores. `apply_repair()` adds partial durability. `recalculate_wear()` syncs wear_state to durability_pct.
+- **4 minigames** (scripts/repair/): polish_bench (drag-wipe), oil_grindstone (hold-to-pour + rotation + sparks), exorcise_altar (trace-sigil), reforge_furnace (3-stage melt/pour/hammer — already transforms weapon).
 - **Weapon state model (v8):** `wear_state` is the single mechanical truth (gates repair stations). `State` enum (Bloodied/Rusted/Haunted/Cursed) is flavor-only. `unexorcised_deaths` is an orthogonal penalty (-6% per death, capped -30%, cleared at Altar). `can_repair_at(station_key)` is the single source of truth for what each station accepts: Polish=WORN, Grind=DAMAGED, Forge=BROKEN, Altar=any haunted weapon.
+- **Shared scaffolding** across 4 repair files (signal, _finish, time_left, finished) — could be refactored to RepairMinigame base class (maintenance issue, not performance).
+
+### Other Systems
 - **Persistent party:** Party persists across waves. Dead members stay dead. `spawn_party()` only spawns if no living members. `recruit_adventurer()` costs 40+stage*10 shards, requires a living vouch. Full wipe = lose.
 - **Procedural SFX:** Zero audio files. All sounds synthesized at startup.
-- **Ghost HP in salvage:** 5 HP (upgradeable via ghost_resilience). I-frames after damage. At 0 HP, forced exit to workshop.
+- **Procedural music:** Zero audio files. Main theme rendered at startup, disk-cached.
 
-### Known Bugs (as of latest commit)
-- Solo survivor can never retreat (requires starting_party_count > 1)
-- Duplicate name risk for recruits (`_random_name` can collide)
-- `planning.gd` has dead code: map-view close via E (lines 139-141, unreachable)
+### Input Map (current)
+- `move_up/down/left/right` — WASD or Arrow keys
+- `interact` — E
+- `phase` — SPACE (incorporeal dash)
+- `pulse` — SHIFT (tap for momentum burst)
+- `pause` — ESC
+- `mute_music` — M (toggles music mute)
+
+### Known Issues
+- **pulse_charge SFX is dead code** — left over from v0.14 charge design. `_streams["pulse_charge"]` is prerendered but never played. Low priority cleanup.
+- **Stale "Sidestep" comments** in salvage.gd:340, workshop.gd:162, planning.gd:111 — orphaned comments, no dead code beneath. Cosmetic.
+- **MEMORY_CONTEXT.md / DESIGN_PLAN.md / README.md** can fall behind VERSION_LOG.md. Always check VERSION_LOG.md for the latest state. (This file was updated v0.24.)
+- **Solo survivor can never retreat** (requires starting_party_count > 1) — old bug, may still exist.
+- **Music startup hitch** — first boot renders 8.7s of GDScript DSP. Disk cache fixes subsequent boots. Could thread the render for true fix.
 
 ### What's NOT Built Yet
-- QTE variety in salvage (all same timing bar)
 - Visible weapon transformation in polish/oil_grind/exorcise minigames (oil_grind now rotates + sparks, but no rust-flake fade or blood-wipe reveal)
 - Live authoring feedback during minigames
 - Quick-repair / triage system
@@ -84,8 +142,6 @@ Pick which old frictions to keep ON PURPOSE (weapon loss, checkpoint distance), 
 - Diegetic upgrade shop (currently a scroll list)
 - Efficiency score / incremental reward curve
 - Walk cycle animations
-- Ambient music bed
-- Push-your-luck salvage branching
 
 ---
 
@@ -146,6 +202,13 @@ Pick which old frictions to keep ON PURPOSE (weapon loss, checkpoint distance), 
 - Make bad rolls rare, not impossible — weighted placement, not a solver
 - Don't chase infinite variety you don't need
 
+### Speder2 (Subtle Chord Atmosphere)
+- Japanese game-electronica composer (NOT lo-fi, NOT jazz)
+- Modal color-chord rotation over house beat with chiptune textures
+- Chord palette: m7(9), M7(9), m6, mM7, aug7, 7alt(+5+9), m7b5, m7(11)
+- 2-beat chord rate, four-on-the-floor kick, cowbell on 3&4, sustained saw bass
+- Full analysis at /home/z/my-project/download/MUSIC_RESEARCH_REPORT.md
+
 ---
 
 ## 5. DIFFICULTY/BALANCE NUMBERS (current)
@@ -172,16 +235,17 @@ Pick which old frictions to keep ON PURPOSE (weapon loss, checkpoint distance), 
 - If durability_pct < 0.15, restore *= 0.7 (harder to fix nearly-broken)
 - Max restore per pass: ~60% of max durability
 
-### Ghost HP
-- 5 HP (base) + ghost_resilience upgrade level
+### Ghost Spirit (salvage HP)
+- 3 Spirit (base) + ghost_resilience upgrade level
 - I-frames: 1 second after damage
-- At 0 HP: forced exit to workshop
+- At 0 Spirit: forced exit to workshop
 
 ### Shard economy
 - Start: 100 shards
 - Win: 30 + stage*5 + wave*3 + survivors*25
 - Lose: 10 + stage + dead_count*8
 - Recruit: 40 + stage*10
+- Phase costs: 1 shard per use
 
 ---
 
@@ -220,8 +284,9 @@ Pick which old frictions to keep ON PURPOSE (weapon loss, checkpoint distance), 
 dungeon_caretaker/
 ├── project.godot          — Godot config (480x270, viewport stretch, snap-to-pixel)
 ├── DESIGN_PLAN.md          — V2 implementation plan (7 priorities)
-├── MEMORY_CONTEXT.md       — This file
+├── MEMORY_CONTEXT.md       — This file (handoff doc — READ FIRST)
 ├── DESIGN_IDEAS.md         — Cut/half-built ideas backlog
+├── VERSION_LOG.md          — Running changelog (most current doc — always check this)
 ├── README.md               — Player-facing readme
 ├── assets/
 │   ├── default_theme.tres  — Global theme (Press Start 2P)
@@ -231,27 +296,31 @@ dungeon_caretaker/
 └── scripts/
     ├── autoload/
     │   ├── game_state.gd   — Run state, party, arsenal, upgrades, save/load
-    │   └── sfx.gd          — Procedural SFX (12 sounds, zero audio files)
+    │   ├── sfx.gd          — Procedural SFX (18 sounds, zero audio files)
+    │   └── music.gd        — Procedural main theme (speder2-style, disk-cached)
     ├── game_font.gd        — Press Start 2P helper (draw_string with outline)
-    ├── juice.gd            — Screen shake, hit-stop, particles (autoload)
+    ├── ghost_movement.gd   — Movement state machine (FLOAT/PHASE/DIVE/COAST + momentum)
+    ├── juice.gd            — Screen shake, hit-stop, particles, ghost trail (autoload)
     ├── main.gd             — Phase manager (fade transitions, ESC handler)
     ├── palette.gd          — 48 curated colors
-    ├── sprites.gd          — Procedural 16x16 pixel sprites (30+ types)
+    ├── sprites.gd          — Procedural 16x16 pixel sprites (30+ types, cached)
     ├── weapon.gd           — Weapon class (wear, durability, fingerprints, history)
+    ├── dungeon_gen.gd      — Procedural dungeon generation (corridors + forks)
+    ├── draw_utils.gd       — Shared draw helpers
     ├── phases/
     │   ├── main_menu.gd    — Title screen
     │   ├── gate.gd         — Walkable threshold with grave markers
-    │   ├── salvage.gd      — Top-down corridor, corpses, QTE hazards, ghost HP
+    │   ├── salvage.gd      — Top-down corridor, corpses, 4 QTE types, push-your-luck, 3 Spirit
     │   ├── workshop.gd     — Walkable room, 5 repair stations, bell timer, TAB inspect
     │   ├── upgrade_shop.gd — Scrollable upgrade list (TO BE REPLACED with diegetic wall)
     │   ├── planning.gd     — Walkable room, weapon rack, recruit shrine, map table, bell
-    │   ├── battle.gd       — Spectator auto-battler, weapon degradation, ghost ability
+    │   ├── battle.gd       — Spectator auto-battler, weapon degradation, phase verb
     │   ├── results.gd      — Weapon dossiers (clickable for full history), continue
     │   ├── aftermath.gd    — Memorial beat showing fallen
     │   └── win_lose.gd     — Run end screen with chronicle
     └── repair/
         ├── polish_bench.gd     — Drag-wipe minigame (BLOODIED → needs visible transform)
-        ├── oil_grindstone.gd   — Hold-to-pour minigame (needs weapon rotation)
+        ├── oil_grindstone.gd   — Hold-to-pour minigame (rotates + sparks)
         ├── exorcise_altar.gd   — Trace-sigil minigame (needs visible wisp fade)
         └── reforge_furnace.gd  — 3-stage melt/pour/hammer (ALREADY transforms weapon)
 ```
@@ -275,3 +344,20 @@ dungeon_caretaker/
 13. **All draw positions must be integer-snapped** (`int(x)`) or sprites jitter at 480×270.
 14. **Overscan: draw 3 tiles beyond viewport on all sides** so scroll edges are never visible.
 15. **The theme/pixel_theme.tres import is fragile** — the `.import` file must exist or the font won't load. Delete `.godot/` and reimport if the theme fails to load.
+16. **Indentation is inconsistent across files** (ghost_movement.gd, planning.gd, battle.gd, weapon.gd use tabs; salvage.gd, workshop.gd, gate.gd, results.gd use spaces). Multiple AI sessions with different defaults. If editing a file, match its existing style.
+17. **gate.gd uses hand-copied movement** instead of GhostMovement. Its constants were updated in v0.23 to match (300 accel, 0.5 decel) but it's still a duplicate. Should be refactored to use real GhostMovement.
+18. **Music render takes 8.7s** in GDScript at first boot. Disk cache (`user://music_cache.bin`) fixes subsequent boots. Bump `CACHE_VERSION` constant in music.gd when music data changes to invalidate.
+19. **Wall collision must zero velocity** on the clamped axis (v0.23 fix). `clampf(pos)` alone lets velocity/momentum build against walls.
+20. **`Input.is_action_just_pressed` can be unreliable** in manual tick contexts. GhostMovement uses `_pulse_was_pressed` manual edge detection for pulse input.
+
+---
+
+## 9. DOCUMENTATION MAINTENANCE RULE
+
+**After every push/commit that changes game behavior, update:**
+1. **VERSION_LOG.md** — always (this is the running changelog)
+2. **MEMORY_CONTEXT.md** — if architecture, systems, constants, or file map changed
+3. **DESIGN_PLAN.md** — if a priority was completed or scope changed
+4. **README.md** — if controls, features, or player-facing info changed
+
+**When in doubt, check VERSION_LOG.md first** — it's the most current. If the other three are stale, update them before starting work.

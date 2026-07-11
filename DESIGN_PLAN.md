@@ -9,13 +9,15 @@ The roguelike layer (combat variance, hazard RNG, salvage rolls) stays genuinely
 
 ## BUILD STATUS
 
-- [x] **Priority 1 — Movement feel + Phase verb** — DONE (commit e986b47). Ghost now has tighter accel/friction, velocity-driven camera bob, ghost trail, footstep SFX, and the unified Phase verb (SPACE) working across salvage/workshop/planning/battle.
-- [ ] Priority 2 — Salvage overhaul (density, QTE variety, push-your-luck)
-- [ ] Priority 3 — Repair minigame overhaul (visible transform, live stats, triage, system-changing upgrades)
-- [ ] Priority 4 — Battle drama (speed, sparks, boss waves)
-- [ ] Priority 5 — Ghost personality + tone
-- [ ] Priority 6 — Diegetic upgrade shop + incremental reward curve
-- [ ] Priority 7 — Polish pass
+- [x] **Priority 1 — Movement feel + Phase verb** — DONE (v0.17+ redesign). Ghost has 4-state movement machine (FLOAT/PHASE/DIVE/COAST) with compoundable momentum, tap pulse (SHIFT), chain degradation, and direction reflect. Phase verb (SPACE) works across all walkable phases.
+- [x] **Priority 2 — Salvage overhaul** — DONE. Shortened corridor, 4 QTE types (timing/spam/pattern/reverse), push-your-luck branching (deeper section), corpse identity (named fallen vs random).
+- [ ] Priority 3 — Repair minigame overhaul (visible transform, live stats, triage, system-changing upgrades) — PARTIAL. oil_grindstone rotates + sparks. reforge_furnace transforms. Polish/exorcise still static. No quick-repair, no live stats, no system-changing upgrades.
+- [ ] Priority 4 — Battle drama (speed, sparks, boss waves) — PARTIAL. Phase verb integrated (replaced '1' key Haunt). No boss waves, no speed increases, no weapon sparks.
+- [ ] Priority 5 — Ghost personality + tone — NOT STARTED
+- [ ] Priority 6 — Diegetic upgrade shop + incremental reward curve — NOT STARTED (still scroll list)
+- [x] **Priority 7 (partial) — Polish pass** — Sound bed DONE (procedural main theme, speder2-style, disk-cached). Screen transitions working. Walk cycles, ambient lighting, UI consistency not done.
+
+**Last updated:** v0.24 (2026-07-12). Check VERSION_LOG.md for latest.
 
 ## THE 7 PRIORITIES (IN BUILD ORDER)
 

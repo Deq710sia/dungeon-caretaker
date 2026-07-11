@@ -11,7 +11,9 @@ A top-down **pixel-art roguelike management sim** where you play a ghost bound t
 2. Open the project folder in Godot
 3. Press **F5** to play
 
-No external assets required — all sprites are procedurally generated. The pixel font (Press Start 2P) is bundled. All SFX are procedurally synthesized at runtime (zero audio files).
+No external assets required — all sprites are procedurally generated. The pixel font (Press Start 2P) is bundled. All SFX + music are procedurally synthesized at runtime (zero audio files).
+
+**Note:** First launch takes ~9 seconds to render the procedural main theme. Subsequent launches load from disk cache instantly. Press **M** anytime to mute music.
 
 ## Reset Save Data
 
@@ -20,7 +22,7 @@ Delete the save file to reset meta-upgrades:
 - **Windows:** `%APPDATA%\Godot\app_userdata\Dungeon Caretaker\save_v3.json`
 - **Mac:** `~/Library/Application Support/Godot/app_userdata/Dungeon Caretaker/save_v3.json`
 
-Also delete the `.godot/` folder in the project directory if experiencing stale imports.
+Also delete the `.godot/` folder in the project directory if experiencing stale imports. Delete `music_cache.bin` (same folder as save) to force music re-render.
 
 ## Controls
 
@@ -28,20 +30,34 @@ Also delete the `.godot/` folder in the project directory if experiencing stale 
 |---|---|
 | Move ghost | WASD or Arrow keys |
 | Interact | E |
-| Phase (ghost incorporeal) | SPACE |
+| Phase (ghost incorporeal dash) | SPACE |
+| Pulse (momentum burst, tap) | SHIFT |
+| Mute music | M |
 | Rack paging | [ and ] |
 | Inspect carried weapon | TAB (in workshop) |
 | Back to menu | ESC |
 
+## The Movement System
+
+The ghost uses a **4-state movement machine** with compoundable momentum:
+
+- **FLOAT** — normal walking. Build momentum by moving fast.
+- **PHASE** (SPACE) — incorporeal dash, 2x speed, costs 1 soul shard, bypasses fire/spikes. 4s cooldown (halved to 2s when chained from COAST).
+- **DIVE** — momentum burst on phase cancel. Boost scales with remaining phase energy + current momentum. Chain degrades 10% per consecutive phase (min 50%).
+- **COAST** — carrying converted momentum. Low deceleration.
+- **PULSE** (SHIFT, tap) — instant 1.5x burst. Costs 0.3 momentum, adds 0.4 (net +0.1). Resets chain degradation.
+
+**Momentum** (0-2.0) builds when moving fast, decays when slow, and modifies speed up to +50%. It's preserved across states — the skill is compounding it through the chain: phase → cancel → dive → coast → pulse (reset) → phase → ...
+
 ## Game Loop (Per Wave)
 
 1. **Gate** — Walk past grave markers of the fallen. New run shows predecessors; later cycles show actual casualties.
-2. **Salvage** — Top-down corridor. Collect gear from named corpses (your dead party's ACTUAL weapons). Hazards trigger QTE minigames. Ghost has 5 HP. Phase through fire/spikes to grab corpses faster. Reach exit → workshop.
-3. **Workshop** — Walk between 5 repair stations (Arsenal, Polish, Grind, Altar, Forge). Each minigame shows the weapon large. Graduated repair (no full-reset). TAB inspects weapon stats. Phase for 2x movement between stations. Ring bell → upgrade shop.
-4. **Upgrade** — Buy meta-upgrades and system-changing repair upgrades (planned V2: diegetic wall).
+2. **Salvage** — Top-down corridor with push-your-luck branching. Collect gear from named corpses (your dead party's ACTUAL weapons). 4 QTE types (timing, spam, pattern, reverse). Ghost has 3 Spirit (HP). Phase through fire/spikes to grab corpses faster. Go deeper for better gear but more risk. Reach exit → workshop.
+3. **Workshop** — Walk between 5 repair stations (Arsenal, Polish, Grind, Altar, Forge). Each minigame shows the weapon large. Graduated repair (no full-reset). TAB inspects weapon stats. Phase for 2x movement. Pulse for momentum burst. Ring bell → upgrade shop.
+4. **Upgrade** — Buy meta-upgrades (currently a scroll list — planned V2: diegetic wall).
 5. **Planning** — Walk to weapon rack, pick up gear, carry to adventurers to assign. Recruit at shrine. View map for wave intel. Phase for faster movement. Ring bell → battle.
 6. **Battle** — Spectator auto-battler. Party auto-fights. Weapons visibly degrade. Phase to slow all enemies.
-7. **Results** — Weapon dossiers (click for full history). Efficiency score (planned V2). Continue → aftermath.
+7. **Results** — Weapon dossiers (click for full history). Continue → aftermath.
 8. **Aftermath** — Memorial beat showing the fallen. Continue → gate (next cycle).
 
 ## Weapon System
@@ -70,5 +86,13 @@ Stage 1 is genuinely hard. Starter weapons begin at 30% durability in bad states
 - **Resolution:** 480×270 internal, scales to 4K+
 - **Art:** All sprites procedurally generated at 16×16 via `scripts/sprites.gd`
 - **Font:** Press Start 2P (bundled), rendered at 8px or 16px only
-- **Audio:** 15 procedural SFX via `scripts/autoload/sfx.gd` (zero audio files)
+- **Audio:** 18 procedural SFX via `scripts/autoload/sfx.gd` + procedural main theme via `scripts/autoload/music.gd` (zero audio files)
 - **Palette:** 48 curated colors via `scripts/palette.gd`
+- **Music:** Speder2-style game-electronica, 30s stereo loop, 8 layers, Schroeder reverb, disk-cached
+
+## Documentation
+
+- **VERSION_LOG.md** — Running changelog (most current — always check this first)
+- **MEMORY_CONTEXT.md** — Handoff doc for AI sessions (architecture, systems, gotchas)
+- **DESIGN_PLAN.md** — V2 implementation plan (7 priorities, build status)
+- **DESIGN_IDEAS.md** — Cut/half-built ideas backlog
