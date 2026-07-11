@@ -1,0 +1,11 @@
+{
+  "main_motif": "MOTIF_A",
+  "main_motif_occurrences": 6,
+  "motif_counts": {
+    "MOTIF_A": 6,
+    "MOTIF_D": 2
+  },
+  "total_motifs_defined": 4,
+  "total_motifs_used": 2,
+  "reuse_ratio": 1.0
+}
