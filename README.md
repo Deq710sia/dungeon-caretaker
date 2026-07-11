@@ -88,9 +88,9 @@ Stage 1 is genuinely hard. Starter weapons begin at 30% durability in bad states
 - **Resolution:** 480×270 internal, scales to 4K+
 - **Art:** All sprites procedurally generated at 16×16 via `scripts/sprites.gd`
 - **Font:** Press Start 2P (bundled), rendered at 8px or 16px only
-- **Audio:** 18 procedural SFX via `scripts/autoload/sfx.gd` + procedural main theme via `scripts/autoload/music.gd` (zero audio files)
+- **Audio:** 17 procedural SFX via `scripts/autoload/sfx.gd` + procedural main theme via `scripts/autoload/music.gd` (zero audio files)
 - **Palette:** 48 curated colors via `scripts/palette.gd`
-- **Music:** Speder2-style game-electronica, 30s stereo loop, 8 layers, Schroeder reverb, disk-cached
+- **Music:** D major, AABA form, 4 motifs, FM bell chords + triangle lead + sine bass + woodblock perc. Disk-cached. Music CI pipeline in `tools/music/` (analyzes quality scores, ALL TESTS must pass before export)
 
 ## Documentation
 

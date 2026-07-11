@@ -3,7 +3,7 @@
 
 This file contains everything a new AI session needs to understand the project's history, current state, design philosophy, and next steps. **Read this before touching any code.**
 
-**Last updated:** v0.25 (2026-07-12). If this file is stale, check VERSION_LOG.md for the latest changes and update this file before working.
+**Last updated:** v0.31 (2026-07-12). If this file is stale, check VERSION_LOG.md for the latest changes and update this file before working.
 
 ---
 
@@ -53,8 +53,8 @@ Pick which old frictions to keep ON PURPOSE (weapon loss, checkpoint distance), 
 - `main.gd` — Phase manager. Swaps Node2D + set_script per phase. Has fade transitions (working — `_on_phase_changed` calls `_start_fade`, 0.15s fade-to-black, swap mid-fade, 0.15s fade back). ESC → menu. Calls `_on_phase_exit()` on old phase before freeing (prevents weapon loss).
 - `GameState` (autoload) — Single source of truth: stage/wave, soul_shards, arsenal[], party[], meta_upgrades{}, run_log[], last_battle_result{}. Saves only meta_upgrades to `user://save_v3.json`.
 - `Juice` (autoload) — Screen shake (trauma-based), hit-stop, particle system (pixel squares, directional, integer-snapped), ghost trail (4 fading afterimages at 0.07s intervals, denser + bluer when phasing).
-- `SFX` (autoload) — **18 procedural SFX** (blip, chime, thud, hit, shatter, coin, select, deny, bell, death, repair, recruit, footstep, phase_in, phase_out, pulse_charge [DEAD CODE — left over from v0.14 charge design, never played], pulse_release). Pre-rendered as AudioStreamWAV from raw PCM. 8-voice round-robin pool with pitch jitter. SFX + Music buses created at runtime.
-- `Music` (autoload) — **Procedural main theme** (v6). 30-second stereo loop at 128 BPM, 16 bars, speder2-style game-electronica. 8 layers (kick, clap, hats, cowbell, bass, chords, arp, lead/melody). Schroeder reverb (4 combs + 2 allpass). **Disk-cached** (`user://music_cache.bin`) — first boot renders in ~8.7s, subsequent boots load from disk in <100ms. Cache version constant (6) invalidates on music data changes. **M key mutes.**
+- `SFX` (autoload) — **17 procedural SFX** (blip, chime, thud, hit, shatter, coin, select, deny, bell, death, repair, recruit, footstep, phase_in, phase_out, pulse_release). pulse_charge was deleted in v0.27 (dead code from v0.14 charge design). Pre-rendered as AudioStreamWAV from raw PCM. 8-voice round-robin pool with pitch jitter. SFX + Music buses created at runtime.
+- `Music` (autoload) — **Procedural main theme** (v0.31, D major). 30-second stereo loop at 128 BPM, 16 bars, AABA form. 4 layers (bass, chords, lead/melody, drums — arp dropped in v0.29 for density). **Instrument synthesis completely revamped in v0.31:** bass = sine+triangle+sub (was saw), chords = FM bell pluck (was saw stabs), lead = triangle+pluck (was sine), drums = rounder kick + tonal clap + woodblock (was noise/squares). D major key, 4 motifs (A/B/C/D), maj7(9)/m7(9)/sus4 chords (no altered dominants — too dark). **Disk-cached** (`user://music_cache.bin`, version 10). **M key mutes.** **Music CI pipeline** in `tools/music/` analyzes composition quality (HOOK/PHRASE/MOTIF/DENSITY scores 0-100) — ALL TESTS MUST PASS before export to game. Pipeline artifacts preserved per iteration in `generated/iterations/NNN/`.
 - `Palette` — 48 curated colors. ALL colors in the game come from here.
 - `Sprites` — All sprites procedurally generated at 16×16 via Image API. 30+ sprite types. `get_weapon_sprite(type, state)` returns state-tinted weapon art. **Cached** in `_cache` dict (good — not regenerated per call).
 - `GameFont` — Press Start 2P helper. NEVER use default Godot font. Only crisp at 8px or 16px.
@@ -126,11 +126,13 @@ The movement system is a **state machine with compoundable momentum**, NOT just 
 - `mute_music` — M (toggles music mute)
 
 ### Known Issues
-- **pulse_charge SFX is dead code** — left over from v0.14 charge design. `_streams["pulse_charge"]` is prerendered but never played. Low priority cleanup.
+- **~~pulse_charge SFX is dead code~~** — FIXED in v0.27 (deleted).
 - **Stale "Sidestep" comments** in salvage.gd:340, workshop.gd:162, planning.gd:111 — orphaned comments, no dead code beneath. Cosmetic.
-- **MEMORY_CONTEXT.md / DESIGN_PLAN.md / README.md** can fall behind VERSION_LOG.md. Always check VERSION_LOG.md for the latest state. (This file was updated v0.24.)
+- **MEMORY_CONTEXT.md / DESIGN_PLAN.md / README.md** should be updated after every push (see AGENT.md). VERSION_LOG.md is always current.
 - **Solo survivor can never retreat** (requires starting_party_count > 1) — old bug, may still exist.
-- **Music startup hitch** — first boot renders 8.7s of GDScript DSP. Disk cache fixes subsequent boots. Could thread the render for true fix.
+- **Music startup hitch** — first boot renders ~9s of GDScript DSP. Disk cache (version 10) fixes subsequent boots. Could thread the render for true fix.
+- **Music theme still needs ear-test iteration** — pipeline scores are 92/100 (ALL TESTS PASS) but user hasn't confirmed it sounds good yet. The CI pipeline measures composition quality, not timbre preference.
+- **Not-yet-implemented refactors** (identified in v0.25 code review, not yet coded): RepairMinigame base class (~120 lines), ghost state parameterization (~45 lines). Both marked MINOR RISK.
 
 ### What's NOT Built Yet
 - Visible weapon transformation in polish/oil_grind/exorcise minigames (oil_grind now rotates + sparks, but no rust-flake fade or blood-wipe reveal)
@@ -288,16 +290,33 @@ dungeon_caretaker/
 ├── DESIGN_IDEAS.md         — Cut/half-built ideas backlog
 ├── VERSION_LOG.md          — Running changelog (most current doc — always check this)
 ├── README.md               — Player-facing readme
+├── AGENT.md                — AI agent instructions (doc maintenance rules, code style, pitfalls)
 ├── assets/
 │   ├── default_theme.tres  — Global theme (Press Start 2P)
 │   └── fonts/press_start_2p.ttf
 ├── theme/pixel_theme.tres  — Project-wide pixel font theme
 ├── scenes/main.tscn        — Root scene (runs main.gd)
+├── tools/                   — Music CI pipeline (SEPARATE from game — never imported by game)
+│   └── music/
+│       ├── analyze_midi.py        — Stage 1: MIDI inspector (concrete numbers)
+│       ├── score_music.py         — Stage 8: quality scorer (0-100 per dimension)
+│       ├── test_composition.py    — Assertion tests (must ALL pass before export)
+│       ├── motif_detector.py      — Stage 6: recurring motif finder
+│       ├── visualize_piano_roll.py — Stage 5: piano roll PNGs per layer
+│       ├── spectrogram.py         — Stage 4: spectrogram + waveform from WAV
+│       ├── html_report.py         — Listening dashboard (all artifacts in one HTML)
+│       ├── run_pipeline.py        — Master CI: runs all + preserves iteration
+│       └── references/            — (for reference MIDI/WAV tracks — empty)
+├── generated/               — Pipeline output (iterations preserved)
+│   ├── iterations/          — Every pipeline run (iteration_001/, iteration_002/, ...)
+│   ├── reports/             — Latest dashboard.html
+│   ├── wav/                 — Rendered WAV (gitignored)
+│   └── spectrograms/        — Spectrogram PNGs (gitignored)
 └── scripts/
     ├── autoload/
     │   ├── game_state.gd   — Run state, party, arsenal, upgrades, save/load
-    │   ├── sfx.gd          — Procedural SFX (18 sounds, zero audio files)
-    │   └── music.gd        — Procedural main theme (speder2-style, disk-cached)
+    │   ├── sfx.gd          — Procedural SFX (17 sounds, zero audio files)
+    │   └── music.gd        — Procedural main theme (D major, FM bell chords, disk-cached)
     ├── game_font.gd        — Press Start 2P helper (draw_string with outline)
     ├── ghost_movement.gd   — Movement state machine (FLOAT/PHASE/DIVE/COAST + momentum)
     ├── juice.gd            — Screen shake, hit-stop, particles, ghost trail (autoload)

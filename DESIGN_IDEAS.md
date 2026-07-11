@@ -186,26 +186,38 @@ The push-your-luck branching in salvage is technically implemented (main corrido
 
 ---
 
-## 20. Music Theme Still Needs Work (v0.25 player feedback)
+## 20. Music Theme Still Needs Work (v0.31 — still iterating)
 
-**Status:** Implemented but user says "sounds bad" — Priority 7 in DESIGN_PLAN.md, PARTIAL.
+**Status:** Many iterations (v0.14-v0.31). Pipeline scores are 92/100 (ALL TESTS PASS) but user hasn't confirmed it sounds good yet.
 
-The procedural main theme has been through 9+ iterations (v0.14-v0.22). Current state: speder2-style chord palette, 8 layers, stereo, Schroeder reverb, melody. But user feedback is still "sounds kinda bad." The melody was added in v0.22 but the overall mix/arrangement needs more iteration. User asked for a mute button (added v0.23, M key) while the theme is being fixed.
+The procedural main theme has been through 17+ iterations. Current state (v0.31): D major, AABA form, 4 motifs, FM bell chords + triangle lead + sine bass + woodblock perc. Music CI pipeline built (tools/music/) that scores HOOK/PHRASE/MOTIF/DENSITY etc. — ALL TESTS PASS at 92/100. Instruments were completely revamped in v0.31 (was: all saw/noise, now: FM bell + triangle + sine + woodblock).
 
 **Known issues to address:**
-- The mix may still be too dense (8 layers all playing)
-- The melody needs to be more singable / prominent
-- The chord voicings were fixed in v0.21 but may still clash in places
-- Needs A/B testing against actual speder2 reference tracks
+- User hasn't confirmed the revamped instruments sound good — pipeline measures composition, not timbre preference
+- The CI pipeline doesn't analyze timbre at all — only notes/rhythm/harmony. Need a spectrogram comparison tool (Stage 4 built but not integrated into scoring)
+- RHYTHM score is 76 (no syncopation in melody — all notes on beat)
+- May need reference track comparison (Stage 2 from ChatGPT's plan — not yet built)
 
 ---
 
-## 21. Code Quality Issues (v0.25 Claude review)
+## 21. Code Quality Issues (v0.27 — partially addressed)
 
-**Status:** Partially addressed — see VERSION_LOG v0.23-v0.25.
+**Status:** Safe refactors applied in v0.27 (129 lines net reduction). Riskier refactors identified but not yet coded.
 
-Claude (Sonnet 5) reviewed the codebase and found:
-- **Fixed:** Salvage HUD lying about controls, gate.gd stale constants, wall collision velocity bug, pulse_charge dead code (v0.23), music disk cache (v0.24), documentation overhaul (v0.25)
-- **Not fixed:** Repair folder duplication (4 files share ~120 lines of scaffolding, could be RepairMinigame base class), get_speed() circularity (investigated, self-stabilizing), stale "Sidestep" comments, ghost_movement state-update functions share 80% structure (could parameterize)
+**Fixed in v0.27:**
+- Deleted pulse_charge dead code (sfx.gd)
+- Fixed reforge_furnace drift bugs (hammer grid + melt lock_rect constants extracted)
+- Fixed weapon.gd _derive_flavor drift bug (single source of truth)
+- Added weighted_pick helper (weapon.gd)
+- Added WEAR_MULTS const (weapon.gd)
+- QTE presets as const Dictionary (salvage.gd, ~45 lines saved)
+- Added _lp_coeff helper + _HPFilter class (music.gd, 13 sites de-duplicated)
+- Extracted MELODY motifs (music.gd, ~150 lines saved)
 
-A full refactoring review (v0.25) identified ~400 lines of potential savings across the codebase. Top opportunities: RepairMinigame base class (~120 lines), MELODY motif extraction (~150 lines), sine-chord timbre helper (~50 lines). See AGENT.md for the full refactoring checklist.
+**Not fixed (identified, MINOR RISK — needs careful testing):**
+- RepairMinigame base class (~120 lines savings across 4 repair files)
+- Ghost state parameterization (~45 lines savings in ghost_movement.gd)
+- get_speed() circularity (investigated, self-stabilizing — not a bug)
+- Stale "Sidestep" comments (cosmetic)
+
+**Music CI pipeline built in v0.28** (tools/music/ — 7 analyzers + master runner, completely separate from game code). Analyzes composition quality with concrete scores (HOOK/PHRASE/MOTIF/DENSITY 0-100). Export gate: ALL TESTS must pass before music enters game. Every iteration preserved in generated/iterations/NNN/.

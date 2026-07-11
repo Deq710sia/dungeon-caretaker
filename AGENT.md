@@ -51,9 +51,11 @@ Read this BEFORE touching any code.
 1. **Edit tool converts tabs to spaces** — if editing a tab-indented file, run `unexpand -t 8 --first-only` after, or use a Python patcher with explicit `\t` in heredocs.
 2. **`Input.is_action_just_pressed` unreliable in manual tick** — use `_pulse_was_pressed` manual edge detection pattern (see ghost_movement.gd).
 3. **`clampf(pos)` doesn't zero velocity** — wall collision must zero the clamped axis of velocity or momentum builds against walls (v0.23 fix).
-4. **Music render takes 8.7s** — disk cache fixes subsequent boots. Bump `CACHE_VERSION` in music.gd when music data changes.
+4. **Music render takes ~9s** in GDScript at first boot. Disk cache (`user://music_cache.bin`, version 10) fixes subsequent boots. Bump `CACHE_VERSION` constant in music.gd when music data changes to invalidate.
 5. **`store_bool` doesn't exist in Godot 4.3** — use `store_32(1 if bool else 0)` and `get_32() != 0`.
 6. **gate.gd uses hand-copied movement** — if you change GhostMovement constants, update gate.gd too (or refactor it to use real GhostMovement).
+7. **Music CI pipeline** is in `tools/music/` — completely separate from game code. Run `python3 tools/music/run_pipeline.py` after any music change. ALL TESTS must pass before export. Every iteration preserved in `generated/iterations/NNN/`. The pipeline measures composition quality (notes/rhythm/harmony), NOT timbre — changing instruments requires ear-testing the WAV.
+8. **17 SFX** (was 18 — pulse_charge deleted in v0.27 as dead code).
 
 ## Git Workflow
 

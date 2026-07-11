@@ -4,6 +4,139 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.31 — Revamp ALL Instrument Synthesis (2026-07-12)
+
+### Problem: Different Notes, Same Shitty Sound
+**Diagnosis:** User correctly identified that changing chords/melody but keeping the same instrument synthesis code = same sound. Every track (v0.14-v0.30) sounded identical because the synthesis was identical: saw bass + saw chord stabs + sine lead + noise drums. The pipeline only analyzes composition (notes/rhythm/harmony), not timbre — so it couldn't catch this.
+
+### Fix: Completely Replaced Every Instrument Engine
+
+**Bass:** saw+lowpass → sine fundamental + triangle 2nd harmonic + sub-octave sine. Pure sine core (no buzz), triangle adds woody body, pluck envelope (2ms attack, 0.4s decay) makes it feel played instead of sustained.
+
+**Chords:** saw stabs → FM bell pluck. FM synthesis: carrier sine modulated by 2:1 modulator creates bell-like inharmonic partials. FM index decays over time (bright attack → clean sustain = glassy). 1ms attack + 0.5s decay = bell ring, not stab. No noise, no lowpass sweep — FM itself creates the timbre.
+
+**Lead:** sine+2nd harmonic → triangle wave + 3rd harmonic, pluck envelope. Triangle (warmer than sine, more character than saw). Pluck decay (0.6s) = kalimba/celesta feel. 3rd harmonic at -18dB for sparkle.
+
+**Drums — all revamped:**
+- Kick: longer decay (0.1s vs 0.06s), softer click (0.08 vs 0.2) = rounder
+- Clap: +tonal 200Hz sine = wooden snap, not just noise
+- Hats: shorter (30ms vs 50ms) + quieter (0.02 vs 0.035) = less hissy
+- Cowbell → woodblock: sine 800+1200Hz, 80ms = crisp woody hit (was harsh square waves)
+
+**Master:** blanket `tanh(x*0.6)` → soft clip only above 0.85. Preserves dynamics instead of squashing everything.
+
+**Pipeline: ALL TESTS PASS, OVERALL: 92, Export: YES.**
+
+---
+
+## v0.30 — New Pretty Track in D Major (2026-07-12)
+
+### Problem: Previous Track Was Too Dark
+**Diagnosis:** v0.29 track was in C minor with G7#5#9 altered dominants (#5 and #9 = harsh/dark tension). User said "main sound is too dark, needs to sound a little pretty."
+
+### Fix: Entirely New Track in D Major
+- **Key:** C minor → D major (bright, hopeful)
+- **Chords:** m6/7alt/mM7 → maj7(9)/m7(9)/sus4 (warm, no altered tensions, no #5 or #9)
+- **Melody:** D5-A5 range (bell-like, higher register)
+- **A section:** Dmaj9 → Amaj9 → Bm7(9) → Gmaj9 (diatonic I-V-vi-IV with jazz extensions)
+- **B section:** Em7(9) → Bm7/F# → Gmaj9 → A7sus4 (subdominant excursion, sus4 adds gentle color)
+- **Pipeline: ALL TESTS PASS, OVERALL: 92, Export: YES**
+
+Also fixed: MOTIF_C last note raised (E4→A4) to fix leap > 9 semitones. F#m7 replaced with Bm7/F# to increase key confidence above 0.3.
+
+---
+
+## v0.29 — New Track: AABA Form, Pipeline-Verified (2026-07-12)
+
+### First Track Built Through the CI Pipeline
+Instead of guessing what sounds good, designed the track to pass the tests:
+
+**Form:** AABA (16 bars, 128 BPM, ~30s). A1/A2: Cm6→BbM7(9)→Cm6→G7#5#9. B: AbM7(9)→Gm7→Cm7(9)→Fm7(9). A3: return with variation.
+
+**Melody:** 4 motifs only (was 17 — that's why the old track wasn't memorable):
+- MOTIF_A (hook): Eb4→G4→A4→G4 — appears 13 times
+- MOTIF_B (answer): F4→D4→C4→D4 — appears 6 times
+- MOTIF_C (tension): B4→A#4→G4→F4 — appears 7 times
+- MOTIF_D (B-section): Ab4→C5→Eb5→C5 — appears 4 times
+- Plus `[]` rests at section boundaries for phrase structure
+
+**Dropped arp layer** to reduce density (20.5 → 14.5 voices).
+
+**Pipeline scores:** HOOK 100 (was 54), PHRASE DEV 100 (was 40), DENSITY 100 (was 70), OVERALL 92 (was 74). ALL TESTS PASS.
+
+Also fixed: analyzer parser now correctly parses multi-entry MELODY lines and preserves `[]` rest positions for phrase detection.
+
+---
+
+## v0.28 — Music Evaluation CI Pipeline (2026-07-12)
+
+### Built Full Music CI Pipeline (Separate From Game Code)
+Per ChatGPT's advice: "teach the AI how you judge good music instead of hoping it guesses correctly each time." Tools are completely separate from game code — game never imports tools, tools never care about Godot.
+
+**7 tools + master runner in `tools/music/`:**
+- `analyze_midi.py` — MIDI inspector (melody/harmony/rhythm stats with concrete numbers)
+- `score_music.py` — quality scorer (HOOK/VOICE LEADING/PHRASE/RHYTHM/MOTIF/TENSION/REGISTER/DENSITY, 0-100 each)
+- `test_composition.py` — assertion tests that must ALL pass before export (earn the right to export)
+- `motif_detector.py` — finds recurring motifs, variation confidence, melody story
+- `visualize_piano_roll.py` — piano roll PNGs per layer
+- `spectrogram.py` — spectrogram + waveform from WAV
+- `html_report.py` — listening dashboard (all artifacts in one HTML)
+- `run_pipeline.py` — master CI: runs all + preserves iteration
+
+**Every iteration preserved** in `generated/iterations/NNN/` with all artifacts.
+
+**Export gate:** nothing enters the game until ALL tests pass.
+
+---
+
+## v0.27 — Safe Refactors (129 Lines Net Reduction) (2026-07-12)
+
+Applied safe refactors from the code review. All behavior-preserving:
+
+1. **Deleted pulse_charge dead code** (sfx.gd, ~22 lines) — was prerendered but never played after v0.17 tap-pulse redesign
+2. **Fixed reforge_furnace drift bugs** — hammer grid + melt lock_rect constants extracted, shared between draw + click (prevents visual/hit-detection drift)
+3. **Fixed weapon.gd _derive_flavor drift bug** — single source of truth for flavor state derivation (was duplicated in recalculate_state + roll_affliction)
+4. **Added weighted_pick helper** (weapon.gd, ~15 lines saved) — weighted random pick pattern was duplicated
+5. **Added WEAR_MULTS const** (weapon.gd) — match ladder → Dictionary lookup + extracted DREAD_PER_DEATH/DREAD_MAX constants
+6. **QTE presets as const Dictionary** (salvage.gd, ~45 lines saved) — 5-branch match → 8-line function
+7. **Added _lp_coeff helper + _HPFilter class** (music.gd, 13 sites de-duplicated) — `1.0 - exp(-2.0 * PI * cutoff / SR)` was duplicated 13×
+8. **Extracted MELODY motifs** (music.gd, ~150 lines saved) — 16 named MOTIF_* constants, song structure visible at a glance
+
+Net: 1169 deletions, 1040 insertions = 129 lines reduction. No behavior changes.
+
+---
+
+## v0.26 — Fix Doc Overstatements (2026-07-12)
+
+### Problem: Docs Said "DONE" But Things Aren't Fun Yet
+User feedback: docs were too generous saying things were "finished." Priority 1 (movement) and Priority 2 (salvage) are implemented but NOT FUN YET.
+
+**DESIGN_PLAN.md:** Priority 1 & 2 changed from "✅ DONE" to "⚠️ PARTIAL / NOT FUN YET" with specific critiques:
+- Priority 1: momentum/speed-vs-precision tension, phase auto-DIVE issue
+- Priority 2: crossroads is just text not a visual bend, deeper path is a no-brainer, difficulty inconsistent
+
+**MEMORY_CONTEXT.md:** Salvage section: added "(BROKEN)" to push-your-luck, documented crossroads issue. Movement section: added "NOT FUN YET" header.
+
+**README.md:** Movement section: added "(WORK IN PROGRESS)" + known issue. Salvage: added "not yet a real choice."
+
+**DESIGN_IDEAS.md:** Entry 3 updated to "Implemented but NOT FUN YET." Added 3 new entries: #19 Salvage Crossroads, #20 Music Theme Still Needs Work, #21 Code Quality Issues.
+
+---
+
+## v0.25 — Documentation Overhaul + Agent Instructions (2026-07-12)
+
+Deep-dived the code and updated all three stale docs (they were 38 commits behind). Added AGENT.md for AI session handoff.
+
+**MEMORY_CONTEXT.md:** Updated SFX count (15→18), added Music autoload section, rewrote movement section (4-state machine + momentum), updated salvage (4 QTE types, push-your-luck, 3 Spirit), updated input map (pulse + mute_music), fixed backwards accel value, added gotchas (wall collision, manual edge detection, store_bool workaround, indentation inconsistency, gate.gd duplicate, disk cache versioning). Added Section 9: Documentation Maintenance Rule.
+
+**DESIGN_PLAN.md:** Updated BUILD STATUS (Priority 2 marked done — later corrected in v0.26).
+
+**README.md:** Updated controls table (Pulse + Mute), added movement system section, updated salvage, updated tech (18 SFX + music).
+
+**AGENT.md (new):** Documentation maintenance rule, code style, testing workflow, common pitfalls, git workflow.
+
+---
+
 ## v0.24 — Music Disk Cache (Fixes 8.7s Startup Hitch) (2026-07-12)
 
 ### Problem: 8.7-Second Startup Freeze
