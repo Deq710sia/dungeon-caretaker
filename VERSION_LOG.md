@@ -4,6 +4,52 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.24 — Music Disk Cache (Fixes 8.7s Startup Hitch) (2026-07-12)
+
+### Problem: 8.7-Second Startup Freeze
+**Measured:** Claude flagged the synchronous music render as a potential hitch. I timed it — **8,703ms** of GDScript DSP at boot, before the menu even appears. Breakdown:
+- Chord stabs: 3,701ms (43%) — 2 detuned voices × 5 notes × exp decay + dropping lowpass per sample
+- Schroeder reverb: 3,155ms (36%) — 4 combs + 2 allpass × 1.3M samples × 2 channels
+- Lead/melody: 572ms
+- Bass: 356ms
+- Drums: 272ms
+- Arp: 262ms
+- Master: 208ms
+
+This is a real, user-facing performance problem. The game freezes for ~9 seconds on every launch.
+
+### Fix: Disk Cache
+Added `_load_cached()` / `_save_cached()` to Music autoload:
+- First boot: renders theme (8.7s), saves to `user://music_cache.bin`
+- Every boot after: loads from disk (<100ms)
+- Cache version constant (currently 6) — bump when music data changes to invalidate
+- Stores: version, mix_rate, stereo flag, data size, raw PCM bytes
+
+**Verified:** Second boot prints "Music: loaded from cache (instant)" — no render, no hitch.
+
+### Other Performance Findings (investigated, not bugs)
+
+**get_speed() circularity — self-stabilizing, not a bug**
+Claude flagged that `get_speed()` bakes in the momentum bonus, and `_update_momentum()` measures `speed_pct` against that same `get_speed()`. Analysis:
+- At momentum=0: need vel > 38.5 to build momentum
+- At momentum=2.0: need vel > 57.75 to build momentum (threshold rises)
+- BUT: `target_speed = get_speed() * _pulse_mult` also rises with momentum
+- So vel follows the rising target, keeping speed_pct ~1.0 > 0.7
+- Positive feedback loop that converges to max momentum when moving, decays when stopped
+- At ACCEL=300, vel catches up to the rising target in ~0.05s — no oscillation
+- **Conclusion:** self-stabilizing, not a real problem. No fix needed.
+
+**Repair folder duplication — maintenance issue, not performance**
+4 minigame files (783 lines total) share duplicated scaffolding:
+- `signal completed(quality: float)` — identical
+- `var time_left`, `var finished`, `var gear` — identical pattern
+- `func _finish()` — same structure (set finished, compute quality, await, emit, queue_free)
+- Actual minigame logic is unique (connect-the-dots, timing sweet spot, paint coverage, 3-stage furnace)
+- Could be refactored to a `RepairMinigame` base class
+- **Not a performance issue** — code quality/maintenance only
+
+---
+
 ## v0.23 — Mute Button + Claude Review Bug Fixes (2026-07-12)
 
 ### Mute Music Button (M key)

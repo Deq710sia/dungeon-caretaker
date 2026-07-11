@@ -24,6 +24,7 @@ Juice="*res://scripts/juice.gd"
 SFX="*res://scripts/autoload/sfx.gd"
 Music="*res://scripts/autoload/music.gd"
 
+
 [display]
 
 window/size/viewport_width=480

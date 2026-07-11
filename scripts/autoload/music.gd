@@ -42,8 +42,20 @@ var _player: AudioStreamPlayer
 var _muted: bool = false
 var _saved_volume: float = -10.0
 
+const CACHE_PATH := "user://music_cache.bin"
+const CACHE_VERSION := 6  # bump when music data changes to invalidate cache
+
 func _ready() -> void:
-        _stream = _render_theme()
+        _stream = _load_cached()
+        if _stream == null:
+                print("Music: rendering theme (first boot or cache invalid)...")
+                var t0: float = Time.get_ticks_msec()
+                _stream = _render_theme()
+                var t1: float = Time.get_ticks_msec()
+                print("Music: render took %dms, caching to disk..." % int(t1 - t0))
+                _save_cached(_stream)
+        else:
+                print("Music: loaded from cache (instant)")
         _stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
         _stream.loop_begin = 0
         _stream.loop_end = _stream.data.size() / 4  # stereo: 2 bytes * 2 channels
@@ -54,6 +66,44 @@ func _ready() -> void:
         _player.name = "MusicPlayer"
         add_child(_player)
         _player.play()
+
+## Save rendered theme to disk for instant loading on next boot.
+func _save_cached(wav: AudioStreamWAV) -> void:
+        var f := FileAccess.open(CACHE_PATH, FileAccess.WRITE)
+        if f == null:
+                push_warning("Music: could not open cache file for writing")
+                return
+        f.store_32(CACHE_VERSION)
+        f.store_32(wav.mix_rate)
+        f.store_32(1 if wav.stereo else 0)  # bool as int (Godot 4.3 has no store_bool)
+        f.store_32(wav.data.size())
+        f.store_buffer(wav.data)
+        f.close()
+
+## Load cached theme from disk. Returns null if cache is invalid/missing.
+func _load_cached() -> AudioStreamWAV:
+        var f := FileAccess.open(CACHE_PATH, FileAccess.READ)
+        if f == null:
+                return null
+        # Check version
+        var ver: int = f.get_32()
+        if ver != CACHE_VERSION:
+                f.close()
+                return null
+        # Read format params
+        var mix_rate: int = f.get_32()
+        var stereo: bool = f.get_32() != 0
+        var data_size: int = f.get_32()
+        var data := PackedByteArray()
+        data.resize(data_size)
+        data = f.get_buffer(data_size)
+        f.close()
+        var w := AudioStreamWAV.new()
+        w.format = AudioStreamWAV.FORMAT_16_BITS
+        w.mix_rate = mix_rate
+        w.stereo = stereo
+        w.data = data
+        return w
 
 func _process(_delta: float) -> void:
         # M key toggles mute
