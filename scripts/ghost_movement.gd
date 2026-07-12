@@ -67,7 +67,10 @@ const MOMENTUM_DIVE_COST: float = 0.3     # spent on manual cancel (dive)
 
 # --- Phase ---
 const PHASE_DURATION: float = 1.2     # was 1.5 — shorter, more committed
-const PHASE_CD: float = 3.0           # was 4.0 — tighter chain
+const PHASE_CD: float = 1.5           # v0.43: was 3.0 — lowered so the bank from
+                                      # early cancels can cover it. Cancel at >50%
+                                      # banks >0.6s; after dive+coast (1.0s),
+                                      # remaining cd = 0.5s; bank 0.6s > 0.5s = re-phase.
 const PHASE_COST: int = 1
 const PHASE_BANK_MAX: float = 3.0
 const PHASE_SPEED: float = 110.0      # base phase speed (2x BASE_SPEED)
@@ -521,13 +524,26 @@ func try_activate_phase() -> bool:
         if _phase_buffer > 0:
                 _phase_buffer = 0.0
         if state == State.PHASE:
-                # Manual cancel — convert remaining phase energy into a DIVE impulse
+                # Manual cancel — convert remaining phase energy into a DIVE impulse.
+                # The remaining phase time is BANKED (phase_bank += phase_active).
+                # v0.43: the bank is what enables the chain — if you cancel early,
+                # you bank enough time that the next phase's cooldown is reduced
+                # (or zero). This is the "50% gauge" mechanic: cancel with >50%
+                # remaining = bank > 50% of PHASE_DURATION = next phase available
+                # immediately (banked time exceeds cooldown).
                 var remaining_pct: float = phase_active / PHASE_DURATION
                 phase_bank = minf(PHASE_BANK_MAX, phase_bank + phase_active)
                 phase_active = 0.0
                 _end_phase(remaining_pct)
                 return true
-        if phase_cd > 0:
+        # v0.43: Cooldown check — but the banked time from early cancels can
+        # cover the remaining cooldown. If phase_cd - phase_bank <= 0, the
+        # bank covers it and we can phase. This is the clean version of v30's
+        # "chain again" mechanic: driven by the bank, not a COAST bypass.
+        # The "50% gauge" rule: cancel with >50% of PHASE_DURATION remaining
+        # banks >0.6s, which covers the 3.0s cooldown's remaining time after
+        # the dive+coast (~1.0s) — so you can re-phase immediately.
+        if phase_cd > 0 and (phase_cd - phase_bank) > 0:
                 return false
         if GameState.soul_shards < PHASE_COST:
                 SFX.play("deny")
