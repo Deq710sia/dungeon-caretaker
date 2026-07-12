@@ -1,0 +1,64 @@
+============================================================
+DESIGN LAB REPORT — baseline_salvage_deeper
+============================================================
+
+MOVEMENT
+------------------------------------------------------------
+  Total tick samples:    216 (21.6s of gameplay)
+  State distribution:
+    FLOAT   100.0%  ( 21.6s)
+    PHASE     0.0%  (  0.0s)
+    DIVE      0.0%  (  0.0s)
+    COAST     0.0%  (  0.0s)
+  Dominant state:        FLOAT (100.0%)
+
+  Phase activations:     0
+    Manual cancels:      0  (player chose to DIVE)
+    Natural expiries:    0  (v0.36 path — returns to FLOAT)
+    Cancel rate:         0.0%  (intentional play indicator)
+
+  Pulse fires:           0  (denials: 0)
+    Pulse per phase:     0.00  (active play indicator)
+
+  Momentum:
+    Average:             0.68 / 2.0
+    Peak:                1.73 / 2.0
+    Retention +1s:       0.00  (avg momentum 1s after phase start)
+    Retention +3s:       0.00  (avg momentum 3s after phase start)
+
+  Chains:
+    Avg chain length:    1.00 states
+    Top 5 chains:
+      (no multi-state chains detected)
+
+  Expression score:      11.2 / 100
+    (composite: state diversity + chain length + momentum
+     retention + pulse usage + intentional cancel rate)
+
+SALVAGE
+------------------------------------------------------------
+  Stage 1 Wave 1
+  Completed:             YES  (14.6s)
+  Path taken:            deeper
+
+  Crossroads:
+    Committed deeper:    YES
+    Deeper commit time:  7.7s into run
+
+  Corpses collected:     0  (from deeper: 0)
+
+  Spirit:
+    Remaining:           1 / 3  (lost: 2)
+
+  QTEs:
+    Total:               2  (pass: 0, fail: 2)
+    Pass rate:           0.0%
+    Avg time:            2750ms
+    By type:
+      pattern     0/1  (0%)
+      spam        0/1  (0%)
+
+  Damage:
+    Total events:        2  (from deeper: 1)
+
+============================================================

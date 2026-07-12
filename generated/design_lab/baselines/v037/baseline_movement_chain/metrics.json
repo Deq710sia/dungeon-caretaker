@@ -1,0 +1,66 @@
+{
+  "label": "baseline_movement_chain",
+  "movement": {
+    "total_ticks": 36,
+    "state_seconds": {
+      "FLOAT": 2.8000000000000003,
+      "PHASE": 0.4,
+      "DIVE": 0.4
+    },
+    "state_pct": {
+      "FLOAT": 77.77777777777779,
+      "PHASE": 11.11111111111111,
+      "DIVE": 11.11111111111111
+    },
+    "dominant_state": "FLOAT",
+    "dominant_state_pct": 77.77777777777779,
+    "state_transitions": {
+      "FLOAT->PHASE": 1,
+      "PHASE->DIVE": 1,
+      "DIVE->FLOAT": 1
+    },
+    "avg_chain_length": 4.0,
+    "top_chains": [
+      {
+        "chain": "FLOAT -> PHASE -> DIVE -> FLOAT",
+        "count": 1
+      }
+    ],
+    "phase_activations": 1,
+    "phase_cancels_manual": 1,
+    "phase_expiries_natural": 0,
+    "phase_cancel_rate": 1.0,
+    "pulse_fires": 0,
+    "pulse_denials": 2,
+    "pulse_per_phase": 0.0,
+    "momentum_avg": 0.13131958086419704,
+    "momentum_peak": 0.42361111111111,
+    "momentum_retention_1s": 0.0825547611111102,
+    "momentum_retention_3s": 0.0,
+    "expression_score": 53.8
+  },
+  "salvage": {
+    "started": false,
+    "stage": 0,
+    "wave": 0,
+    "completed": false,
+    "completion_time_s": 0.0,
+    "path_taken": "",
+    "committed_deeper": false,
+    "deeper_commit_time_s": 0.0,
+    "corpses_collected": 0,
+    "corpses_from_deeper": 0,
+    "spirit_remaining": 0,
+    "spirit_max": 0,
+    "spirit_lost": 0,
+    "shards": 0,
+    "qte_total": 0,
+    "qte_success": 0,
+    "qte_fail": 0,
+    "qte_pass_rate": 0.0,
+    "qte_avg_time_ms": 0.0,
+    "qte_by_type": {},
+    "damage_events": 0,
+    "damage_from_deeper": 0
+  }
+}

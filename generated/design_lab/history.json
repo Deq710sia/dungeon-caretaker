@@ -1,0 +1,118 @@
+[
+  {
+    "timestamp": "20260712_032336",
+    "label": "baseline_movement_empty",
+    "notes": "v0.37 baseline",
+    "run_dir": "generated/design_lab/runs/20260712_032336_baseline_movement_empty",
+    "movement": {
+      "expression_score": 88.8,
+      "avg_chain_length": 4.0,
+      "dominant_state": "FLOAT",
+      "dominant_state_pct": 93.0,
+      "phase_cancel_rate": 1.0,
+      "pulse_per_phase": 1.0,
+      "momentum_avg": 1.4280907192698393,
+      "momentum_retention_3s": 2.0,
+      "state_pct": {
+        "FLOAT": 93.0,
+        "PHASE": 3.0,
+        "DIVE": 4.0
+      }
+    },
+    "salvage": {
+      "completed": false,
+      "path_taken": "",
+      "completion_time_s": 0.0,
+      "committed_deeper": false,
+      "corpses_collected": 0,
+      "qte_pass_rate": 0.0,
+      "spirit_lost": 0
+    }
+  },
+  {
+    "timestamp": "20260712_032337",
+    "label": "baseline_movement_chain",
+    "notes": "v0.37 baseline",
+    "run_dir": "generated/design_lab/runs/20260712_032337_baseline_movement_chain",
+    "movement": {
+      "expression_score": 53.8,
+      "avg_chain_length": 4.0,
+      "dominant_state": "FLOAT",
+      "dominant_state_pct": 77.77777777777779,
+      "phase_cancel_rate": 1.0,
+      "pulse_per_phase": 0.0,
+      "momentum_avg": 0.13131958086419704,
+      "momentum_retention_3s": 0.0,
+      "state_pct": {
+        "FLOAT": 77.77777777777779,
+        "PHASE": 11.11111111111111,
+        "DIVE": 11.11111111111111
+      }
+    },
+    "salvage": {
+      "completed": false,
+      "path_taken": "",
+      "completion_time_s": 0.0,
+      "committed_deeper": false,
+      "corpses_collected": 0,
+      "qte_pass_rate": 0.0,
+      "spirit_lost": 0
+    }
+  },
+  {
+    "timestamp": "20260712_032337",
+    "label": "baseline_salvage_main",
+    "notes": "v0.37 baseline",
+    "run_dir": "generated/design_lab/runs/20260712_032337_baseline_salvage_main",
+    "movement": {
+      "expression_score": 11.2,
+      "avg_chain_length": 1.0,
+      "dominant_state": "FLOAT",
+      "dominant_state_pct": 100.0,
+      "phase_cancel_rate": 0.0,
+      "pulse_per_phase": 0.0,
+      "momentum_avg": 0.4365300976190473,
+      "momentum_retention_3s": 0.0,
+      "state_pct": {
+        "FLOAT": 100.0
+      }
+    },
+    "salvage": {
+      "completed": true,
+      "path_taken": "main",
+      "completion_time_s": 5.317,
+      "committed_deeper": false,
+      "corpses_collected": 0,
+      "qte_pass_rate": 0.0,
+      "spirit_lost": 0
+    }
+  },
+  {
+    "timestamp": "20260712_032337",
+    "label": "baseline_salvage_deeper",
+    "notes": "v0.37 baseline",
+    "run_dir": "generated/design_lab/runs/20260712_032337_baseline_salvage_deeper",
+    "movement": {
+      "expression_score": 11.2,
+      "avg_chain_length": 1.0,
+      "dominant_state": "FLOAT",
+      "dominant_state_pct": 100.0,
+      "phase_cancel_rate": 0.0,
+      "pulse_per_phase": 0.0,
+      "momentum_avg": 0.6820922888888948,
+      "momentum_retention_3s": 0.0,
+      "state_pct": {
+        "FLOAT": 100.0
+      }
+    },
+    "salvage": {
+      "completed": true,
+      "path_taken": "deeper",
+      "completion_time_s": 14.624,
+      "committed_deeper": true,
+      "corpses_collected": 0,
+      "qte_pass_rate": 0.0,
+      "spirit_lost": 2
+    }
+  }
+]

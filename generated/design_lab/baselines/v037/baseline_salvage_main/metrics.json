@@ -1,0 +1,53 @@
+{
+  "label": "baseline_salvage_main",
+  "movement": {
+    "total_ticks": 140,
+    "state_seconds": {
+      "FLOAT": 14.0
+    },
+    "state_pct": {
+      "FLOAT": 100.0
+    },
+    "dominant_state": "FLOAT",
+    "dominant_state_pct": 100.0,
+    "state_transitions": {},
+    "avg_chain_length": 1.0,
+    "top_chains": [],
+    "phase_activations": 0,
+    "phase_cancels_manual": 0,
+    "phase_expiries_natural": 0,
+    "phase_cancel_rate": 0.0,
+    "pulse_fires": 0,
+    "pulse_denials": 0,
+    "pulse_per_phase": 0.0,
+    "momentum_avg": 0.4365300976190473,
+    "momentum_peak": 2,
+    "momentum_retention_1s": 0.0,
+    "momentum_retention_3s": 0.0,
+    "expression_score": 11.2
+  },
+  "salvage": {
+    "started": true,
+    "stage": 1,
+    "wave": 1,
+    "completed": true,
+    "completion_time_s": 5.317,
+    "path_taken": "main",
+    "committed_deeper": false,
+    "deeper_commit_time_s": 0.0,
+    "corpses_collected": 0,
+    "corpses_from_deeper": 0,
+    "spirit_remaining": 3,
+    "spirit_max": 3,
+    "spirit_lost": 0,
+    "shards": 100,
+    "qte_total": 0,
+    "qte_success": 0,
+    "qte_fail": 0,
+    "qte_pass_rate": 0.0,
+    "qte_avg_time_ms": 0.0,
+    "qte_by_type": {},
+    "damage_events": 0,
+    "damage_from_deeper": 0
+  }
+}

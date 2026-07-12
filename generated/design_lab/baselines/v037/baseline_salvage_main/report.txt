@@ -1,0 +1,60 @@
+============================================================
+DESIGN LAB REPORT — baseline_salvage_main
+============================================================
+
+MOVEMENT
+------------------------------------------------------------
+  Total tick samples:    140 (14.0s of gameplay)
+  State distribution:
+    FLOAT   100.0%  ( 14.0s)
+    PHASE     0.0%  (  0.0s)
+    DIVE      0.0%  (  0.0s)
+    COAST     0.0%  (  0.0s)
+  Dominant state:        FLOAT (100.0%)
+
+  Phase activations:     0
+    Manual cancels:      0  (player chose to DIVE)
+    Natural expiries:    0  (v0.36 path — returns to FLOAT)
+    Cancel rate:         0.0%  (intentional play indicator)
+
+  Pulse fires:           0  (denials: 0)
+    Pulse per phase:     0.00  (active play indicator)
+
+  Momentum:
+    Average:             0.44 / 2.0
+    Peak:                2.00 / 2.0
+    Retention +1s:       0.00  (avg momentum 1s after phase start)
+    Retention +3s:       0.00  (avg momentum 3s after phase start)
+
+  Chains:
+    Avg chain length:    1.00 states
+    Top 5 chains:
+      (no multi-state chains detected)
+
+  Expression score:      11.2 / 100
+    (composite: state diversity + chain length + momentum
+     retention + pulse usage + intentional cancel rate)
+
+SALVAGE
+------------------------------------------------------------
+  Stage 1 Wave 1
+  Completed:             YES  (5.3s)
+  Path taken:            main
+
+  Crossroads:
+    Committed deeper:    NO
+
+  Corpses collected:     0  (from deeper: 0)
+
+  Spirit:
+    Remaining:           3 / 3  (lost: 0)
+
+  QTEs:
+    Total:               0  (pass: 0, fail: 0)
+    Pass rate:           0.0%
+    Avg time:            0ms
+
+  Damage:
+    Total events:        0  (from deeper: 0)
+
+============================================================

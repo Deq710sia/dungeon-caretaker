@@ -20,8 +20,10 @@ Thumbs.db
 generated/wav/
 generated/spectrograms/
 tools/music/output/
-# Design lab run outputs (telemetry.jsonl copies) — large + ephemeral
+# Design lab run outputs (telemetry.jsonl copies) — large + ephemeral.
+# Exception: keep baselines/ for archival.
 generated/design_lab/runs/
+!generated/design_lab/baselines/
 # tools/ (allowed on this branch)
 # generated/ (allowed on this branch)
 # scripts/playtest_driver.gd (allowed on this branch)

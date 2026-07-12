@@ -146,3 +146,101 @@ tools-management branch (this branch):
 - **Doesn't work:** No way to answer "is movement better?" or "is salvage fun?" from tool output. Screenshot+vision verification catches layout bugs but not design issues.
 
 ---
+
+## Entry 002 — v0.37 Baseline Playtest Findings (2026-07-12)
+
+### Setup
+Ran 4 baseline playtests against v0.37 (main + Telemetry autoload + Design Lab v1 on tools-management). All headless via Xvfb. Reports archived in `generated/design_lab/baselines/v037/`. Metrics in `generated/design_lab/history.json`.
+
+| Scenario | Phase | Purpose |
+|----------|-------|---------|
+| `baseline_movement_empty` | workshop | Drift in a loose circle + 1 phase cancel + 1 pulse |
+| `baseline_movement_chain` | workshop | Optimal chain: phase → cancel → dive → coast → pulse (x2) |
+| `baseline_salvage_main` | salvage | Walk straight down main corridor to fork exit, no deeper commit |
+| `baseline_salvage_deeper` | salvage | Walk past fork into deeper section, trigger crossroads_committed |
+
+### Movement Findings
+
+**1. COAST state is effectively dead.**
+- `baseline_movement_empty`: COAST = 0 ticks (state_pct key absent)
+- `baseline_movement_chain`: COAST = 0 ticks (same)
+- Root cause traced in code: `COAST_DECEL_MULT = 0.25` (was 0.08, raised in v0.17 for "faster coast stop"). With `COAST_MIN_SPEED = 50`, coast ends in ~0.09s when no input is held — shorter than one 10Hz tick. The state is entered but exits before any observable sample.
+- **Fix target:** lower `COAST_DECEL_MULT` to ~0.12 (between original 0.08 and current 0.25), lower `COAST_MIN_SPEED` to 35. This should make coast last ~0.3-0.5s, observable in telemetry.
+
+**2. Pulse denied too often at low momentum.**
+- `baseline_movement_chain`: `pulse_per_phase = 0.0` (WARN violated). Pulse fires: 0, denials: 2.
+- Root cause: `MOMENTUM_PULSE_COST = 0.3` but after a dive, momentum is `clamp(prev - 0.3, 0, 2.0)`. If prev was 0.5, post-dive is 0.2 < 0.3 → pulse denied. The chain_practice scenario fires pulse right after dive, exactly when momentum is lowest.
+- **Fix target:** lower `MOMENTUM_PULSE_COST` to 0.2 (so pulse fires whenever momentum ≥ 0.2). Net gain becomes +0.2 per pulse (was +0.1). May need to also lower `MOMENTUM_PULSE_GAIN` to 0.3 to keep net gain at +0.1.
+
+**3. Phase cancel rate = 100% in movement scenarios.**
+- v0.36 fix is working as intended. In `baseline_movement_chain`, all phase exits were manual cancels (intentional DIVE). Constitution rule `intentional_cancel_rate` PASSES.
+- No iteration needed here.
+
+**4. Momentum average varies wildly by scenario.**
+- `baseline_movement_empty`: momentum_avg = 1.43 (good — long movement builds momentum)
+- `baseline_movement_chain`: momentum_avg = 0.13 (WARN violated — too low)
+- The chain_practice scenario's `move down 1.0` is too short to build momentum before the first phase. Momentum needs ~2s of fast movement to reach the 0.7 speed_pct threshold.
+- **Fix target:** either retune `MOMENTUM_BUILD_RATE` (currently 0.5/s) to 0.8/s, OR accept that the scenario is artificial and real play will have longer movement phases. Leaning toward retune — PF lesson is "momentum had memory," so building it should be faster.
+
+**5. Expression score: empty=88.8, chain=53.8.**
+- Counterintuitive: the "empty room" scenario scores higher than the "chain practice" scenario. This is because empty room had longer continuous movement (built momentum, fired pulse successfully), while chain practice had short movements between phase cancels (low momentum, pulse denied).
+- The expression score formula is working but the scenario design is biasing results. After fixing pulse cost + momentum build rate, re-run and compare.
+
+### Salvage Findings
+
+**6. Main path completed in 5.3s without engaging ANY mechanics.**
+- `baseline_salvage_main`: 100% FLOAT, 0 phase activations, 0 pulses, 0 QTEs, 0 corpses, expression score 11.2/100.
+- The ghost walks from start (y=48) to main exit (y=480, fork_y=30 tiles) in 5.3s. At 55px/s base + momentum bonus, that's ~7.85s expected, but momentum builds during the walk so it completes faster.
+- **Problem:** the main path is a straight shot with no engagement. The "floor" (guaranteed clear) is so easy it's not even a puzzle.
+- **Fix target:** lengthen the main corridor (raise `fork_y` minimum from 15 to 25) AND/OR add a required hazard gate at the midpoint that forces a QTE. The DESIGN_PLAN says "exit is always visible and reachable" — that's fine, but the path should have at least one mandatory interaction.
+
+**7. Deeper path: 2 QTEs, both failed, 0 corpses collected.**
+- `baseline_salvage_deeper`: 14.6s completion, crossroads committed at 7.7s, spirit lost 2/3, 0 corpses.
+- The deeper path IS riskier (2 damage events vs 0 in main), but the reward isn't there — 0 corpses collected because the scenario doesn't include `interact` commands at deeper corpse positions.
+- **Problem (scenario):** the `deeper_commit` scenario walks down but doesn't interact with corpses. Need a richer scenario.
+- **Problem (design):** even if the scenario did interact, the deeper path's reward (better gear) isn't visible/legible during play. The player has no way to know the deeper corpses have better stuff without picking them up.
+- **Fix target:** add a visual marker (blue soul-glow per DESIGN_PLAN Priority 2D) to deeper corpses so the reward is legible. Also add a "deeper gate" hazard at the fork that requires a QTE to enter — makes the choice cost something upfront, not just downstream.
+
+**8. QTE pass rate = 0% in deeper (both failed).**
+- The playtest driver doesn't solve QTEs (no key presses for timing/spam/pattern types). So QTEs always time out as failures.
+- **Limitation:** this is a playtest driver issue, not a game issue. To test QTE success rate, I'd need to add QTE-solving logic to the scenarios. For now, the analyzer correctly reports 0% pass rate, which is a known artifact.
+- **Fix target:** add a `solve_qte` command to PlaytestDriver that auto-solves the current QTE (for testing the success path). Or accept that QTE pass rate is a manual-test metric.
+
+### Constitution Verdicts (v0.37 baseline)
+
+| Scenario | PASS | FAIL | WARN | SKIP | Verdict |
+|----------|------|------|------|------|---------|
+| movement_empty | 7 | 1 | 1 | 3 | FAIL (dominant FLOAT 93%) |
+| movement_chain | 6 | 1 | 2 | 3 | FAIL (dominant FLOAT 78%, pulse dead, momentum low) |
+| salvage_main | 2 | 1 | 4 | 5 | FAIL (dominant FLOAT 100%, expression 11.2) |
+| salvage_deeper | 3 | 1 | 5 | 3 | FAIL (dominant FLOAT 100%, QTE 0%) |
+
+**Common FAIL:** `no_dominant_state` (FLOAT > 70%) in all 4 scenarios. This is partly scenario-driven (canned scenarios don't use mechanics enough) but also reveals that FLOAT is the default and the other states require explicit player action. After iteration, re-test with richer scenarios.
+
+### Iteration Targets (for next game-code changes on main)
+
+Based on the above, the next game-code iteration on main should:
+
+1. **Fix COAST observability** — lower `COAST_DECEL_MULT` 0.25→0.12, `COAST_MIN_SPEED` 50→35
+2. **Lower pulse cost** — `MOMENTUM_PULSE_COST` 0.3→0.2, `MOMENTUM_PULSE_GAIN` 0.4→0.3 (net +0.1 preserved)
+3. **Faster momentum build** — `MOMENTUM_BUILD_RATE` 0.5→0.8 (PF "momentum had memory" lesson)
+4. **Lengthen main salvage path** — raise `fork_y` minimum from 15 to 25 tiles
+5. **Add deeper gate hazard** — required QTE at the fork to enter deeper (makes choice cost upfront)
+6. **Add blue soul-glow to deeper corpses** — make reward legible (DESIGN_PLAN Priority 2D)
+
+After these changes, re-run the same 4 scenarios and diff metrics. Expected improvements:
+- COAST ticks > 0 in movement scenarios
+- pulse_per_phase > 0.3 in movement_chain
+- momentum_avg > 0.3 in movement_chain
+- salvage_main completion time increases (longer path)
+- salvage_deeper triggers a QTE at the gate (deeper_commit_time may shift)
+
+### What the Design Lab Already Proved
+
+- **Telemetry capture works** — 4 runs, ~22KB-45KB JSONL each, all events well-formed
+- **Analyzer computes meaningful metrics** — state distribution, chain length, momentum retention, expression score all differentiate scenarios
+- **Constitution catches real issues** — COAST death, pulse denial, dominant FLOAT, low expression — all surfaced automatically
+- **Cross-version diff is set up** — history.json has 4 entries, ready for after-iteration comparison
+- **ChatGPT was right that the original tools couldn't do this** — the old PlaytestDriver log would have shown "moved down, interacted, exited" with no design signal
+
+---

@@ -1,0 +1,66 @@
+============================================================
+DESIGN CONSTITUTION VALIDATION — baseline_salvage_deeper
+============================================================
+
+Summary: 3 PASS, 1 FAIL, 5 WARN, 3 SKIP, 0 ERROR
+VERDICT: FAIL — design rules violated. Fix before shipping.
+
+------------------------------------------------------------
+[OK] no_dead_states
+     Every movement state (FLOAT/PHASE/DIVE/COAST) should appear in at least 1%% of ticks. Dead states indicate an unreachable or useless mechanic.
+     metric: movement.state_pct.FLOAT = 100.0 | rule: movement.state_pct.FLOAT > 0.5
+     100.0000 > 0.5000 -> holds
+
+[--] phase_used
+     PHASE state should appear in at least 5%% of ticks. If lower, phase is underused — either too costly or not useful.
+     metric not present (likely no telemetry for this dimension)
+
+[--] dive_used
+     DIVE state should appear in at least 1%% of ticks. If 0, the dive skill move is dead — either players don't know about it or it's not useful.
+     metric not present (likely no telemetry for this dimension)
+
+[--] coast_used
+     COAST state should appear in at least 1%% of ticks. If 0, the coast state is dead — players cancel dive too early or don't carry momentum.
+     metric not present (likely no telemetry for this dimension)
+
+[XX] no_dominant_state
+     No single state should exceed 70%% of total time. Higher indicates a dominant strategy — the movement has degenerated to one move.
+     metric: movement.dominant_state_pct = 100.0 | rule: movement.dominant_state_pct < 70.0
+     100.0000 < 70.0000 -> violated
+
+[!!] min_chain_length
+     Average chain length should be at least 2.0 states. Lower indicates one-move spam rather than expressive combo play.
+     metric: movement.avg_chain_length = 1.0 | rule: movement.avg_chain_length >= 2.0
+     1.0000 >= 2.0000 -> violated
+
+[!!] pulse_alive
+     Pulse should fire at least 0.3 times per phase activation. Lower indicates pulse is dead — players don't use it in the chain.
+     metric: movement.pulse_per_phase = 0.0 | rule: movement.pulse_per_phase > 0.3
+     0.0000 > 0.3000 -> violated
+
+[!!] intentional_cancel_rate
+     At least 30%% of phase exits should be manual cancels (intentional DIVE). Lower indicates players are letting phase expire naturally rather than engaging with the cancel skill move.
+     metric: movement.phase_cancel_rate = 0.0 | rule: movement.phase_cancel_rate > 0.3
+     0.0000 > 0.3000 -> violated
+
+[!!] expression_floor
+     Expression score should be at least 30/100. Lower indicates the movement system is not being used expressively at all.
+     metric: movement.expression_score = 11.2 | rule: movement.expression_score >= 30.0
+     11.2000 >= 30.0000 -> violated
+
+[OK] momentum_not_dead
+     Average momentum should be at least 0.3 (out of 2.0). Lower indicates momentum is not building — players aren't moving fast enough to engage the system.
+     metric: movement.momentum_avg = 0.6820922888888948 | rule: movement.momentum_avg > 0.3
+     0.6821 > 0.3000 -> holds
+
+[!!] salvage_qte_pass_floor
+     Salvage QTE pass rate should be at least 40%% (when QTEs occurred). Lower indicates QTEs are too hard or controls are unclear. Skip if no QTEs.
+     metric: salvage.qte_pass_rate = 0.0 | rule: salvage.qte_pass_rate >= 0.4
+     0.0000 >= 0.4000 -> violated
+
+[OK] salvage_qte_pass_ceiling
+     Salvage QTE pass rate should be at most 90%% (when QTEs occurred). Higher indicates QTEs are too easy — no real risk.
+     metric: salvage.qte_pass_rate = 0.0 | rule: salvage.qte_pass_rate <= 0.9
+     0.0000 <= 0.9000 -> holds
+
+============================================================

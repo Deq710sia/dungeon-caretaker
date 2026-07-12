@@ -1,0 +1,42 @@
+============================================================
+DESIGN LAB REPORT — baseline_movement_empty
+============================================================
+
+MOVEMENT
+------------------------------------------------------------
+  Total tick samples:    100 (10.0s of gameplay)
+  State distribution:
+    FLOAT    93.0%  (  9.3s)
+    PHASE     3.0%  (  0.3s)
+    DIVE      4.0%  (  0.4s)
+    COAST     0.0%  (  0.0s)
+  Dominant state:        FLOAT (93.0%)
+
+  Phase activations:     1
+    Manual cancels:      1  (player chose to DIVE)
+    Natural expiries:    0  (v0.36 path — returns to FLOAT)
+    Cancel rate:         100.0%  (intentional play indicator)
+
+  Pulse fires:           1  (denials: 0)
+    Pulse per phase:     1.00  (active play indicator)
+
+  Momentum:
+    Average:             1.43 / 2.0
+    Peak:                2.00 / 2.0
+    Retention +1s:       1.85  (avg momentum 1s after phase start)
+    Retention +3s:       2.00  (avg momentum 3s after phase start)
+
+  Chains:
+    Avg chain length:    4.00 states
+    Top 5 chains:
+      FLOAT -> PHASE -> DIVE -> FLOAT                               1 uses
+
+  Expression score:      88.8 / 100
+    (composite: state diversity + chain length + momentum
+     retention + pulse usage + intentional cancel rate)
+
+SALVAGE
+------------------------------------------------------------
+  (no salvage telemetry captured)
+
+============================================================
