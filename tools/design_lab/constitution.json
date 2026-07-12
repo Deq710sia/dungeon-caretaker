@@ -1,0 +1,103 @@
+{
+  "_comment": "Design Constitution v1 — pass/fail rules for game design health. Each rule has a name, description, metric path (dotted, into metrics.json), comparator (one of <, >, <=, >=, ==, !=), threshold, and severity (PASS/FAIL or WARN). Validator runs each rule against the metrics and emits a validation report.",
+  "rules": [
+    {
+      "name": "no_dead_states",
+      "description": "Every movement state (FLOAT/PHASE/DIVE/COAST) should appear in at least 1%% of ticks. Dead states indicate an unreachable or useless mechanic.",
+      "metric": "movement.state_pct.FLOAT",
+      "comparator": ">",
+      "threshold": 0.5,
+      "severity": "FAIL"
+    },
+    {
+      "name": "phase_used",
+      "description": "PHASE state should appear in at least 5%% of ticks. If lower, phase is underused — either too costly or not useful.",
+      "metric": "movement.state_pct.PHASE",
+      "comparator": ">",
+      "threshold": 5.0,
+      "severity": "WARN"
+    },
+    {
+      "name": "dive_used",
+      "description": "DIVE state should appear in at least 1%% of ticks. If 0, the dive skill move is dead — either players don't know about it or it's not useful.",
+      "metric": "movement.state_pct.DIVE",
+      "comparator": ">",
+      "threshold": 1.0,
+      "severity": "WARN"
+    },
+    {
+      "name": "coast_used",
+      "description": "COAST state should appear in at least 1%% of ticks. If 0, the coast state is dead — players cancel dive too early or don't carry momentum.",
+      "metric": "movement.state_pct.COAST",
+      "comparator": ">",
+      "threshold": 1.0,
+      "severity": "WARN"
+    },
+    {
+      "name": "no_dominant_state",
+      "description": "No single state should exceed 70%% of total time. Higher indicates a dominant strategy — the movement has degenerated to one move.",
+      "metric": "movement.dominant_state_pct",
+      "comparator": "<",
+      "threshold": 70.0,
+      "severity": "FAIL"
+    },
+    {
+      "name": "min_chain_length",
+      "description": "Average chain length should be at least 2.0 states. Lower indicates one-move spam rather than expressive combo play.",
+      "metric": "movement.avg_chain_length",
+      "comparator": ">=",
+      "threshold": 2.0,
+      "severity": "WARN"
+    },
+    {
+      "name": "pulse_alive",
+      "description": "Pulse should fire at least 0.3 times per phase activation. Lower indicates pulse is dead — players don't use it in the chain.",
+      "metric": "movement.pulse_per_phase",
+      "comparator": ">",
+      "threshold": 0.3,
+      "severity": "WARN"
+    },
+    {
+      "name": "intentional_cancel_rate",
+      "description": "At least 30%% of phase exits should be manual cancels (intentional DIVE). Lower indicates players are letting phase expire naturally rather than engaging with the cancel skill move.",
+      "metric": "movement.phase_cancel_rate",
+      "comparator": ">",
+      "threshold": 0.3,
+      "severity": "WARN"
+    },
+    {
+      "name": "expression_floor",
+      "description": "Expression score should be at least 30/100. Lower indicates the movement system is not being used expressively at all.",
+      "metric": "movement.expression_score",
+      "comparator": ">=",
+      "threshold": 30.0,
+      "severity": "WARN"
+    },
+    {
+      "name": "momentum_not_dead",
+      "description": "Average momentum should be at least 0.3 (out of 2.0). Lower indicates momentum is not building — players aren't moving fast enough to engage the system.",
+      "metric": "movement.momentum_avg",
+      "comparator": ">",
+      "threshold": 0.3,
+      "severity": "WARN"
+    },
+    {
+      "name": "salvage_qte_pass_floor",
+      "description": "Salvage QTE pass rate should be at least 40%% (when QTEs occurred). Lower indicates QTEs are too hard or controls are unclear. Skip if no QTEs.",
+      "metric": "salvage.qte_pass_rate",
+      "comparator": ">=",
+      "threshold": 0.4,
+      "severity": "WARN",
+      "skip_if": "salvage.qte_total == 0"
+    },
+    {
+      "name": "salvage_qte_pass_ceiling",
+      "description": "Salvage QTE pass rate should be at most 90%% (when QTEs occurred). Higher indicates QTEs are too easy — no real risk.",
+      "metric": "salvage.qte_pass_rate",
+      "comparator": "<=",
+      "threshold": 0.9,
+      "severity": "WARN",
+      "skip_if": "salvage.qte_total == 0"
+    }
+  ]
+}

@@ -15,12 +15,31 @@ This branch contains **testing and evaluation tools only**. No game file changes
 - `run_pipeline.py` — master CI: runs all + preserves iteration
 
 ### Generated Artifacts (`generated/`)
-- `iterations/` — every pipeline run preserved (iteration_001/, iteration_002/, ...)
-- `reports/` — latest dashboard.html
+- `iterations/` — every music pipeline run preserved (iteration_001/, iteration_002/, ...)
+- `reports/` — latest music dashboard.html
+- `design_lab/runs/` — every design lab analysis run (timestamped, contains telemetry.jsonl + metrics.json + report.txt + validation.txt)
+- `design_lab/history.json` — append-only metrics across all runs (for cross-version trend lines)
 
 ### Playtest Driver (`scripts/playtest_driver.gd`)
 Automated playtest harness. Registered as `PlaytestDriver` autoload in `project.godot`.
 Reads commands from `user://playtest_commands.txt`.
+
+**v1 Design Lab additions:**
+- `arm_telemetry <label>` / `disarm_telemetry` — control the Telemetry autoload (on main) to capture structured events
+- `finish_run <label>` — disarm telemetry + write summary + quit
+- `run_movement_scenario <name>` — canned movement input sequences (empty_room, hazard_course, chain_practice)
+- `run_salvage_scenario <name>` — canned salvage playthroughs (main_only, deeper_commit, mixed)
+- `set_shards <n>`, `force_phase_cancel`, `press_pulse`, `press_phase` — debug primitives
+
+### Design Lab (`tools/design_lab/`)
+Built in entry 001 of `TOOLS_ITERATION_LOG.md`. Turns playtest telemetry into design feedback.
+- `analyze.py` — parse telemetry JSONL → metrics.json + report.txt (movement + salvage metrics, expression score)
+- `validate.py` — run constitution rules against metrics.json → validation.txt (pass/fail per rule)
+- `run_analysis.py` — master: runs both + archives to `generated/design_lab/runs/` + appends `history.json`
+- `constitution.json` — design rules (tunable pass/fail thresholds)
+- `README.md` — full usage guide + what each metric means
+
+See `TOOLS_ITERATION_LOG.md` for the running log of design lab changes.
 
 ## Branch Structure
 
@@ -39,9 +58,19 @@ python3 tools/music/run_pipeline.py
 Outputs dashboard at `generated/reports/dashboard.html`. Every iteration preserved in `generated/iterations/NNN/`.
 
 ### Playtest
-1. Write commands to `user://playtest_commands.txt`
-2. Run Godot (the PlaytestDriver autoload executes them automatically)
-3. Read log at `user://playtest_log.txt`
+1. On a `main` checkout, drop `scripts/playtest_driver.gd` (from this branch) into `scripts/` (gitignored on main per v0.33)
+2. Add `PlaytestDriver` to `project.godot` autoloads locally (do not commit to main)
+3. Write commands to `user://playtest_commands.txt`
+4. Run headless: `Xvfb :42 -screen 0 960x540x24 && DISPLAY=:42 godot --headless --path .`
+5. Read log at `user://playtest_log.txt`
+6. If telemetry was armed, `user://telemetry_<label>.jsonl` will exist — analyze with:
+   ```bash
+   python3 tools/design_lab/run_analysis.py <path-to-telemetry.jsonl> --label <label> --notes "..."
+   ```
+7. Compare across versions:
+   ```bash
+   python3 tools/design_lab/run_analysis.py --diff <label_a> <label_b>
+   ```
 
 ## How to Merge Tools Changes
 

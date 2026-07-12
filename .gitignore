@@ -20,6 +20,9 @@ Thumbs.db
 generated/wav/
 generated/spectrograms/
 tools/music/output/
+# Design lab run outputs (telemetry.jsonl copies) — large + ephemeral
+generated/design_lab/runs/
 # tools/ (allowed on this branch)
 # generated/ (allowed on this branch)
 # scripts/playtest_driver.gd (allowed on this branch)
+# generated/design_lab/history.json (allowed — keep cross-version metrics in git)

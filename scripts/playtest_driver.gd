@@ -1,11 +1,14 @@
 extends Node
-## PlaytestDriver — automated playtest harness for continuous testing.
+## PlaytestDriver — automated playtest harness for the Design Lab.
+##
+## This file lives on the tools-management branch ONLY. On main it is
+## gitignored (per v0.33) — to run a playtest, drop this file into
+## scripts/ on a main checkout and add PlaytestDriver to project.godot
+## autoloads locally (do not commit that change to main).
+##
+## === LAYER 1: AUTOMATION (unchanged from v0.34) ===
 ## Reads commands from user://playtest_commands.txt, executes them,
-## captures screenshots, logs game state, and runs vision checks.
-##
-## This file lives on the debug-tools branch ONLY. Do not merge to main.
-##
-## Commands:
+## captures screenshots, logs game state. Existing command API:
 ##   start_game              — start new run, go to gate
 ##   advance                 — force-transition to next phase
 ##   set_phase <name>        — jump to a specific phase
@@ -18,6 +21,25 @@ extends Node
 ##   screenshot <label>      — capture screenshot
 ##   log_state <context>     — write game state to log
 ##   done                    — quit
+##
+## === LAYER 2: TELEMETRY (new in Design Lab v1) ===## Arms/disarms the Telemetry autoload so game code emits structured
+## events to user://telemetry_<label>.jsonl. Pair with the Python
+## analyzer in tools/design_lab/ to produce metrics + reports.
+##   arm_telemetry <label>   — start recording events to telemetry_<label>.jsonl
+##   disarm_telemetry        — stop recording (flush + close file)
+##   finish_run <label>      — disarms telemetry + writes summary + done
+##
+## === LAYER 3: SCENARIO HELPERS (new in Design Lab v1) ===
+## Canned input sequences for reproducible playtests. Each runs a fixed
+## pattern of moves/interacts sized to the scenario.
+##   run_movement_scenario <name>  — name in: empty_room, hazard_course, chain_practice
+##   run_salvage_scenario <name>   — name in: main_only, deeper_commit, mixed
+##
+## === LAYER 4: DEBUG PRIMITIVES (new in Design Lab v1) ===
+##   set_shards <n>          — set soul_shards to n (test phase economy)
+##   force_phase_cancel      — simulate SPACE press during active phase (test DIVE)
+##   press_pulse             — simulate SHIFT tap (test pulse)
+##   press_phase             — simulate SPACE press (activate or cancel phase)
 
 var commands: Array = []
 var command_index: int = 0
@@ -28,6 +50,7 @@ var log_file: FileAccess = null
 var screenshot_count: int = 0
 var finished: bool = false
 var executing: bool = false
+var telemetry_label: String = ""
 
 func _ready() -> void:
 	_load_commands()
@@ -85,6 +108,7 @@ func _execute(cmd: String) -> void:
 	var parts := cmd.split(" ")
 	var verb := parts[0]
 	match verb:
+		# === LAYER 1: existing automation commands (unchanged) ===
 		"start_game":
 			GameState.start_new_run()
 			GameState.set_phase("gate")
@@ -139,8 +163,119 @@ func _execute(cmd: String) -> void:
 			_write_state(parts[1] if parts.size() >= 2 else "manual")
 		"done":
 			_finish()
+		# === LAYER 2: telemetry commands (new) ===
+		"arm_telemetry":
+			if parts.size() >= 2:
+				telemetry_label = parts[1]
+				Telemetry.arm(telemetry_label)
+				_write_log("TELEMETRY ARMED: %s" % telemetry_label)
+		"disarm_telemetry":
+			Telemetry.disarm()
+			_write_log("TELEMETRY DISARMED: %s" % telemetry_label)
+		"finish_run":
+			if parts.size() >= 2:
+				telemetry_label = parts[1]
+			if not telemetry_label.is_empty():
+				Telemetry.disarm()
+				_write_log("TELEMETRY DISARMED: %s" % telemetry_label)
+			_write_state("finish_run")
+			_finish()
+		# === LAYER 3: scenario helpers (new) ===
+		"run_movement_scenario":
+			if parts.size() >= 2:
+				_run_movement_scenario(parts[1])
+		"run_salvage_scenario":
+			if parts.size() >= 2:
+				_run_salvage_scenario(parts[1])
+		# === LAYER 4: debug primitives (new) ===
+		"set_shards":
+			if parts.size() >= 2:
+				GameState.soul_shards = int(parts[1])
+				GameState.shards_changed.emit(GameState.soul_shards)
+				_write_log("SET SHARDS: %d" % GameState.soul_shards)
+		"force_phase_cancel":
+			_force_phase_input()
+			_write_log("FORCED PHASE INPUT (SPACE)")
+		"press_pulse":
+			_pulse_input()
+			_write_log("PRESSED PULSE (SHIFT)")
+		"press_phase":
+			_force_phase_input()
+			_write_log("PRESSED PHASE (SPACE)")
 		_:
 			_write_log("UNKNOWN COMMAND: %s" % cmd)
+
+# === Scenario runners ===
+
+func _run_movement_scenario(name: String) -> void:
+	# Inject canned movement commands into the queue at the current position.
+	# These run as if the user typed them — they go through the same
+	# move/wait/interact pipeline.
+	var scenario: Array = []
+	match name:
+		"empty_room":
+			# Drift around in a loose circle in the workshop or planning phase.
+			scenario = ["move right 1.5", "wait 0.2", "move down 1.5", "wait 0.2",
+						"move left 1.5", "wait 0.2", "move up 1.5", "wait 0.2",
+						"press_phase", "wait 0.3", "force_phase_cancel", "wait 0.5",
+						"press_pulse", "wait 0.3", "move right 2.0", "wait 0.5"]
+		"hazard_course":
+			# Salvage: walk straight down through the main corridor.
+			scenario = ["move down 4.0", "wait 0.3", "move down 4.0", "wait 0.3",
+						"move down 4.0", "wait 0.5"]
+		"chain_practice":
+			# Try the optimal chain: phase -> cancel -> dive -> coast -> pulse.
+			scenario = ["move down 1.0", "wait 0.2",
+						"press_phase", "wait 0.4", "force_phase_cancel", "wait 0.6",
+						"press_pulse", "wait 0.3",
+						"press_phase", "wait 0.4", "force_phase_cancel", "wait 0.6",
+						"press_pulse", "wait 0.3"]
+		_:
+			_write_log("UNKNOWN SCENARIO: %s" % name)
+			return
+	# Insert the scenario commands right after the current command.
+	for i in scenario.size():
+		commands.insert(command_index + i, scenario[i])
+	_write_log("QUEUED MOVEMENT SCENARIO: %s (%d commands)" % [name, scenario.size()])
+
+func _run_salvage_scenario(name: String) -> void:
+	var scenario: Array = []
+	match name:
+		"main_only":
+			# Walk down the main corridor to the exit at the fork. No deeper commit.
+			scenario = ["move down 6.0", "wait 0.3", "move down 4.0", "wait 0.5",
+						"interact", "wait 0.3", "move down 4.0", "wait 0.5"]
+		"deeper_commit":
+			# Walk past the fork into the deeper section. Triggers crossroads_committed event.
+			scenario = ["move down 6.0", "wait 0.3", "move down 6.0", "wait 0.3",
+						"move down 6.0", "wait 0.3", "move down 6.0", "wait 0.5"]
+		"mixed":
+			# Walk down a bit, interact with corpses, then either commit deeper or exit.
+			scenario = ["move down 3.0", "wait 0.3", "interact", "wait 0.3",
+						"move down 3.0", "wait 0.3", "interact", "wait 0.3",
+						"move down 4.0", "wait 0.5"]
+		_:
+			_write_log("UNKNOWN SCENARIO: %s" % name)
+			return
+	for i in scenario.size():
+		commands.insert(command_index + i, scenario[i])
+	_write_log("QUEUED SALVAGE SCENARIO: %s (%d commands)" % [name, scenario.size()])
+
+# === Input injection helpers ===
+
+func _force_phase_input() -> void:
+	# Simulate a SPACE press — triggers phase activation OR cancel depending on state.
+	Input.action_press("phase")
+	await get_tree().process_frame
+	Input.action_release("phase")
+
+func _pulse_input() -> void:
+	# Simulate a SHIFT tap.
+	Input.action_press("pulse")
+	await get_tree().process_frame
+	Input.action_release("pulse")
+
+# === Existing helpers (unchanged) ===
 
 func _get_phase_node() -> Node:
 	var main := get_tree().current_scene
