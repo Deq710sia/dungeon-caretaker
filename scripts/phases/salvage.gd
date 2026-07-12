@@ -347,11 +347,7 @@ func _physics_process(delta: float) -> void:
         # so the camera stays close to the ghost. Speed-based micro-shake kicks
         # in during DIVE/COAST to make fast movement FEEL fast without being
         # nauseating.
-        var cam_smooth: float = 8.0
-        if move.state == GhostMovement.State.DIVE:
-                cam_smooth = 14.0
-        elif move.state == GhostMovement.State.COAST:
-                cam_smooth = 11.0
+        var cam_smooth: float = lerp(8.0, 13.0, move.momentum_pct())
         # Minimal look-ahead (8px, was 24) — keeps camera on the ghost
         var look_ahead := move.facing * 8.0
         var cam_target_y := move.pos.y + look_ahead.y
@@ -697,7 +693,7 @@ func _update_phase_hud() -> void:
                 hud_phase.text = "PHASING! %.1fs" % move.phase_active
                 hud_phase.add_theme_color_override("font_color", Palette.GLOW_BLUE)
         elif move.is_coasting():
-                hud_phase.text = "COAST %.1fs" % move._coast_timer
+                hud_phase.text = "MOMENTUM %d%%" % int(move.momentum_pct() * 100)
                 hud_phase.add_theme_color_override("font_color", Color(0.7, 0.8, 1.0))
         elif move.phase_cd > 0:
                 var bank_text := " +%4.1f bank" % move.phase_bank if move.phase_bank > 0.1 else ""
