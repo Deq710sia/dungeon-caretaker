@@ -112,13 +112,14 @@ func _process(delta: float) -> void:
         move.update_pulse(delta)
         move.update(input_dir, delta)
         # FIX: zero velocity on clamped axis (prevents momentum buildup against walls)
+        # v0.38: use bleed_wall_velocity — when coasting, bleed 50% not full zero
         var new_x: float = clampf(move.pos.x, 12, ROOM_W - 12)
         if new_x != move.pos.x:
-                move.vel.x = 0.0
+                move.bleed_wall_velocity("x")
         move.pos.x = new_x
         var new_y: float = clampf(move.pos.y, HUD_H + 30, ROOM_H - 20)
         if new_y != move.pos.y:
-                move.vel.y = 0.0
+                move.bleed_wall_velocity("y")
         move.pos.y = new_y
         _find_nearest_interactive()
         if Input.is_action_just_pressed("interact") and not interact_pressed:

@@ -100,6 +100,7 @@ var _last_input_dir: Vector2 = Vector2.ZERO
 var _pulse_was_pressed: bool = false  # manual edge detection for pulse
 var _pulse_mult: float = 1.0          # active burst multiplier (decays to 1.0)
 var _pulse_flash: float = 0.0         # brief flash ring on pulse
+var _telemetry_tick_accum: float = 0.0  # 10Hz tick accumulator
 
 ## Called every tick by the owning phase. Handles pulse tap + burst decay.
 ## Should be called BEFORE update().
@@ -117,7 +118,13 @@ func update_pulse(delta: float) -> void:
 func _fire_pulse() -> void:
         if momentum < MOMENTUM_PULSE_COST:
                 SFX.play("deny", 0.8, -6.0)
+                Telemetry.emit({
+                        "type": "pulse_denied",
+                        "momentum": momentum,
+                        "pos": [pos.x, pos.y],
+                })
                 return
+        var momentum_before: float = momentum
         momentum = clampf(momentum - MOMENTUM_PULSE_COST + MOMENTUM_PULSE_GAIN, 0.0, MOMENTUM_MAX)
         var boost_dir: Vector2 = vel.normalized() if vel.length() > 1.0 else facing
         if boost_dir == Vector2.ZERO:
@@ -131,6 +138,14 @@ func _fire_pulse() -> void:
         Juice.spawn_particles(pos, 6, Palette.GLOW_BLUE, 25.0, 0.3)
         Juice.add_trauma(0.05)
         squash = 0.7  # compress on pulse
+        Telemetry.emit({
+                "type": "pulse_fired",
+                "momentum_before": momentum_before,
+                "momentum_after": momentum,
+                "state": state_name(state),
+                "is_coasting": is_coasting(),
+                "pos": [pos.x, pos.y],
+        })
 
 ## Returns momentum 0-1 (for HUD).
 func momentum_pct() -> float:
@@ -160,6 +175,13 @@ func get_speed() -> float:
 func is_phasing() -> bool:
         return state == State.PHASE
 
+## Returns the state name as a string (for telemetry + debug).
+static func state_name(s: int) -> String:
+        match s:
+                State.NORMAL: return "NORMAL"
+                State.PHASE: return "PHASE"
+                _:            return "?"
+
 ## Returns the phase cooldown progress 0-1 (for HUD/draw).
 func cooldown_pct() -> float:
         if phase_cd <= 0:
@@ -167,21 +189,84 @@ func cooldown_pct() -> float:
         var cd_max: float = _last_phase_cd if _last_phase_cd > 0 else PHASE_CD
         return 1.0 - (phase_cd / cd_max)
 
+## Wall collision velocity bleed — call from phase scripts when clamping pos.
+## v0.38 Design Lab: wall collision was zeroing velocity entirely, which killed
+## the _end_phase impulse (the DIVE replacement) as soon as the ghost touched
+## a wall. PF lesson: "mistakes weren't catastrophic — you lose some efficiency,
+## not all speed." So when carrying momentum (is_coasting == true), bleed 50%
+## on the clamped axis. When not coasting, zero it fully (prevents momentum
+## buildup against walls, per v0.23 fix).
+func bleed_wall_velocity(axis: String) -> void:
+        if is_coasting():
+                # Bleed 50% — preserve some momentum for the chain
+                if axis == "x":
+                        vel.x *= 0.5
+                else:
+                        vel.y *= 0.5
+        else:
+                # Full zero — low-momentum wall stop (v0.23 behavior)
+                if axis == "x":
+                        vel.x = 0.0
+                else:
+                        vel.y = 0.0
+
 ## Main update — called every tick by the owning phase.
 func update(input_dir: Vector2, delta: float) -> void:
+        var prev_state: int = state
+        var was_coasting: bool = is_coasting()
         # Phase verb timers
         phase_cd = max(0, phase_cd - delta)
         if phase_active > 0:
                 phase_active = max(0, phase_active - delta)
                 if phase_active == 0:
-                        _end_phase(0.2)
+                        _end_phase_natural()
         # State-specific update — just two branches now
         if state == State.PHASE:
                 _update_phase(input_dir, delta)
         else:
                 _update_normal(input_dir, delta)
+        # Telemetry: state change (only if state actually changed this tick)
+        if state != prev_state:
+                Telemetry.emit({
+                        "type": "state_change",
+                        "from": state_name(prev_state),
+                        "to": state_name(state),
+                        "pos": [pos.x, pos.y],
+                        "vel": [vel.x, vel.y],
+                        "momentum": momentum,
+                })
+        # Telemetry: coast transition (is_coasting flipped) — since COAST isn't
+        # a discrete state in this branch, emit a synthetic coast_entered/
+        # coast_exited event for the analyzer.
+        if is_coasting() and not was_coasting:
+                Telemetry.emit({
+                        "type": "coast_entered",
+                        "momentum": momentum,
+                        "pos": [pos.x, pos.y],
+                })
+        elif not is_coasting() and was_coasting:
+                Telemetry.emit({
+                        "type": "coast_exited",
+                        "momentum": momentum,
+                        "pos": [pos.x, pos.y],
+                })
         # Momentum update (after movement, so speed_pct is accurate)
         _update_momentum(delta)
+        # Telemetry: 10Hz tick snapshot (Movement Observatory lite)
+        _telemetry_tick_accum += delta
+        if _telemetry_tick_accum >= 0.1:
+                _telemetry_tick_accum = 0.0
+                Telemetry.emit_tick({
+                        "state": state_name(state),
+                        "is_coasting": is_coasting(),
+                        "pos": [pos.x, pos.y],
+                        "vel": [vel.x, vel.y],
+                        "speed_pct": vel.length() / get_speed() if get_speed() > 0 else 0.0,
+                        "momentum": momentum,
+                        "input": [input_dir.x, input_dir.y],
+                        "phase_active": phase_active,
+                        "phase_cd": phase_cd,
+                })
         # Shared: footstep + trail
         var speed_pct: float = vel.length() / get_speed()
         _footstep_timer += delta
@@ -247,16 +332,19 @@ func _apply_movement(input_dir: Vector2, target_speed: float, accel: float, dece
                 vel = vel.move_toward(Vector2.ZERO, decel * delta)
         pos += vel * delta
 
-## Phase ends — cancelled early or timer ran out. Remaining energy becomes a
-## ONE-TIME velocity impulse. This is DIVE's entire replacement: no state,
-## no timer, no separate decay curve. The impulse just IS the new velocity,
-## and it bleeds off through the same momentum-driven friction as everything
-## else in NORMAL — a fast exit naturally coasts, then naturally settles.
+## Phase ends — cancelled early (MANUAL) or timer ran out (NATURAL).
+## v0.36 bifurcation brought over from main: natural expiry returns to NORMAL
+## cleanly (no impulse, no momentum cost), manual cancel fires the full impulse.
+## The skill expression is choosing WHEN to cancel phase:
+##   - Tap SPACE during phase = intentional impulse (full boost, costs momentum)
+##   - Let phase expire        = clean NORMAL exit (no boost, no control loss)
 func _end_phase(energy_pct: float) -> void:
+        # Manual cancel path — fires the impulse (the DIVE replacement).
         state = State.NORMAL
         var base_mult: float = lerpf(DIVE_MIN_MULT, DIVE_MAX_MULT, energy_pct)
         var momentum_bonus: float = (momentum / MOMENTUM_MAX) * MOMENTUM_DIVE_BONUS
         var impulse_mult: float = base_mult + momentum_bonus
+        var momentum_before: float = momentum
         momentum = clampf(momentum - MOMENTUM_DIVE_COST, 0.0, MOMENTUM_MAX)
         var burst_dir: Vector2 = vel.normalized() if vel.length() > 1.0 else (_last_input_dir if _last_input_dir != Vector2.ZERO else facing)
         vel = burst_dir * get_speed() * impulse_mult
@@ -264,6 +352,28 @@ func _end_phase(energy_pct: float) -> void:
         SFX.play("phase_out", 1.0, -3.0)
         Juice.spawn_particles(pos, 6, Palette.GLOW_BLUE, 30.0, 0.4)
         squash = 0.7
+        Telemetry.emit({
+                "type": "dive_entered",
+                "energy_pct": energy_pct,
+                "momentum_before": momentum_before,
+                "momentum_after": momentum,
+                "impulse_mult": impulse_mult,
+                "pos": [pos.x, pos.y],
+        })
+
+## Natural phase expiry — clean return to NORMAL (v0.36 fix adapted to 2-state).
+## No impulse, no momentum cost. Trail returns to normal density. Soft phase_out
+## SFX gives audio cue without the impulse's heavier hit.
+func _end_phase_natural() -> void:
+        state = State.NORMAL
+        Juice.trail_phasing = false
+        SFX.play("phase_out", 0.8, -6.0)
+        Telemetry.emit({
+                "type": "phase_expired_natural",
+                "pos": [pos.x, pos.y],
+                "vel": [vel.x, vel.y],
+                "momentum": momentum,
+        })
 
 ## Try to activate or cancel the phase verb.
 func try_activate_phase() -> bool:
@@ -304,6 +414,13 @@ func _start_phase(discounted_cd: bool = false) -> void:
         Juice.add_trauma(0.15)
         Juice.spawn_particles(pos, 8, Palette.GLOW_BLUE, 35.0, 0.5)
         SFX.play("phase_in", 1.0, -2.0)
+        Telemetry.emit({
+                "type": "phase_activated",
+                "from_coasting": discounted_cd,
+                "momentum": momentum,
+                "pos": [pos.x, pos.y],
+                "shards_remaining": GameState.soul_shards,
+        })
 
 ## Reset all state (called on phase enter by the owning phase).
 func reset(p_pos: Vector2) -> void:
@@ -323,6 +440,7 @@ func reset(p_pos: Vector2) -> void:
         _pulse_mult = 1.0
         _pulse_flash = 0.0
         _pulse_was_pressed = false
+        _telemetry_tick_accum = 0.0
 
 ## Draws the ghost sprite with trail, phase visual, momentum ring.
 static func draw_ghost(canvas: CanvasItem, mv: GhostMovement, is_underground: bool = false) -> void:

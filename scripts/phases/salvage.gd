@@ -50,6 +50,7 @@ var hud_hint: Label
 var hud_hp: Label
 var hud_phase: Label
 var hud_timer: Label
+var _salvage_start_time: float = 0.0  # for telemetry elapsed calculation
 
 const CORPSE_NAMES := [
         "Bram the Bold", "Wren the Swift", "Cael the Steady", "Mira the Wise",
@@ -80,6 +81,19 @@ func _ready() -> void:
         add_child(cam)
         _build_level()
         _build_hud()
+        _salvage_start_time = Time.get_ticks_msec()
+        Telemetry.emit({
+                "type": "salvage_start",
+                "stage": GameState.stage,
+                "wave": GameState.wave,
+                "spirit": spirit,
+                "shards": GameState.soul_shards,
+                "fork_y": gen.fork_y,
+                "deeper_h": gen.deeper_h,
+                "deeper_w": gen.deeper_w,
+                "corridor_w": corridor_w,
+                "hazard_count": hazards.size(),
+        })
 
 func _build_level() -> void:
         corpses.clear()
@@ -403,6 +417,14 @@ func _physics_process(delta: float) -> void:
                         hud_hint.text = "COMMITTED to the deeper path — no turning back!"
                         SFX.play("bell")
                         Juice.add_trauma(0.3)
+                        Telemetry.emit({
+                                "type": "crossroads_committed",
+                                "pos": [move.pos.x, move.pos.y],
+                                "time_elapsed": (Time.get_ticks_msec() - _salvage_start_time) / 1000.0,
+                                "spirit": spirit,
+                                "shards": GameState.soul_shards,
+                                "momentum": move.momentum,
+                        })
         # QTE update
         if not active_qte.is_empty():
                 _update_qte(delta)
@@ -420,16 +442,18 @@ func _clamp_to_corridor() -> void:
         var right: float = bounds.y * TILE
         # FIX: zero velocity on the axis that got clamped (prevents momentum
         # buildup against walls — Claude review finding)
+        # v0.38: use bleed_wall_velocity — when coasting (high momentum), bleed
+        # 50% instead of full zero (PF "mistakes weren't catastrophic" lesson)
         var new_x: float = clampf(move.pos.x, left, right)
         if new_x != move.pos.x:
-                move.vel.x = 0.0
+                move.bleed_wall_velocity("x")
         move.pos.x = new_x
         # Y clamping: if committed to deeper, can't go back above the fork
         var y_min: float = (gen.fork_y + 1) * TILE if committed_deeper else 22.0
         var y_max: float = (corridor_h - 1) * TILE
         var new_y: float = clampf(move.pos.y, y_min, y_max)
         if new_y != move.pos.y:
-                move.vel.y = 0.0
+                move.bleed_wall_velocity("y")
         move.pos.y = new_y
 
 func _check_hazard_touch() -> void:
@@ -508,11 +532,30 @@ func _collect_corpse(c: Dictionary) -> void:
         SFX.play("coin", 1.0, 0.0, 0.03)
         # Weapon weight: carrying makes you slower
         move.carry_count = 1
+        Telemetry.emit({
+                "type": "corpse_collected",
+                "corpse_name": c.corpse_name,
+                "gear_name": c.gear_name,
+                "gear_type": c.gear_type,
+                "is_deeper": c.get("is_deeper", false),
+                "pos": [c.pos.x, c.pos.y],
+                "time_elapsed": (Time.get_ticks_msec() - _salvage_start_time) / 1000.0,
+                "collected_count": collected_count,
+        })
 
 func _take_hazard_damage(h: Dictionary) -> void:
         h.cooldown = 1.5
         ghost_invuln = 1.0
         spirit -= 1
+        Telemetry.emit({
+                "type": "damage_taken",
+                "cause": h.get("type", "hazard"),
+                "is_deeper": h.get("is_deeper", false),
+                "is_gate": h.get("is_gate", false),
+                "pos": [move.pos.x, move.pos.y],
+                "spirit_remaining": spirit,
+                "time_elapsed": (Time.get_ticks_msec() - _salvage_start_time) / 1000.0,
+        })
         # --- HEAVY feedback: screen flash, big shake, red particles, distinct SFX ---
         Juice.add_trauma(0.8)  # was 0.6 — much harder screen shake
         Juice.hit_stop(0.15)   # was 0.1 — longer freeze to register what happened
@@ -601,7 +644,19 @@ func _start_qte(hazard: Dictionary) -> void:
                         pattern.append(keys[i % keys.size()])
                 preset["pattern"] = pattern
                 preset["index"] = 0
+        preset["start_time"] = Time.get_ticks_msec()
+        preset["hazard_type"] = hazard.get("type", "unknown")
+        preset["is_deeper"] = hazard.get("is_deeper", false)
+        preset["is_gate"] = hazard.get("is_gate", false)
         active_qte = preset
+        Telemetry.emit({
+                "type": "qte_started",
+                "qte_type": preset.type,
+                "hazard_type": hazard.get("type", "unknown"),
+                "is_deeper": hazard.get("is_deeper", false),
+                "is_gate": hazard.get("is_gate", false),
+                "pos": [hazard.pos.x, hazard.pos.y],
+        })
 
 func _update_qte(delta: float) -> void:
         active_qte.timer -= delta
@@ -665,16 +720,36 @@ func _input(event: InputEvent) -> void:
 
 func _qte_success() -> void:
         var h: Dictionary = active_qte.hazard
+        var elapsed_ms: float = Time.get_ticks_msec() - float(active_qte.get("start_time", Time.get_ticks_msec()))
         h.active = false
         Juice.add_trauma(0.3)
         Juice.hit_stop(0.08)
         Juice.spawn_particles(h.pos, 12, Palette.TEXT_GREEN, 40.0, 0.5)
         move.squash = 1.2
         hud_hint.text = "Disarmed the %s!" % h.type
+        Telemetry.emit({
+                "type": "qte_completed",
+                "qte_type": active_qte.type,
+                "hazard_type": active_qte.get("hazard_type", "unknown"),
+                "is_deeper": active_qte.get("is_deeper", false),
+                "is_gate": active_qte.get("is_gate", false),
+                "success": true,
+                "time_taken_ms": elapsed_ms,
+        })
         active_qte = {}
 
 func _qte_fail() -> void:
         var h: Dictionary = active_qte.hazard
+        var elapsed_ms: float = Time.get_ticks_msec() - float(active_qte.get("start_time", Time.get_ticks_msec()))
+        Telemetry.emit({
+                "type": "qte_completed",
+                "qte_type": active_qte.type,
+                "hazard_type": active_qte.get("hazard_type", "unknown"),
+                "is_deeper": active_qte.get("is_deeper", false),
+                "is_gate": active_qte.get("is_gate", false),
+                "success": false,
+                "time_taken_ms": elapsed_ms,
+        })
         _take_hazard_damage(h)
         hud_hint.text = "Failed! Hit by %s!" % h.type
         active_qte = {}
@@ -685,6 +760,16 @@ func _finish() -> void:
         finished = true
         Juice.add_trauma(0.3)
         Juice.spawn_particles(exit_pos, 12, Palette.TEXT_GREEN, 40.0, 0.5)
+        var elapsed: float = (Time.get_ticks_msec() - _salvage_start_time) / 1000.0
+        Telemetry.emit({
+                "type": "exit_reached",
+                "path": "deeper" if committed_deeper else "main",
+                "time_elapsed": elapsed,
+                "corpses_collected": collected_count,
+                "spirit_remaining": spirit,
+                "spirit_max": spirit_max,
+                "shards": GameState.soul_shards,
+        })
         await get_tree().create_timer(0.2).timeout
         GameState.set_phase("workshop")
 
@@ -814,12 +899,18 @@ func _draw() -> void:
                         draw_texture(gear_tex, Vector2(cx - 8, cy - 20 + bob))
                         # Corpse identity glow — blue for YOUR fallen, gold for bonus,
                         # purple for deeper section (push-your-luck reward indicator)
+                        # v0.38 Design Lab: deeper glow made more prominent + always-visible
+                        # "*" marker so the reward is legible at a distance, not just when adjacent.
                         var is_yours: bool = w != null
                         var is_deeper: bool = c.get("is_deeper", false)
                         if is_yours:
                                 DrawUtils.draw_radial_glow(self, Vector2(cx, cy - 12 + bob), [10, 6, 3], Color(0.45, 0.78, 1.0, 0.25), 1.0)
                         elif is_deeper:
-                                DrawUtils.draw_radial_glow(self, Vector2(cx, cy - 12 + bob), [10, 6, 3], Color(0.65, 0.40, 0.85, 0.25), 1.0)
+                                # Stronger purple glow + pulsing — rewards should be visible
+                                var deeper_pulse: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.005)
+                                DrawUtils.draw_radial_glow(self, Vector2(cx, cy - 12 + bob), [14, 9, 5], Color(0.65, 0.40, 0.85, 0.35 + 0.15 * deeper_pulse), 1.0)
+                                # Always-visible "*" marker above deeper corpses (not just on hover)
+                                GameFont.draw_string_centered(self, Vector2(cx, cy - 42 + bob), "*", 8, Palette.GLOW_PURP)
                         else:
                                 DrawUtils.draw_radial_glow(self, Vector2(cx, cy - 12 + bob), [8, 5, 3], Color(0.95, 0.85, 0.40, 0.15), 1.0)
                         if near_interactive == c:

@@ -47,7 +47,10 @@ func _generate(fallen_count: int, salvage_expert: int) -> void:
 		weapon_count = 2 + int(stage / 2)
 	# Main corridor is shorter now (exit is at midpoint). The deeper
 	# section adds length below the fork.
-	var main_h: int = clampi(15 + weapon_count * 4 + randi() % 6, 15, 40)
+	# v0.38 Design Lab finding: main path completed in 5.3s without engaging
+	# any mechanics. Raised minimum main_h from 15 to 25 so the main path
+	# is a real walk, not a straight shot to the exit.
+	var main_h: int = clampi(25 + weapon_count * 4 + randi() % 6, 25, 40)
 	deeper_h = clampi(10 + stage * 3 + randi() % 5, 10, 30)
 	corridor_h = main_h + deeper_h
 	fork_y = main_h
@@ -94,10 +97,22 @@ func _generate(fallen_count: int, salvage_expert: int) -> void:
 		})
 	# --- Deeper hazards (DENSE — 2x density, all in narrow corridor) ---
 	deeper_hazards.clear()
+	# v0.38 Design Lab finding: deeper path was a no-brainer (free reward).
+	# Add a GATE hazard at the fork — a "debris" type (reverse QTE: don't move)
+	# right at deeper_gate_pos. This makes the choice cost something upfront:
+	# the player must solve a QTE to enter deeper, not just walk in.
+	deeper_hazards.append({
+		"pos": Vector2(deeper_gate_pos.x, deeper_gate_pos.y + 1),
+		"type": "debris",
+		"active": true,
+		"cooldown": 0.0,
+		"is_deeper": true,
+		"is_gate": true,  # marker for visualization/telemetry
+	})
 	var deeper_hazard_count: int = 4 + stage * 2
 	for i in deeper_hazard_count:
-		# Pack hazards tightly in the deeper corridor
-		var y: int = fork_y + 2 + (i * 2) % deeper_h
+		# Pack hazards tightly in the deeper corridor (skip gate position)
+		var y: int = fork_y + 3 + (i * 2) % maxi(1, deeper_h - 3)
 		var x: int = deeper_offset + 1 + randi() % maxi(1, deeper_w - 2)
 		deeper_hazards.append({
 			"pos": Vector2(x, y),
