@@ -44,10 +44,13 @@ const DRIFT_PULSE_TO_FLOAT: float = 0.20    # 10-frame stop (pulse burst fades)
 const DRIFT_WALL_HIGH_MOMENTUM: float = 0.5 # bleed 50% on clamped axis (coasting-equivalent)
 const DRIFT_WALL_LOW_MOMENTUM: float = 0.0  # full zero (prevents momentum buildup against walls)
 
-# --- COAST (v30-style: bounded 0.6s glide after DIVE, low decel, inherits dive vel) ---
-const COAST_DECEL_MULT: float = 0.08    # barely slows (8% of accel) — riding momentum
-const COAST_MIN_SPEED: float = 35.0     # below this, coast ends (back to FLOAT)
-const COAST_BASE_DURATION: float = 0.6  # base coast time after a dive
+# --- COAST (v30-style: bounded glide after DIVE, low decel, inherits dive vel) ---
+# v0.45: values bumped ~3x per user request ("coast values +3 across the board")
+# Note: COAST_MIN_SPEED kept low so coast lasts the full COAST_BASE_DURATION.
+# The 3x bump went to DECEL (more friction) + DURATION (longer glide).
+const COAST_DECEL_MULT: float = 0.24    # was 0.08 — 3x more friction (still glides, but bleeds faster)
+const COAST_MIN_SPEED: float = 30.0     # kept low — coast ends on timer, not speed threshold
+const COAST_BASE_DURATION: float = 1.8  # was 0.6 — 3x longer base duration
 const COAST_WEIGHT_REDUCTION: float = 0.5  # weapon weight halved during coast
 
 # --- Snap-stop ---
@@ -68,13 +71,16 @@ const MOMENTUM_DIVE_BONUS: float = 0.5    # dive impulse gets +0.5 mult per mome
 const MOMENTUM_DIVE_COST: float = 0.3     # spent on manual cancel (dive)
 
 # --- Phase ---
-const PHASE_DURATION: float = 1.2     # was 1.5 — shorter, more committed
-const PHASE_CD: float = 1.5           # v0.43: was 3.0 — lowered so the bank from
-                                      # early cancels can cover it. Cancel at >50%
-                                      # banks >0.6s; after dive+coast (1.0s),
-                                      # remaining cd = 0.5s; bank 0.6s > 0.5s = re-phase.
+# v0.45: restored v30 timing. PHASE_CD=4.0 (was 1.5) — full gauge regen time,
+# not insta-regen. PHASE_DURATION=1.5 (was 1.2) — matches v30.
+# PHASE_BANK_MAX raised to 6.0 so bank from early cancels can cover the 4.0s
+# cooldown: cancel at >50% banks ~0.75s; after dive(0.5)+coast(1.8)=2.3s
+# elapsed, remaining cd=1.7s; need ~2 cancels worth of bank (1.5s) to cover.
+# With BANK_MAX=6.0, two early cancels bank ~1.5s, covering the 1.7s gap.
+const PHASE_DURATION: float = 1.5     # v30 value — was 1.2
+const PHASE_CD: float = 4.0           # v30 value — was 1.5 (insta-regen fix)
 const PHASE_COST: int = 1
-const PHASE_BANK_MAX: float = 3.0
+const PHASE_BANK_MAX: float = 6.0     # was 3.0 — raised so bank covers 4.0s cd
 const PHASE_SPEED: float = 110.0      # base phase speed (2x BASE_SPEED)
 const PHASE_COAST_CARRY: float = 0.5  # if phasing from high momentum, preserve 50% of pre-phase vel
 
@@ -369,8 +375,14 @@ func _update_dive(input_dir: Vector2, delta: float) -> void:
         var speed_pct: float = vel.length() / get_speed() if get_speed() > 0 else 0.0
         bob += delta * (8.0 + speed_pct * 6.0)
         squash = lerp(squash, 1.0, 1.0 - exp(-delta * 15.0))
-        # Dive uses the dive_mult as a speed multiplier
-        var target_speed: float = get_speed() * _dive_mult
+        # v0.45: blend dive target toward COAST speed as dive fades.
+        # At dive_mult=2.8 (fresh): target = get_speed() * 2.8 (full burst)
+        # At dive_mult=1.1 (fading): target eases toward get_speed() * 1.0 (coast speed)
+        # This makes the DIVE→COAST transition smooth instead of a snap.
+        var dive_blend: float = clampf((_dive_mult - 1.0) / 1.8, 0.0, 1.0)  # 1.0 at fresh, 0.0 at faded
+        var burst_target: float = get_speed() * _dive_mult
+        var coast_target: float = get_speed()  # coast rides at base speed
+        var target_speed: float = lerpf(coast_target, burst_target, dive_blend)
         if input_dir != Vector2.ZERO:
                 input_dir = input_dir.normalized()
                 facing = input_dir
@@ -382,9 +394,6 @@ func _update_dive(input_dir: Vector2, delta: float) -> void:
                 vel = vel.move_toward(input_dir * target_speed, ACCEL * 1.5 * delta)
         else:
                 # v0.44: dive without WASD bleeds speed (was: pass = hold burst velocity).
-                # The dive mult already decays via DRIFT_DIVE_DECAY, but the velocity
-                # itself was held. Now: apply DRIFT_DIVE_NO_INPUT so the burst fades
-                # naturally when you release WASD, giving control over the ride.
                 vel = vel.move_toward(Vector2.ZERO, ACCEL * DRIFT_DIVE_NO_INPUT * delta)
         pos += vel * delta
         # When dive mult decays enough, transition to COAST (v30-style: ride the burst)
