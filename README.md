@@ -78,9 +78,9 @@ Stage 1 is genuinely hard. Starter weapons begin at 30% durability in bad states
 
 ## Branches
 
-- **main** — The game. Always runnable. Clean game code only — no testing tools, no risky changes.
-- **tools-management** — Music CI pipeline (`tools/music/`), generated analysis artifacts (`generated/`), and PlaytestDriver autoload (`scripts/playtest_driver.gd`). For testing and music evaluation only. No game file changes from main.
-- **game-nightly** — Risky changes not yet ready for main. Currently contains Claude's movement rewrite (4 states → 2). **Never merge to main without user confirmation.**
+- **main** — Stable game code. Always runnable. No tools, no experimental changes.
+- **tools-management** — Music CI pipeline (`tools/music/`), generated artifacts (`generated/`), and PlaytestDriver (`scripts/playtest_driver.gd`). **Tools only — no game files.**
+- **game-nightly** — Experimental changes not yet confirmed. Currently: Claude's movement rewrite (4 states → 2) + pulse fix (ADD to velocity). **Never merge to main without user confirmation.**
 
 ## Tech
 

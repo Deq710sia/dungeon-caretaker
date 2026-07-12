@@ -17,7 +17,7 @@ The roguelike layer (combat variance, hazard RNG, salvage rolls) stays genuinely
 - [ ] Priority 6 — Diegetic upgrade shop + incremental reward curve — NOT STARTED (still scroll list)
 - [ ] **Priority 7 (partial) — Polish pass** — Sound bed: procedural main theme in D major (v0.31), ALL instrument synthesis revamped (FM bell chords, triangle lead, sine+triangle bass, woodblock perc — was all saw/noise). Music CI pipeline built (tools/music/ — analyzes HOOK/PHRASE/MOTIF/DENSITY scores, ALL TESTS PASS at 92/100 before export). Disk-cached (9s render → instant load). M key mutes. **BUT user hasn't confirmed it sounds good yet** — pipeline measures composition quality, not timbre preference. Screen transitions working. Walk cycles, ambient lighting, UI consistency not done.
 
-**Last updated:** v0.31 (2026-07-12). Check VERSION_LOG.md for latest.
+**Last updated:** v0.34 (2026-07-12). Check VERSION_LOG.md for latest.
 
 ## THE 7 PRIORITIES (IN BUILD ORDER)
 

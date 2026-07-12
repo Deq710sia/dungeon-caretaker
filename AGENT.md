@@ -44,7 +44,7 @@ Read this BEFORE touching any code.
 - **Parse check after every change:** `/tmp/godot4 --headless --quit` (download Godot 4.3 if missing)
 - **Unit tests for movement:** write a temp TestRunner autoload, run, then remove before commit (see VERSION_LOG v0.17 for example)
 - **Render music preview:** temp SFXRenderer autoload, export WAV, then remove before commit
-- **Playtest:** checkout debug-tools branch, use PlaytestDriver
+- **Playtest:** checkout `tools-management` branch, use PlaytestDriver
 
 ## Common Pitfalls
 

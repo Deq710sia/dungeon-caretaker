@@ -3,7 +3,12 @@
 
 This file contains everything a new AI session needs to understand the project's history, current state, design philosophy, and next steps. **Read this before touching any code.**
 
-**Last updated:** v0.31 (2026-07-12). If this file is stale, check VERSION_LOG.md for the latest changes and update this file before working.
+**Last updated:** v0.34 (2026-07-12). If this file is stale, check VERSION_LOG.md for the latest changes and update this file before working.
+
+**IMPORTANT — BRANCH STRUCTURE:**
+- **main** (this branch) — Has the 4-state movement system (FLOAT/PHASE/DIVE/COAST + chain_count + pulse ADD-to-velocity fix). Clean game code only, no tools.
+- **game-nightly** — Has Claude's 2-state movement rewrite (NORMAL/PHASE, no DIVE/COAST/chain_count) + same pulse fix. **Experimental — never merge to main without user confirmation.**
+- **tools-management** — Tools only (music CI pipeline, playtest driver). No game files. Tools referenced in this doc (tools/music/, generated/) live on that branch, NOT on main.
 
 ---
 
@@ -296,7 +301,7 @@ dungeon_caretaker/
 │   └── fonts/press_start_2p.ttf
 ├── theme/pixel_theme.tres  — Project-wide pixel font theme
 ├── scenes/main.tscn        — Root scene (runs main.gd)
-├── tools/                   — Music CI pipeline (SEPARATE from game — never imported by game)
+├── tools/                   — Music CI pipeline (ON tools-management BRANCH ONLY — not on main)
 │   └── music/
 │       ├── analyze_midi.py        — Stage 1: MIDI inspector (concrete numbers)
 │       ├── score_music.py         — Stage 8: quality scorer (0-100 per dimension)
@@ -307,7 +312,7 @@ dungeon_caretaker/
 │       ├── html_report.py         — Listening dashboard (all artifacts in one HTML)
 │       ├── run_pipeline.py        — Master CI: runs all + preserves iteration
 │       └── references/            — (for reference MIDI/WAV tracks — empty)
-├── generated/               — Pipeline output (iterations preserved)
+├── generated/               — Pipeline output (ON tools-management BRANCH ONLY — not on main)
 │   ├── iterations/          — Every pipeline run (iteration_001/, iteration_002/, ...)
 │   ├── reports/             — Latest dashboard.html
 │   ├── wav/                 — Rendered WAV (gitignored)

@@ -4,6 +4,28 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## Pulse Fix + Branch Structure (2026-07-12)
+
+### Pulse: ADD to velocity instead of SET (both main + game-nightly)
+**Problem:** Pulse used `vel = boost_dir * get_speed() * 1.5` which SETS velocity to a fixed multiplier. At high momentum, `get_speed()` is already high and velocity is already near it, so the pulse was only ~50% more — barely feelable, and it decayed in 0.33s.
+**Fix:** Changed to `vel += boost_dir * (BASE_SPEED * 0.8)` which ADDS +44 px/s on top of current velocity. At low speed you get a huge kick; at high speed you still get +44 on top — always feelable. Applied to both main (4-state system) and game-nightly (Claude's 2-state rewrite).
+
+### v0.34: New Branch Structure
+Three branches:
+- **main** — Clean game code only. Always runnable.
+- **tools-management** — Tools + playtest driver only. No game files. Stripped of all game code (scripts/, assets/, scenes/, project.godot, etc.).
+- **game-nightly** — Risky experimental changes. Currently: Claude's movement rewrite (4 states → 2). **NEVER merge to main without user confirmation.**
+
+Old `debug` and `debug-tools` branches deleted. Playtest driver recovered from user's saved zip.
+
+### v0.33: Remove tools/generated from main
+Testing files (music CI pipeline, playtest driver, generated artifacts) removed from main. `.gitignore` updated to exclude them. Main is now clean game code only.
+
+### v0.32: Update all docs to v0.31
+VERSION_LOG: added 7 missing entries (v0.25-v0.31). MEMORY_CONTEXT: SFX 18→17, music section rewritten, known issues updated, file map expanded. DESIGN_PLAN: Priority 7 updated. README: SFX count + music description updated. DESIGN_IDEAS: entries 20-21 updated. AGENT.md: cache version + pipeline pitfall added.
+
+---
+
 ## v0.31 — Revamp ALL Instrument Synthesis (2026-07-12)
 
 ### Problem: Different Notes, Same Shitty Sound
