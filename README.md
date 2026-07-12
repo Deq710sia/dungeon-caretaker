@@ -1,4 +1,6 @@
-# Dungeon Caretaker: A Ghost's Salvage
+# Dungeon Caretaker: A Ghost's Salvage — NIGHTLY (Experimental)
+
+> ⚠️ **This is the `game-nightly` branch.** It contains experimental changes that have NOT been confirmed by the user. **Do not merge to `main` without explicit user confirmation.**
 
 A top-down **pixel-art roguelike management sim** where you play a ghost bound to a cursed dungeon. Adventurers come to raid it. They die. You salvage their gear, repair it, upgrade it, and assign it to the next batch of doomed heroes. The weapons persist — their history IS your progress.
 
@@ -78,8 +80,21 @@ Stage 1 is genuinely hard. Starter weapons begin at 30% durability in bad states
 
 ## Branches
 
-- **main** — The game. Always runnable. Clean game code only — no testing tools.
-- **debug** — Testing branch. Has everything main has PLUS: music CI pipeline (`tools/music/`), generated analysis artifacts (`generated/`), and PlaytestDriver autoload (`scripts/playtest_driver.gd`). For automated testing and music evaluation only.
+- **main** — Stable game code. Always runnable. No experimental changes.
+- **tools-management** — Music CI pipeline + playtest driver. No game file changes from main.
+- **game-nightly** — **You are here.** Experimental changes not yet confirmed. Currently: Claude's movement rewrite (4 states → 2, chain_count removed, continuous friction). **Never merge to main without user confirmation.**
+
+### What's Different on This Branch
+
+- `scripts/ghost_movement.gd` — Complete rewrite (366 lines, was 500):
+  - 4 states (FLOAT/PHASE/DIVE/COAST) → 2 (NORMAL/PHASE)
+  - DIVE → one-shot velocity impulse (no state/timer/decay)
+  - COAST → continuous friction lerp (high momentum = low friction)
+  - chain_count deleted (was band-aid over free-phase bypass bug, now fixed)
+  - Momentum: smooth pursuit of speed-derived target (fast rise, slow fall)
+- `scripts/phases/salvage.gd` — 2 edits:
+  - Camera smooth: discrete per-state → `lerp(8.0, 13.0, momentum_pct())`
+  - HUD: `'COAST %.1fs'` → `'MOMENTUM %d%%'`
 
 ## Tech
 

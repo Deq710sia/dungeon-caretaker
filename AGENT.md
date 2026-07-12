@@ -1,4 +1,6 @@
-# Agent Instructions — Dungeon Caretaker
+# Agent Instructions — Dungeon Caretaker (game-nightly branch)
+
+> ⚠️ **This is the game-nightly branch.** Experimental changes live here. **NEVER merge to main without explicit user confirmation.**
 
 This file is for AI agents (GLM, Claude, etc.) working on this codebase.
 Read this BEFORE touching any code.
