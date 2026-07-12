@@ -147,11 +147,16 @@ func update_pulse(delta: float) -> void:
                         _pulse_buffer = 0.0
 
 ## Try to fire a pulse. Returns true if fired.
-## Pulse fires from FLOAT (post-coast, when charges are available).
+## v0.42: Pulse fires from ANY state (FLOAT, DIVE, COAST) — interrupts them.
+## Charges refresh on phase END (so you can pulse the instant phase ends).
+## The player chooses: cancel dive/coast momentum into pulse immediately, or
+## ride it longer and pulse later. Most pulses still happen after dive/coast
+## (that's the intended use — continue the greater dive momentum), but the
+## freedom to do it earlier is there for spatial situations.
 ## With 0 charges, converts to a phase input (no wasted input — Hades pattern).
 func _try_fire_pulse() -> bool:
-        if state != State.FLOAT:
-                # Can only pulse from FLOAT (post-coast state)
+        if state == State.PHASE:
+                # Can't pulse during phase — phase is the dash, pulse is a chain link
                 return false
         if pulse_charges <= 0:
                 # No charges — convert to phase input (no wasted input)
@@ -163,6 +168,12 @@ func _try_fire_pulse() -> bool:
                 if now - _last_pulse_time > PULSE_CHAIN_WINDOW:
                         # Chain broken — reset count
                         _pulse_count_in_chain = 0
+        # v0.42: If pulsing from DIVE or COAST, interrupt that state (go to FLOAT first,
+        # so the pulse burst is clean and not fighting dive/coast movement logic).
+        if state == State.DIVE or state == State.COAST:
+                state = State.FLOAT
+                _dive_mult = 1.0
+                _coast_timer = 0.0
         # Fire the pulse
         pulse_charges -= 1
         _pulse_count_in_chain += 1
@@ -414,6 +425,8 @@ func _apply_movement(input_dir: Vector2, target_speed: float, accel: float, dece
 # --- State transitions ---
 
 ## Phase ends — cancelled early (MANUAL). Fires the DIVE impulse.
+## v0.42: Pulse charges refresh HERE (not on COAST exit) — so the player can
+## pulse the instant phase ends, interrupting the dive if they choose.
 ## v0.36 bifurcation: manual cancel → DIVE, natural expiry → clean FLOAT.
 func _end_phase(energy_pct: float) -> void:
         state = State.DIVE
@@ -433,6 +446,12 @@ func _end_phase(energy_pct: float) -> void:
         SFX.play("phase_out", 1.0, -3.0)
         Juice.spawn_particles(pos, 6, Palette.GLOW_BLUE, 30.0, 0.4)
         squash = 0.7
+        # v0.42: Refresh pulse charges on phase end — player can pulse immediately,
+        # interrupting the dive, OR ride the dive/coast and pulse later.
+        var charges_before: int = pulse_charges
+        pulse_charges = PULSE_MAX_CHARGES
+        _pulse_count_in_chain = 0
+        _last_pulse_time = -1.0
         Telemetry.emit({
                 "type": "dive_entered",
                 "energy_pct": energy_pct,
@@ -441,17 +460,37 @@ func _end_phase(energy_pct: float) -> void:
                 "dive_mult": _dive_mult,
                 "pos": [pos.x, pos.y],
         })
+        Telemetry.emit({
+                "type": "dive_completed",
+                "charges_before": charges_before,
+                "charges_after": pulse_charges,
+                "pos": [pos.x, pos.y],
+                "momentum": momentum,
+        })
 
 ## Natural phase expiry — clean return to FLOAT (v0.36 fix).
 ## No impulse, no momentum cost. Soft phase_out SFX.
+## v0.42: Pulse charges refresh HERE too (so natural expiry also enables pulse).
 func _end_phase_natural() -> void:
         state = State.FLOAT
         Juice.trail_phasing = false
         SFX.play("phase_out", 0.8, -6.0)
+        # v0.42: Refresh pulse charges on natural phase expiry too
+        var charges_before: int = pulse_charges
+        pulse_charges = PULSE_MAX_CHARGES
+        _pulse_count_in_chain = 0
+        _last_pulse_time = -1.0
         Telemetry.emit({
                 "type": "phase_expired_natural",
                 "pos": [pos.x, pos.y],
                 "vel": [vel.x, vel.y],
+                "momentum": momentum,
+        })
+        Telemetry.emit({
+                "type": "dive_completed",
+                "charges_before": charges_before,
+                "charges_after": pulse_charges,
+                "pos": [pos.x, pos.y],
                 "momentum": momentum,
         })
 
@@ -471,22 +510,10 @@ func _enter_coast() -> void:
                 "pos": [pos.x, pos.y],
         })
 
-## COAST ends — transition to FLOAT + refill pulse charges.
-## This is the chain link: coast completion = 2 new pulse charges.
+## COAST ends — transition to FLOAT.
+## v0.42: Pulse charges no longer refresh here (they refresh on phase end now).
 func _end_coast() -> void:
         state = State.FLOAT
-        # Refill pulse charges — the chain reward (was _end_dive in v0.40)
-        var charges_before: int = pulse_charges
-        pulse_charges = PULSE_MAX_CHARGES
-        _pulse_count_in_chain = 0  # reset chain counter
-        _last_pulse_time = -1.0
-        Telemetry.emit({
-                "type": "dive_completed",
-                "charges_before": charges_before,
-                "charges_after": pulse_charges,
-                "pos": [pos.x, pos.y],
-                "momentum": momentum,
-        })
 
 ## Try to activate or cancel the phase verb.
 func try_activate_phase() -> bool:
