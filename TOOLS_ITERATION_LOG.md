@@ -244,3 +244,101 @@ After these changes, re-run the same 4 scenarios and diff metrics. Expected impr
 - **ChatGPT was right that the original tools couldn't do this** — the old PlaytestDriver log would have shown "moved down, interacted, exited" with no design signal
 
 ---
+
+## Entry 003 — Design Lab v2: Profile System + PF-Inspired Metrics (2026-07-12)
+
+### Problem: v1 Analyzer Hardcoded the 4-State Model
+The v1 analyzer (entry 001) hardcoded `["FLOAT", "PHASE", "DIVE", "COAST"]` everywhere — state diversity check, chain splitting, constitution rules, report formatting. When game-nightly's 2-state model (NORMAL/PHASE) was tested, every state-specific rule SKIPped because FLOAT/DIVE/COAST never appeared. The analyzer still computed some metrics (expression score, chain length, momentum retention) but couldn't validate game-nightly against a constitution.
+
+Additionally, several ChatGPT-suggested metrics from the original design lab conversation were missing:
+- Momentum conservation curve (PF "momentum has memory" lesson — momentum should decay as a curve, not a cliff)
+- Recovery rate after mistakes (PF "mistakes weren't catastrophic" — how fast does momentum recover to pre-damage levels?)
+- Decision frequency (meaningful choices per 10s, not APM)
+- Velocity profile / heatmap (where does the player spend time? where do they move fast vs slow?)
+- Trend reports (metric drift across versions, not just pairwise diff)
+
+### Fix: Profile System + New Metrics
+
+**1. Movement profile auto-detection (`analyze.py`)**
+- New `MovementProfile` dataclass: `name`, `states`, `float_state`, `phase_state`, `has_dive_state`, `has_coast_state`, `uses_is_coasting_flag`
+- `detect_profile(events)` scans tick stream: if any tick has `state == "NORMAL"`, profile is `2state`; otherwise `4state`
+- All state-specific logic (state diversity, chain splitting, report formatting, expression score) uses `profile.states` instead of hardcoded list
+- Report header prints the detected profile for transparency
+
+**2. New PF-inspired metrics**
+- **Momentum conservation curve**: samples avg momentum at 0, 0.5, 1, 2, 3, 5s after each phase activation. Printed as a bar chart in the report. Should decay as a curve — if it drops to 0 in <1s, momentum doesn't feel persistent (PF lesson).
+- **Recovery after mistake**: for each `damage_taken` event, finds momentum just before damage, then measures time to recover to that level. Lower = mistakes aren't catastrophic (PF lesson).
+- **Decision frequency**: (phase activations + pulses) / elapsed_seconds * 10. Meaningful choices per 10s. Target: ≥0.5 (lower = passive play).
+- **Coast duration (profile-aware)**: 4-state measures COAST state segment durations; 2-state measures `is_coasting=True` segment durations. Both report `coast_entries` + `coast_duration_avg`. Catches "coast is too fleeting to feel" (v1 baseline finding).
+- **N-gram chain miner**: top 8 single state transitions by frequency (e.g. `PHASE->FLOAT: 5`, `FLOAT->PHASE: 4`). Shows which transitions are alive vs dead.
+
+**3. Velocity profile (text heatmap)**
+- Buckets the world into 32px (2-tile) grid cells
+- For each bucket: visit count + avg speed
+- Top 20 buckets by visit count printed in report with speed bars
+- Reveals: high visits + low speed = stuck/lingering; low visits + high speed = pass-through; no visits = dead space
+
+**4. Split constitution**
+- `constitution_4state.json` — rules for main (FLOAT/PHASE/DIVE/COAST). Includes `no_dead_states` (all 4 used), `dive_used`, `coast_used`, plus v2 additions: `decision_frequency_floor`.
+- `constitution_2state.json` — rules for game-nightly (NORMAL/PHASE). Replaces dive/coast state rules with `coast_duration_floor_2state` (since coast is a momentum tier, not a state). Loosens `no_dominant_state` to 90% (NORMAL will always be dominant in 2-state — rule just catches "never phases at all").
+- `validate.py` auto-picks the right constitution based on `metrics.movement_profile` field. No flags needed.
+
+**5. Trend reports**
+- `run_analysis.py` auto-generates `trend_<prefix>.txt` when ≥3 runs share a label prefix (e.g. `baseline_*`, `v038_*`)
+- Trend report is a table: rows = runs (chronological), columns = key metrics (expression, chain length, dominant state %, cancel rate, pulse/phase, decision freq, momentum avg, coast duration, salvage path/time/corpses/QTE/spirit)
+- New CLI flag: `--trend [PREFIX]` shows trend for a prefix (or all runs if no prefix)
+
+**6. Design notes field**
+- `run_analysis.py --notes "free text"` passes through to `analyze.py`
+- Notes stored in `metrics.json` + `history.json` + printed in report header
+- Use case: record the design hypothesis being tested ("testing if lower pulse cost increases chain length") so future readers know what the run was for
+
+### Verification
+
+Smoke-tested against both profiles:
+
+**4-state (main v0.37 baseline):**
+- `baseline_movement_chain`: detected `4state`, used `constitution_4state.json`
+- All v1 metrics preserved (expression score, chain length, etc.)
+- New metrics computed: decision_frequency=2.55/10s, momentum_curve visible
+- Constitution: same FAIL/WARN verdicts as v1 (no regressions)
+
+**2-state (game-nightly):**
+- `nightly_test_movement`: detected `2state`, used `constitution_2state.json`
+- NORMAL/PHASE states shown correctly in report
+- is_coasting flag tracked (77.6% of NORMAL ticks were coasting)
+- Momentum conservation curve: 1.51 → 1.20 → 0.88 → 0.57 (decay curve visible — PF check passes)
+- Coast duration: 0.78s avg across 2 entries (observable!)
+- Decision frequency: 7.64/10s
+- Constitution: **9 PASS, 0 FAIL, 2 SKIP** — full pass on game-nightly for the first time
+
+**Cross-profile diff:**
+- `--diff baseline_movement_chain v038_movement_chain` works across profiles (4state vs 4state)
+- `--diff` would also work across 4state vs 2state (just shows "n/a" for state-specific metrics that don't exist in one profile)
+
+**Trend report:**
+- Auto-generated for `baseline` (4 runs) and `v038` (4 runs) prefixes
+- `--trend baseline` and `--trend v038` both print the table
+
+### What This Unlocks
+
+- **Game-nightly can now be validated** — the 2-state constitution catches real issues (coast duration, decision frequency, momentum) instead of SKIPping everything
+- **PF design lessons are measurable** — momentum conservation curve + recovery rate turn "momentum has memory" and "mistakes weren't catastrophic" from vibes into numbers
+- **Velocity profile reveals level design issues** — dead space, stuck points, and pass-through routes are visible at a glance
+- **Trend reports show iteration direction** — across multiple runs, you can see if expression score is trending up, dominant state % is trending down, etc.
+- **Profile auto-detection means no flags** — same analyzer works on main and game-nightly without configuration
+
+### Files Changed
+
+```
+tools/design_lab/
+├── analyze.py                  # +200 lines (profile system + new metrics + velocity profile)
+├── validate.py                 # +50 lines (auto-pick constitution by profile)
+├── run_analysis.py             # +100 lines (trend reports + --notes pass-through + more history fields)
+├── constitution_4state.json    # NEW (split from constitution.json)
+├── constitution_2state.json    # NEW (2-state-specific rules)
+├── constitution.json           # UNCHANGED (legacy, kept for backward compat)
+└── README.md                   # REWRITTEN (profile system + new metrics documented)
+```
+
+---

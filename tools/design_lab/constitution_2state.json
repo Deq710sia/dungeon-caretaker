@@ -1,0 +1,96 @@
+{
+  "_comment": "Design Constitution v2 — 2-state model (NORMAL/PHASE). Used when the analyzer detects the 2-state movement profile (game-nightly branch, Claude's rewrite). COAST is not a state here — it's a momentum tier (is_coasting flag). DIVE is a one-shot impulse event, not a state. Rules adapted accordingly.",
+  "rules": [
+    {
+      "name": "phase_used_2state",
+      "description": "PHASE state should appear in at least 5%% of ticks. If lower, phase is underused — either too costly or not useful.",
+      "metric": "movement.state_pct.PHASE",
+      "comparator": ">",
+      "threshold": 5.0,
+      "severity": "WARN"
+    },
+    {
+      "name": "no_dominant_state_2state",
+      "description": "NORMAL should not exceed 90%% of total time (2-state model — NORMAL is the default, so it WILL be dominant; this rule just catches 'never phases at all'). Higher than 90%% means phase is dead.",
+      "metric": "movement.dominant_state_pct",
+      "comparator": "<",
+      "threshold": 90.0,
+      "severity": "FAIL"
+    },
+    {
+      "name": "min_chain_length_2state",
+      "description": "Average chain length should be at least 2.0 states. Lower indicates no phase engagement (just NORMAL walking).",
+      "metric": "movement.avg_chain_length",
+      "comparator": ">=",
+      "threshold": 2.0,
+      "severity": "WARN"
+    },
+    {
+      "name": "pulse_alive_2state",
+      "description": "Pulse should fire at least 0.3 times per phase activation. Lower indicates pulse is dead — players don't use it in the chain.",
+      "metric": "movement.pulse_per_phase",
+      "comparator": ">",
+      "threshold": 0.3,
+      "severity": "WARN"
+    },
+    {
+      "name": "intentional_cancel_rate_2state",
+      "description": "At least 30%% of phase exits should be manual cancels (impulse fired). Lower indicates players are letting phase expire naturally rather than engaging with the cancel skill move.",
+      "metric": "movement.phase_cancel_rate",
+      "comparator": ">",
+      "threshold": 0.3,
+      "severity": "WARN"
+    },
+    {
+      "name": "expression_floor_2state",
+      "description": "Expression score should be at least 30/100. Lower indicates the movement system is not being used expressively at all.",
+      "metric": "movement.expression_score",
+      "comparator": ">=",
+      "threshold": 30.0,
+      "severity": "WARN"
+    },
+    {
+      "name": "momentum_not_dead_2state",
+      "description": "Average momentum should be at least 0.3 (out of 2.0). Lower indicates momentum is not building — players aren't moving fast enough to engage the system.",
+      "metric": "movement.momentum_avg",
+      "comparator": ">",
+      "threshold": 0.3,
+      "severity": "WARN"
+    },
+    {
+      "name": "coast_duration_floor_2state",
+      "description": "Average coast duration should be at least 0.2s. Lower (when coast entries > 0) indicates coast is too fleeting to feel — momentum tier may be too narrow.",
+      "metric": "movement.coast_duration_avg",
+      "comparator": ">",
+      "threshold": 0.2,
+      "severity": "WARN",
+      "skip_if": "movement.coast_entries == 0"
+    },
+    {
+      "name": "decision_frequency_floor_2state",
+      "description": "Decision frequency (phase+pulse per 10s) should be at least 0.5. Lower indicates passive play — player isn't engaging with the verbs.",
+      "metric": "movement.decision_frequency",
+      "comparator": ">",
+      "threshold": 0.5,
+      "severity": "WARN"
+    },
+    {
+      "name": "salvage_qte_pass_floor_2state",
+      "description": "Salvage QTE pass rate should be at least 40%% (when QTEs occurred). Lower indicates QTEs are too hard or controls are unclear. Skip if no QTEs.",
+      "metric": "salvage.qte_pass_rate",
+      "comparator": ">=",
+      "threshold": 0.4,
+      "severity": "WARN",
+      "skip_if": "salvage.qte_total == 0"
+    },
+    {
+      "name": "salvage_qte_pass_ceiling_2state",
+      "description": "Salvage QTE pass rate should be at most 90%% (when QTEs occurred). Higher indicates QTEs are too easy — no real risk.",
+      "metric": "salvage.qte_pass_rate",
+      "comparator": "<=",
+      "threshold": 0.9,
+      "severity": "WARN",
+      "skip_if": "salvage.qte_total == 0"
+    }
+  ]
+}

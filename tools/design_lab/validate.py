@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 """
-Design Lab — Constitution validator.
+Design Lab — Constitution validator (v2).
 
-Runs the design rules in constitution.json against a metrics.json file
-produced by analyze.py. Writes validation.txt with pass/fail/warn per rule.
+Auto-picks the right constitution file based on the metrics' movement_profile
+field (4state vs 2state). Runs the rules, writes validation.txt with
+pass/fail/warn per rule.
 
 Usage:
     python3 validate.py <metrics.json> [--constitution PATH] [--out PATH]
+
+If --constitution is a directory, picks constitution_4state.json or
+constitution_2state.json based on metrics.movement_profile.
+If --constitution is a file, uses it directly.
+If --constitution is omitted, uses the directory containing this script.
 """
 from __future__ import annotations
 
@@ -107,8 +113,6 @@ def run_rules(metrics: dict, constitution: dict) -> list[RuleResult]:
             continue
 
         passed = op(value, threshold)
-        # PASS if the rule's assertion holds; FAIL if it doesn't.
-        # Severity field tells us whether a failure is FAIL or WARN.
         status = "PASS" if passed else severity
         detail = "%.4f %s %.4f -> %s" % (value, comp_str, threshold, "holds" if passed else "violated")
 
@@ -117,11 +121,12 @@ def run_rules(metrics: dict, constitution: dict) -> list[RuleResult]:
     return results
 
 
-def write_validation_report(results: list[RuleResult], out_path: str, metrics_label: str) -> None:
+def write_validation_report(results: list[RuleResult], out_path: str, metrics_label: str, profile_name: str) -> None:
     lines: list[str] = []
     lines.append("=" * 60)
     lines.append("DESIGN CONSTITUTION VALIDATION — %s" % metrics_label)
     lines.append("=" * 60)
+    lines.append("Movement profile: %s" % profile_name)
     lines.append("")
 
     pass_count = sum(1 for r in results if r.status == "PASS")
@@ -159,10 +164,46 @@ def write_validation_report(results: list[RuleResult], out_path: str, metrics_la
         f.write("\n".join(lines) + "\n")
 
 
+def pick_constitution(metrics: dict, constitution_arg: str | None) -> str:
+    """Pick the right constitution file based on profile + arg."""
+    script_dir = os.path.dirname(__file__)
+    profile = metrics.get("movement_profile", "4state")
+
+    if constitution_arg:
+        if os.path.isdir(constitution_arg):
+            # Directory: pick by profile
+            fname = "constitution_%s.json" % profile
+            path = os.path.join(constitution_arg, fname)
+            if os.path.isfile(path):
+                return path
+            # Fallback to legacy constitution.json
+            legacy = os.path.join(constitution_arg, "constitution.json")
+            if os.path.isfile(legacy):
+                return legacy
+            sys.stderr.write("error: no constitution file found in %s\n" % constitution_arg)
+            sys.exit(1)
+        else:
+            # File path — use directly
+            return constitution_arg
+    else:
+        # Default: use script dir
+        fname = "constitution_%s.json" % profile
+        path = os.path.join(script_dir, fname)
+        if os.path.isfile(path):
+            return path
+        # Fallback to legacy constitution.json
+        legacy = os.path.join(script_dir, "constitution.json")
+        if os.path.isfile(legacy):
+            return legacy
+        sys.stderr.write("error: no constitution file found in %s\n" % script_dir)
+        sys.exit(1)
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Design Lab constitution validator")
+    ap = argparse.ArgumentParser(description="Design Lab constitution validator v2")
     ap.add_argument("metrics_file", help="Path to metrics.json from analyze.py")
-    ap.add_argument("--constitution", default=None, help="Path to constitution.json (default: alongside this script)")
+    ap.add_argument("--constitution", default=None,
+                    help="Path to constitution.json (file) or directory containing constitution_<profile>.json. Default: script dir.")
     ap.add_argument("--out", default=None, help="Output path for validation.txt (default: alongside metrics file)")
     args = ap.parse_args()
 
@@ -170,28 +211,27 @@ def main() -> int:
         sys.stderr.write("error: %s not found\n" % args.metrics_file)
         return 1
 
-    constitution_path = args.constitution or os.path.join(os.path.dirname(__file__), "constitution.json")
-    if not os.path.isfile(constitution_path):
-        sys.stderr.write("error: constitution not found at %s\n" % constitution_path)
-        return 1
-
     with open(args.metrics_file, "r", encoding="utf-8") as f:
         metrics = json.load(f)
+
+    constitution_path = pick_constitution(metrics, args.constitution)
     with open(constitution_path, "r", encoding="utf-8") as f:
         constitution = json.load(f)
 
     label = metrics.get("label", os.path.basename(args.metrics_file).replace(".json", ""))
+    profile_name = metrics.get("movement_profile", "unknown")
+
+    print("Using constitution: %s (profile: %s)" % (constitution_path, profile_name))
 
     results = run_rules(metrics, constitution)
     out_path = args.out or os.path.join(os.path.dirname(args.metrics_file), "validation.txt")
-    write_validation_report(results, out_path, label)
+    write_validation_report(results, out_path, label, profile_name)
 
     print("Wrote %s" % out_path)
     print()
     with open(out_path, "r", encoding="utf-8") as f:
         sys.stdout.write(f.read())
 
-    # Exit code: 0 if PASS or WARN-only, 1 if any FAIL or ERROR
     has_hard_fail = any(r.status in ("FAIL", "ERROR") for r in results)
     return 1 if has_hard_fail else 0
 

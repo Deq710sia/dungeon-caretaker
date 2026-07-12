@@ -1,0 +1,19 @@
+======================================================================
+TREND REPORT — v038 (runs with prefix 'v038')
+======================================================================
+
+Shows metric drift across 4 runs. Look for:
+  - Expression score: should trend UP across iterations
+  - Dominant state %: should trend DOWN (more state diversity)
+  - Coast duration: should trend UP (if fixing coast observability)
+  - QTE pass rate: should stabilize in 40-90%% band
+
+----------------------------------------------------------------------
+Label                         Expression  ChainLen DomState%CancelRate  Pulse/Ph   DecFreq    MomAvg  MomRet3s  CoastDur  CoastEnt      Path  SalvTime   Corpses     QTE%%SpiritLost
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+v038_movement_empty                 88.8      4.00      94.0      1.00      1.00      1.89      1.67      2.00      0.00         0                 0.0         0      0.00         0
+v038_movement_chain                 68.8      4.00      77.8      1.00      1.00      5.07      0.32      0.00      0.00         0                 0.0         0      0.00         0
+v038_salvage_main                   11.2      1.00     100.0      0.00      0.00      0.00      1.54      0.00      0.00         0                 0.0         0      0.50         0
+v038_salvage_deeper                 11.2      1.00     100.0      0.00      0.00      0.00      1.05      0.00      0.00         0    deeper      15.4         0      0.50         1
+
+======================================================================
