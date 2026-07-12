@@ -23,6 +23,7 @@ GameState="*res://scripts/autoload/game_state.gd"
 Juice="*res://scripts/juice.gd"
 SFX="*res://scripts/autoload/sfx.gd"
 Music="*res://scripts/autoload/music.gd"
+PlaytestDriver="*res://scripts/playtest_driver.gd"
 
 
 [display]
