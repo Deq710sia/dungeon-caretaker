@@ -59,7 +59,14 @@ Read this BEFORE touching any code.
 
 ## Git Workflow
 
+**Three branches:**
+- **main** — Clean game code. Always runnable. No tools, no playtest driver, no risky changes.
+- **tools-management** — Music CI pipeline (`tools/music/`), generated artifacts, PlaytestDriver autoload. No game file changes from main. For testing and music evaluation.
+- **game-nightly** — Risky changes not yet ready for main. **NEVER merge game-nightly to main without explicit user confirmation.** Currently contains Claude's movement rewrite.
+
+**Rules:**
 - Commit with descriptive messages including version number (e.g. "v0.25: fix X")
-- Push to origin/main after each meaningful change
+- Push to the appropriate branch after each meaningful change
 - Don't commit temp test files (TestRunner, SFXRenderer, timing_test) — remove before staging
 - Don't commit .godot/ import changes unless intentional — `git checkout HEAD -- <file>` to restore
+- **game-nightly → main requires user confirmation. No exceptions.**

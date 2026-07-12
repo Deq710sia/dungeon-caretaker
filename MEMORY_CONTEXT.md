@@ -13,7 +13,7 @@ This file contains everything a new AI session needs to understand the project's
 **Engine:** Godot 4.3 stable, GDScript, GL Compatibility renderer
 **Resolution:** 480×270 internal (scaled up, pixel-perfect via `viewport` stretch mode)
 **Repo:** https://github.com/Deq710sia/dungeon-caretaker
-**Branches:** `main` (clean game code only — no testing tools), `debug` (main + music CI pipeline in `tools/music/` + generated artifacts in `generated/` + PlaytestDriver autoload)
+**Branches:** `main` (clean game code only), `tools-management` (main + music CI pipeline in `tools/music/` + generated artifacts + PlaytestDriver autoload — no game file changes), `game-nightly` (main + risky changes — currently Claude's movement rewrite. **NEVER merge to main without user confirmation.**)
 
 **One-line pitch:** You're a ghost bound to a dungeon. Adventurers come, die, and leave their gear. You salvage it, repair it, assign it to the next batch. The weapons persist — their history IS your progress.
 
