@@ -35,8 +35,10 @@ const WEAPON_WEIGHT_MULT: float = 0.12
 # --- Per-action drift matrix (each exit has its own decel) ---
 # All values are multipliers of ACCEL. Lower = more drift, higher = more stop.
 const DRIFT_FLOAT_DECEL: float = 0.18       # 12-frame stop (release input in FLOAT)
+const DRIFT_PHASE_NO_INPUT: float = 0.12    # v0.44: phase without WASD gently bleeds (was: pass = hold full vel)
 const DRIFT_PHASE_NATURAL: float = 0.5      # 4-frame stop (phase expired → FLOAT, clean)
-const DRIFT_DIVE_DECAY: float = 3.0         # dive mult decays to 1.0 over ~0.4s
+const DRIFT_DIVE_DECAY: float = 3.0         # dive mult decays to 1.0 over ~0.5s
+const DRIFT_DIVE_NO_INPUT: float = 0.15     # v0.44: dive without WASD bleeds (was: pass = hold burst vel)
 const DRIFT_DIVE_TO_FLOAT: float = 0.25     # 8-frame stop (dive ends → COAST, ride the burst)
 const DRIFT_PULSE_TO_FLOAT: float = 0.20    # 10-frame stop (pulse burst fades)
 const DRIFT_WALL_HIGH_MOMENTUM: float = 0.5 # bleed 50% on clamped axis (coasting-equivalent)
@@ -77,9 +79,9 @@ const PHASE_SPEED: float = 110.0      # base phase speed (2x BASE_SPEED)
 const PHASE_COAST_CARRY: float = 0.5  # if phasing from high momentum, preserve 50% of pre-phase vel
 
 # --- Dive (one-shot burst on phase cancel) ---
-const DIVE_MIN_MULT: float = 1.2      # cancel at 0s remaining
-const DIVE_MAX_MULT: float = 2.5      # cancel at full duration
-const DIVE_DURATION: float = 0.4
+const DIVE_MIN_MULT: float = 1.3      # v0.44: was 1.2 — slightly stronger floor
+const DIVE_MAX_MULT: float = 2.8      # v0.44: was 2.5 — stronger burst
+const DIVE_DURATION: float = 0.5      # v0.44: was 0.4 — lasts a little longer
 
 # --- Pulse (NEW — 2 charges, refresh on dive completion) ---
 const PULSE_MAX_CHARGES: int = 2
@@ -353,8 +355,11 @@ func _update_phase(input_dir: Vector2, delta: float) -> void:
                         vel = input_dir * vel.length() * REVERSAL_KEEP
                 vel = vel.move_toward(input_dir * target_speed, ACCEL * delta)
         else:
-                # Hold current velocity when no input — phase is a committed dash
-                pass
+                # v0.44: phase without WASD gently bleeds speed (was: pass = hold full velocity
+                # until phase ends, which felt like the game was dragging you forward).
+                # Now: apply DRIFT_PHASE_NO_INPUT so speed slowly fades, giving the player
+                # control over when to stop committing to the dash.
+                vel = vel.move_toward(Vector2.ZERO, ACCEL * DRIFT_PHASE_NO_INPUT * delta)
         pos += vel * delta
 
 # --- DIVE: momentum burst on phase cancel (one-shot, decays) ---
@@ -376,8 +381,11 @@ func _update_dive(input_dir: Vector2, delta: float) -> void:
                 # cancel without reversing). Input steers but doesn't reverse.
                 vel = vel.move_toward(input_dir * target_speed, ACCEL * 1.5 * delta)
         else:
-                # No input — keep going in current direction (ride the burst)
-                pass
+                # v0.44: dive without WASD bleeds speed (was: pass = hold burst velocity).
+                # The dive mult already decays via DRIFT_DIVE_DECAY, but the velocity
+                # itself was held. Now: apply DRIFT_DIVE_NO_INPUT so the burst fades
+                # naturally when you release WASD, giving control over the ride.
+                vel = vel.move_toward(Vector2.ZERO, ACCEL * DRIFT_DIVE_NO_INPUT * delta)
         pos += vel * delta
         # When dive mult decays enough, transition to COAST (v30-style: ride the burst)
         if _dive_timer <= 0 or _dive_mult < 1.1:
