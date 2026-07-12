@@ -34,7 +34,7 @@ Read this BEFORE touching any code.
 
 ## Code Style
 
-- **Indentation is inconsistent across files** — some use tabs (ghost_movement.gd, planning.gd, battle.gd, weapon.gd), some use spaces (salvage.gd, workshop.gd, gate.gd, results.gd). **Match the file you're editing.** Don't convert.
+- **Indentation is inconsistent across files** — `ghost_movement.gd` uses SPACES (verified v0.36; was previously misdocumented as tabs), `planning.gd`/`battle.gd`/`weapon.gd` use tabs, `salvage.gd`/`workshop.gd`/`gate.gd`/`results.gd` use spaces. **Match the file you're editing.** Don't convert. When in doubt, run `sed -n '100p' <file> | od -c | head -1` to verify what the file actually uses — doc claims have been wrong before.
 - Use explicit types (`var x: float = 0.0` not `var x := 0.0`) — Godot 4 type inference can fail on Dictionary access.
 - Integer-snap all draw positions (`int(x)`) — sub-pixel jitter at 480×270.
 - Never use font_size other than 8 or 16 (Press Start 2P only crisp at those).

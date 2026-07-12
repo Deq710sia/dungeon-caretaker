@@ -4,6 +4,29 @@ A running log of all changes made to the game, with intentions. Updated after ev
 
 ---
 
+## v0.36 — Phase Natural Expiry Returns to FLOAT (2026-07-12)
+
+### Problem: Phase Auto-Fired DIVE on Natural Expiry, Costing ~1s of Reduced Control
+**Diagnosis:** Per the v0.23 Claude review and MEMORY_CONTEXT "Known design tension" note: when the phase timer ran out naturally (player didn't tap SPACE to cancel early), `_enter_dive(0.2)` was called, forcing the ghost into DIVE state for 0.4s + COAST for 0.6s minimum. The player didn't choose to dive — they were just caught off-guard by phase ending — but they paid the full DIVE cost anyway: -0.3 momentum, locked burst direction, ~1s of reduced steering control. This was the single most-cited "why does movement feel bad" issue, since the player uses phase as their primary hazard tool and the forced DIVE frequently disrupted the next precise maneuver they were about to make.
+
+**Fix:** Replaced `_enter_dive(0.2)` with a new `_end_phase_natural()` method that cleanly transitions back to FLOAT:
+- `state = State.FLOAT` (no DIVE, no COAST)
+- `Juice.trail_phasing = false` (trail returns to normal density)
+- `SFX.play("phase_out", 0.8, -6.0)` — softer phase_out cue (was 1.0, -3.0 in dive)
+- No momentum spend, no velocity burst, no chain degradation
+
+The skill expression is now cleanly bifurcated:
+- **Tap SPACE during phase** = intentional DIVE (full boost scaled by remaining energy + momentum, chain degrades 10% per consecutive phase)
+- **Let phase expire** = clean FLOAT exit (no boost, no control loss)
+
+Manual cancel path (`try_activate_phase()` → `_enter_dive(remaining_pct)`) is unchanged. The DIVE skill move is fully preserved — it's just no longer forced on players who didn't ask for it.
+
+**Verification:** `godot4 --headless --path . --quit` parses cleanly (same baseline output, only the existing Music cache + ObjectDB warnings). Diff is +18/-1 lines, all in `ghost_movement.gd`. No other files touched. Battle's separate phase system (local `phase_active` for enemy-slow effect) is unaffected — it never called `_enter_dive()`.
+
+**Docs updated:** MEMORY_CONTEXT.md (resolved design tension note, fixed stale "uses tabs" claim for ghost_movement.gd), DESIGN_PLAN.md (Priority 1 critique trimmed — auto-DIVE issue resolved, momentum-vs-precision tension remains).
+
+---
+
 ## Pulse Fix + Branch Structure (2026-07-12)
 
 ### Pulse: ADD to velocity instead of SET (both main + game-nightly)

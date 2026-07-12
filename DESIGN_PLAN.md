@@ -9,7 +9,7 @@ The roguelike layer (combat variance, hazard RNG, salvage rolls) stays genuinely
 
 ## BUILD STATUS
 
-- [ ] **Priority 1 — Movement feel + Phase verb** — PARTIAL / NOT FUN YET. The 4-state movement machine (FLOAT/PHASE/DIVE/COAST) with compoundable momentum, tap pulse (SHIFT), and chain degradation is *implemented* but has design tension: the momentum system rewards staying fast, but the game's tasks (narrow corridors, small hazard hitboxes, 45s timer) reward stopping precisely. Phase auto-fires DIVE on natural expiry, costing ~2.5s of reduced control after using your hazard tool. Wall collision was silently building momentum (fixed v0.23). Needs playtest-driven tuning before it's "done."
+- [ ] **Priority 1 — Movement feel + Phase verb** — PARTIAL / NOT FUN YET. The 4-state movement machine (FLOAT/PHASE/DIVE/COAST) with compoundable momentum, tap pulse (SHIFT), and chain degradation is *implemented* but has design tension: the momentum system rewards staying fast, but the game's tasks (narrow corridors, small hazard hitboxes, 45s timer) reward stopping precisely. **The phase-auto-fires-DIVE-on-natural-expiry sub-issue was fixed in v0.36** (natural expiry now returns cleanly to FLOAT; manual SPACE cancel still triggers DIVE for the skill move). Wall collision was silently building momentum (fixed v0.23). The remaining "not fun yet" call is the momentum-vs-precision tension itself — needs playtest-driven tuning of momentum build/decay rates and possibly a precision-mode flag before it's "done."
 - [ ] **Priority 2 — Salvage overhaul** — PARTIAL / NOT FUN YET. 4 QTE types (timing/spam/pattern/reverse) and push-your-luck branching are *implemented* but: the "crossroads" is not a visual bend — it's just a body + text that says "deeper," then the exit disappears and you get an easy pickup. No real choice tension. Difficulty is inconsistent (sometimes good, sometimes too easy). Needs the deeper path to actually feel risky/rewarding, not a no-brainer.
 - [ ] Priority 3 — Repair minigame overhaul (visible transform, live stats, triage, system-changing upgrades) — PARTIAL. oil_grindstone rotates + sparks. reforge_furnace transforms. Polish/exorcise still static. No quick-repair, no live stats, no system-changing upgrades.
 - [ ] Priority 4 — Battle drama (speed, sparks, boss waves) — PARTIAL. Phase verb integrated (replaced '1' key Haunt). No boss waves, no speed increases, no weapon sparks.
@@ -17,7 +17,7 @@ The roguelike layer (combat variance, hazard RNG, salvage rolls) stays genuinely
 - [ ] Priority 6 — Diegetic upgrade shop + incremental reward curve — NOT STARTED (still scroll list)
 - [ ] **Priority 7 (partial) — Polish pass** — Sound bed: procedural main theme in D major (v0.31), ALL instrument synthesis revamped (FM bell chords, triangle lead, sine+triangle bass, woodblock perc — was all saw/noise). Music CI pipeline built (tools/music/ — analyzes HOOK/PHRASE/MOTIF/DENSITY scores, ALL TESTS PASS at 92/100 before export). Disk-cached (9s render → instant load). M key mutes. **BUT user hasn't confirmed it sounds good yet** — pipeline measures composition quality, not timbre preference. Screen transitions working. Walk cycles, ambient lighting, UI consistency not done.
 
-**Last updated:** v0.34 (2026-07-12). Check VERSION_LOG.md for latest.
+**Last updated:** v0.36 (2026-07-12). Check VERSION_LOG.md for latest.
 
 ## THE 7 PRIORITIES (IN BUILD ORDER)
 

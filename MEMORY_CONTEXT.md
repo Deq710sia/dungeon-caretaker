@@ -3,7 +3,7 @@
 
 This file contains everything a new AI session needs to understand the project's history, current state, design philosophy, and next steps. **Read this before touching any code.**
 
-**Last updated:** v0.34 (2026-07-12). If this file is stale, check VERSION_LOG.md for the latest changes and update this file before working.
+**Last updated:** v0.36 (2026-07-12). If this file is stale, check VERSION_LOG.md for the latest changes and update this file before working.
 
 **IMPORTANT — BRANCH STRUCTURE:**
 - **main** (this branch) — Has the 4-state movement system (FLOAT/PHASE/DIVE/COAST + chain_count + pulse ADD-to-velocity fix). Clean game code only, no tools.
@@ -52,7 +52,7 @@ Pick which old frictions to keep ON PURPOSE (weapon loss, checkpoint distance), 
 
 ---
 
-## 3. CURRENT CODE STATE (v0.24, 2026-07-12)
+## 3. CURRENT CODE STATE (v0.36, 2026-07-12)
 
 ### Architecture
 - `main.gd` — Phase manager. Swaps Node2D + set_script per phase. Has fade transitions (working — `_on_phase_changed` calls `_start_fade`, 0.15s fade-to-black, swap mid-fade, 0.15s fade back). ESC → menu. Calls `_on_phase_exit()` on old phase before freeing (prevents weapon loss).
@@ -68,14 +68,14 @@ Pick which old frictions to keep ON PURPOSE (weapon loss, checkpoint distance), 
 ### Phase Flow
 `menu → gate → salvage → workshop → upgrade → planning → battle → results → aftermath → gate → ...`
 
-### Movement System (v0.17+ — REDESIGNED, NOT FUN YET)
+### Movement System (v0.17+ — REDESIGNED, NOT FUN YET; v0.36 fixed phase-expiry control loss)
 
-The movement system is a **state machine with compoundable momentum**, NOT just preserved velocity. This was redesigned in v0.17 after the user reported 9 specific issues with the v0.14 charge-based pulse design. **The system is implemented but has design tension — see below.**
+The movement system is a **state machine with compoundable momentum**, NOT just preserved velocity. This was redesigned in v0.17 after the user reported 9 specific issues with the v0.14 charge-based pulse design. **The system is implemented but has design tension — see below.** v0.36 resolved the phase-natural-expiry-forces-DIVE sub-issue (natural expiry now returns cleanly to FLOAT).
 
 **4 states:**
 - `FLOAT` — normal walking. Build momentum by moving fast. Tap SHIFT to pulse.
 - `PHASE` — incorporeal dash (2x speed + momentum bonus, costs shard). **Holds current velocity when no input** (was pushing toward facing — fixed v0.17).
-- `DIVE` — momentum burst on phase cancel. Boost scales with remaining phase energy AND current momentum. Chain degradation reduces boost 10% per consecutive phase (min 50%).
+- `DIVE` — momentum burst on phase CANCEL (manual SPACE tap during phase, v0.36 — no longer auto-fires on natural expiry). Boost scales with remaining phase energy AND current momentum. Chain degradation reduces boost 10% per consecutive phase (min 50%).
 - `COAST` — carrying momentum. Low deceleration. Pulse extends duration + adds momentum.
 
 **Momentum system (the core compoundable value):**
@@ -100,7 +100,7 @@ The movement system is a **state machine with compoundable momentum**, NOT just 
 - `PHASE_DURATION = 1.5s`, `PHASE_CD = 4.0s` (halved to 2.0s from COAST — chain reward), `PHASE_COST = 1 shard`
 - `MOMENTUM_MAX = 2.0`, `MOMENTUM_SPEED_BONUS = 0.5`, `MOMENTUM_PHASE_BONUS = 0.3`, `MOMENTUM_DIVE_BONUS = 0.5`
 
-**Known design tension (Claude review, v0.23):** The momentum system rewards staying fast, but the game's tasks (narrow corridors, small hazard hitboxes, 45s timer) reward stopping precisely. This is a design call, not a bug — but it's the core "why does movement feel bad" tension. Possible fix: phase natural expiry returns to FLOAT instead of forcing DIVE.
+**Known design tension (Claude review, v0.23):** The momentum system rewards staying fast, but the game's tasks (narrow corridors, small hazard hitboxes, 45s timer) reward stopping precisely. This is a design call, not a bug — but it's the core "why does movement feel bad" tension. The companion issue — phase auto-firing DIVE on natural expiry, costing ~1s of reduced control after using the hazard tool — was **resolved in v0.36** (natural expiry now returns cleanly to FLOAT; manual SPACE cancel still triggers DIVE for the skill move). The momentum-vs-precision tension itself remains an open design call.
 
 **Wall collision fix (v0.23):** `clampf(pos)` now zeros the clamped axis of velocity (was: position stopped but velocity kept building, causing momentum buildup against walls). Applied to salvage `_clamp_to_corridor()`, workshop, planning.
 
@@ -368,7 +368,7 @@ dungeon_caretaker/
 13. **All draw positions must be integer-snapped** (`int(x)`) or sprites jitter at 480×270.
 14. **Overscan: draw 3 tiles beyond viewport on all sides** so scroll edges are never visible.
 15. **The theme/pixel_theme.tres import is fragile** — the `.import` file must exist or the font won't load. Delete `.godot/` and reimport if the theme fails to load.
-16. **Indentation is inconsistent across files** (ghost_movement.gd, planning.gd, battle.gd, weapon.gd use tabs; salvage.gd, workshop.gd, gate.gd, results.gd use spaces). Multiple AI sessions with different defaults. If editing a file, match its existing style.
+16. **Indentation is inconsistent across files** (ghost_movement.gd uses SPACES — verified v0.36, was previously claimed to be tabs but the actual file uses 8-space indents; planning.gd, battle.gd, weapon.gd use tabs; salvage.gd, workshop.gd, gate.gd, results.gd use spaces). Multiple AI sessions with different defaults. If editing a file, match its existing style — and don't trust doc claims about indentation, run `od -c` on a sample line to verify.
 17. **gate.gd uses hand-copied movement** instead of GhostMovement. Its constants were updated in v0.23 to match (300 accel, 0.5 decel) but it's still a duplicate. Should be refactored to use real GhostMovement.
 18. **Music render takes 8.7s** in GDScript at first boot. Disk cache (`user://music_cache.bin`) fixes subsequent boots. Bump `CACHE_VERSION` constant in music.gd when music data changes to invalidate.
 19. **Wall collision must zero velocity** on the clamped axis (v0.23 fix). `clampf(pos)` alone lets velocity/momentum build against walls.

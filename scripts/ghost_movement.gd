@@ -11,9 +11,11 @@ extends RefCounted
 ##            pulse (spends momentum for an instant burst, resets chain).
 ##   PHASE  — incorporeal dash (2x speed + momentum bonus, costs shard).
 ##            Holds current velocity when no input (doesn't push toward facing).
-##   DIVE   — momentum burst on phase cancel. Boost scales with remaining
-##            phase energy AND current momentum. Chain degradation reduces
-##            boost 10% per consecutive phase (min 50%).
+##            Natural expiry (timer runs out) returns to FLOAT cleanly (v0.36).
+##            Tap SPACE during phase to cancel early → DIVE (intentional burst).
+##   DIVE   — momentum burst on phase CANCEL (manual only, not natural expiry).
+##            Boost scales with remaining phase energy AND current momentum.
+##            Chain degradation reduces boost 10% per consecutive phase (min 50%).
 ##   COAST  — carrying momentum. Low deceleration. Pulse during coast
 ##            extends duration AND adds momentum. Weapon weight halved.
 ##
@@ -230,7 +232,7 @@ func update(input_dir: Vector2, delta: float) -> void:
         if phase_active > 0:
                 phase_active = max(0, phase_active - delta)
                 if phase_active == 0:
-                        _enter_dive(0.2)
+                        _end_phase_natural()
         # State-specific update
         match state:
                 State.PHASE:  _update_phase(input_dir, delta)
@@ -359,6 +361,25 @@ func _apply_movement(input_dir: Vector2, target_speed: float, accel: float, dece
         pos += vel * delta
 
 # --- State transitions ---
+
+## Natural phase expiry — clean return to FLOAT (v0.36 fix).
+## Previously, letting phase timer run out forced _enter_dive(0.2), which
+## locked the player into ~1s of DIVE+COAST with reduced control after
+## using their hazard tool. That felt bad: the player didn't choose to dive,
+## they were just caught off-guard by phase ending.
+##
+## Now: natural expiry just releases the ghost back to normal walking.
+## The skill expression is choosing WHEN to cancel phase:
+##   - Tap SPACE during phase = intentional DIVE (full boost from remaining energy)
+##   - Let phase expire        = clean FLOAT exit (no boost, no control loss)
+##
+## No forced burst, no momentum spend, no chain degradation. Trail returns
+## to normal density. Soft phase_out SFX gives audio cue without the dive's
+## heavier hit.
+func _end_phase_natural() -> void:
+        state = State.FLOAT
+        Juice.trail_phasing = false
+        SFX.play("phase_out", 0.8, -6.0)  # softer than dive's phase_out (1.0, -3.0)
 
 ## Enter DIVE state from phase cancel. Boost scales with remaining phase
 ## energy AND current momentum. Chain degradation reduces boost 10% per step.
