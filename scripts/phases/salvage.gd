@@ -362,6 +362,10 @@ func _physics_process(delta: float) -> void:
         # in during DIVE/COAST to make fast movement FEEL fast without being
         # nauseating.
         var cam_smooth: float = lerp(8.0, 13.0, move.momentum_pct())
+        # v0.39: snap camera during phase — ghost shouldn't outrun camera at 2x speed.
+        # Was: cam_smooth maxed at 13, which lagged visibly during phase.
+        if move.is_phasing():
+                cam_smooth = 25.0
         # Minimal look-ahead (8px, was 24) — keeps camera on the ghost
         var look_ahead := move.facing * 8.0
         var cam_target_y := move.pos.y + look_ahead.y

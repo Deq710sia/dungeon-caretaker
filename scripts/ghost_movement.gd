@@ -58,7 +58,7 @@ const MOMENTUM_PHASE_BONUS: float = 0.3   # phase gets +30% speed at full moment
 const MOMENTUM_DIVE_BONUS: float = 0.5    # phase-end impulse gets +0.5 mult per momentum point
 const MOMENTUM_DIVE_COST: float = 0.3     # spent whenever phase ends
 const MOMENTUM_PULSE_GAIN: float = 0.4    # added by pulse
-const MOMENTUM_PULSE_COST: float = 0.3    # required to fire pulse
+const MOMENTUM_PULSE_COST: float = 0.2    # v0.39: was 0.3 — net +0.2 per pulse (was +0.1). Makes pulse a better chain-builder.
 const COASTING_THRESHOLD: float = 0.4     # fraction of MOMENTUM_MAX that counts as "coasting"
 
 # --- Pulse (unchanged mechanically — tap-fire momentum spend) ---
@@ -101,18 +101,28 @@ var _pulse_was_pressed: bool = false  # manual edge detection for pulse
 var _pulse_mult: float = 1.0          # active burst multiplier (decays to 1.0)
 var _pulse_flash: float = 0.0         # brief flash ring on pulse
 var _telemetry_tick_accum: float = 0.0  # 10Hz tick accumulator
+var _pulse_buffer: float = 0.0        # v0.39: 100ms input buffer for pulse
+var _phase_buffer: float = 0.0        # v0.39: 100ms input buffer for phase
 
 ## Called every tick by the owning phase. Handles pulse tap + burst decay.
 ## Should be called BEFORE update().
 func update_pulse(delta: float) -> void:
         _pulse_mult = lerp(_pulse_mult, 1.0, 1.0 - exp(-delta * PULSE_BOOST_DECAY))
         _pulse_flash = max(0, _pulse_flash - delta * 4.0)
+        # v0.39: input buffer — if pulse was pressed within last 100ms, try to fire.
+        # This catches early presses (before momentum is sufficient) and late presses
+        # (just after a denial). Standard fighting-game technique for responsiveness.
+        _pulse_buffer = max(0, _pulse_buffer - delta)
         # Pulse: TAP to fire (manual edge detection — more reliable than Input.is_action_just_pressed)
         var pulse_now: bool = Input.is_action_pressed("pulse")
         var pulse_just_pressed: bool = pulse_now and not _pulse_was_pressed
         _pulse_was_pressed = pulse_now
         if pulse_just_pressed:
+                _pulse_buffer = 0.1  # set 100ms buffer
+        # Try to fire if buffer is active AND momentum is sufficient
+        if _pulse_buffer > 0 and momentum >= MOMENTUM_PULSE_COST:
                 _fire_pulse()
+                _pulse_buffer = 0.0
 
 ## Fire an instant pulse burst. Costs momentum, adds momentum back net.
 func _fire_pulse() -> void:
@@ -270,7 +280,9 @@ func update(input_dir: Vector2, delta: float) -> void:
         # Shared: footstep + trail
         var speed_pct: float = vel.length() / get_speed()
         _footstep_timer += delta
-        if speed_pct > 0.25 and _footstep_timer > 0.30 / maxf(0.4, speed_pct):
+        # v0.39: lowered footstep threshold 0.25 -> 0.05 — always audio feedback when moving.
+        # Was 0.25 (silent below 25% speed) — slow maneuvering had no audio, felt 'dead'.
+        if speed_pct > 0.05 and _footstep_timer > 0.30 / maxf(0.4, speed_pct):
                 _footstep_timer = 0.0
                 SFX.play("footstep", 0.85 + randf() * 0.25, -8.0, 0.04)
         Juice.trail_sample(pos)
@@ -310,7 +322,8 @@ func _update_phase(input_dir: Vector2, delta: float) -> void:
                 facing = input_dir
                 _last_input_dir = input_dir
                 if vel.length() > 10.0 and vel.normalized().dot(input_dir) < 0.0:
-                        vel = input_dir * vel.length() * 0.85
+                        # v0.39: lowered reversal penalty 0.85 -> 0.6 (same as _apply_movement)
+                        vel = input_dir * vel.length() * 0.6
                 vel = vel.move_toward(input_dir * target_speed, ACCEL * delta)
         else:
                 # Hold current velocity when no input — phase is a committed dash,
@@ -326,7 +339,10 @@ func _apply_movement(input_dir: Vector2, target_speed: float, accel: float, dece
                 facing = input_dir
                 _last_input_dir = input_dir
                 if vel.length() > 10.0 and vel.normalized().dot(input_dir) < 0.0:
-                        vel = input_dir * vel.length() * 0.85
+                        # v0.39: lowered reversal penalty 0.85 -> 0.6 for crisper pivots.
+                        # Was 0.85 (keep 85% speed on reversal) — felt drift-pivot-y.
+                        # 0.6 gives a sharper pivot without losing all momentum.
+                        vel = input_dir * vel.length() * 0.6
                 vel = vel.move_toward(input_dir * target_speed, accel * delta)
         else:
                 vel = vel.move_toward(Vector2.ZERO, decel * delta)
@@ -441,6 +457,8 @@ func reset(p_pos: Vector2) -> void:
         _pulse_flash = 0.0
         _pulse_was_pressed = false
         _telemetry_tick_accum = 0.0
+        _pulse_buffer = 0.0
+        _phase_buffer = 0.0
 
 ## Draws the ghost sprite with trail, phase visual, momentum ring.
 static func draw_ghost(canvas: CanvasItem, mv: GhostMovement, is_underground: bool = false) -> void:
