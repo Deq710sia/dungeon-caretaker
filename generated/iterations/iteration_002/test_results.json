@@ -1,0 +1,52 @@
+[
+  {
+    "name": "test_melody_range",
+    "passed": true,
+    "message": "melody range 12 semitones (max 18)"
+  },
+  {
+    "name": "test_melody_leaps",
+    "passed": true,
+    "message": "largest leap 9 semitones (max 9)"
+  },
+  {
+    "name": "test_phrase_length",
+    "passed": false,
+    "message": "phrase lengths [8] \u2014 need 2+ phrases of <= 8 each"
+  },
+  {
+    "name": "test_repeated_motif",
+    "passed": true,
+    "message": "max motif repeats: 6 (need >= 3)"
+  },
+  {
+    "name": "test_bass_register",
+    "passed": true,
+    "message": "bass range 7 semitones (max 12)"
+  },
+  {
+    "name": "test_chord_density",
+    "passed": false,
+    "message": "estimated polyphony 20.5 (max 18 for clarity)"
+  },
+  {
+    "name": "test_motif_reuse",
+    "passed": true,
+    "message": "motif reuse ratio 1.0 (need >= 0.5)"
+  },
+  {
+    "name": "test_note_density",
+    "passed": false,
+    "message": "note density 2.0/bar (need 4-8)"
+  },
+  {
+    "name": "test_duration_variety",
+    "passed": false,
+    "message": "1 duration values (need >= 2)"
+  },
+  {
+    "name": "test_key_confidence",
+    "passed": true,
+    "message": "key confidence 0.47 (need >= 0.3)"
+  }
+]

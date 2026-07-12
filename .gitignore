@@ -20,6 +20,6 @@ Thumbs.db
 generated/wav/
 generated/spectrograms/
 tools/music/output/
-tools/
-generated/
-scripts/playtest_driver.gd
+# tools/ (allowed on this branch)
+# generated/ (allowed on this branch)
+# scripts/playtest_driver.gd (allowed on this branch)
