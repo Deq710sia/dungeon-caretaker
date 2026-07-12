@@ -20,3 +20,5 @@ Thumbs.db
 generated/wav/
 generated/spectrograms/
 tools/music/output/
+tools/
+generated/
