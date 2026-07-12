@@ -78,8 +78,8 @@ Stage 1 is genuinely hard. Starter weapons begin at 30% durability in bad states
 
 ## Branches
 
-- **main** — The game. Always runnable.
-- **debug-tools** — Playtest harness (PlaytestDriver autoload). For automated testing only.
+- **main** — The game. Always runnable. Clean game code only — no testing tools.
+- **debug** — Testing branch. Has everything main has PLUS: music CI pipeline (`tools/music/`), generated analysis artifacts (`generated/`), and PlaytestDriver autoload (`scripts/playtest_driver.gd`). For automated testing and music evaluation only.
 
 ## Tech
 
